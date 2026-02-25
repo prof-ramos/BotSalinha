@@ -1,0 +1,84 @@
+[project]
+name = "botsalinha"
+version = "2.0.0"
+description = "Discord bot specialized in Brazilian law and public contests"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Core
+    "agno",
+    "discord.py",
+    "python-dotenv",
+
+    # Configuration
+    "pydantic>=2.0",
+    "pydantic-settings",
+
+    # Database (SQLite only)
+    "sqlalchemy>=2.0",
+    "alembic",
+
+    # Logging
+    "structlog",
+
+    # Resilience
+    "tenacity",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.6",
+    "mypy>=1.9",
+    "pre-commit>=3.6",
+]
+
+[project.scripts]
+botsalinha = "src.main:main"
+backup = "scripts.backup:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.6",
+    "mypy>=1.9",
+    "pre-commit>=3.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/__init__.py" = ["F401"]
+"src/__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = false
+warn_unused_ignores = false
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

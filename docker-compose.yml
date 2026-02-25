@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  botsalinha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: botsalinha
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      # Persist logs
+      - ./logs:/app/logs
+    environment:
+      # Override database path for container
+      - BOTSALINHA_DATABASE__URL=sqlite:///data/botsalinha.db
+      - BOTSALINHA_LOG__LEVEL=INFO
+      - BOTSALINHA_LOG__FORMAT=json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
