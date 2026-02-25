@@ -4,7 +4,6 @@ Agno AI agent wrapper for BotSalinha.
 Wraps the Agno Agent class with proper abstractions and error handling.
 """
 
-import asyncio
 from typing import Any
 
 import structlog
@@ -12,10 +11,11 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 
 from ..config.settings import settings
+from ..config.yaml_config import yaml_config
 from ..storage.repository import MessageRepository
 from ..storage.sqlite_repository import get_repository
-from ..utils.errors import APIError, RetryExhaustedError
-from ..utils.retry import async_retry, AsyncRetryConfig
+from ..utils.errors import APIError
+from ..utils.retry import AsyncRetryConfig, async_retry
 
 log = structlog.get_logger()
 
@@ -40,27 +40,32 @@ class AgentWrapper:
         """
         self.repository = repository or get_repository()
 
+        # Load prompt from external file (configured in config.yaml)
+        prompt_content = yaml_config.prompt_content
+
+        # Use model ID from YAML config (can be overridden by .env)
+        model_id = settings.google.model_id or yaml_config.model.id
+
+        # Get temperature from YAML config
+        temperature = yaml_config.model.temperature
+
         # Create the Agno agent
         self.agent = Agent(
             name="BotSalinha",
-            model=Gemini(id=settings.google.model_id),
-            instructions=(
-                "Você é BotSalinha, um assistente virtual especializado em "
-                "direito brasileiro e concursos públicos. "
-                "Responda em português brasileiro de forma clara, objetiva e "
-                "profissional. Use terminologia jurídica adequada e cite "
-                "fontes quando relevante."
-            ),
+            model=Gemini(id=model_id, temperature=temperature),
+            instructions=prompt_content,
             add_history_to_context=True,
             num_history_runs=settings.history_runs,
-            add_datetime_to_context=True,
-            markdown=True,
-            debug_mode=settings.debug,
+            add_datetime_to_context=yaml_config.agent.add_datetime,
+            markdown=yaml_config.agent.markdown,
+            debug_mode=yaml_config.agent.debug_mode or settings.debug,
         )
 
         log.info(
             "agent_wrapper_initialized",
-            model=settings.google.model_id,
+            model=model_id,
+            prompt_file=yaml_config.prompt.file,
+            temperature=yaml_config.model.temperature,
             history_runs=settings.history_runs,
         )
 
@@ -123,9 +128,7 @@ class AgentWrapper:
             )
             raise
 
-    async def _generate_with_retry(
-        self, prompt: str, history: list[dict[str, Any]]
-    ) -> str:
+    async def _generate_with_retry(self, prompt: str, history: list[dict[str, Any]]) -> str:
         """
         Generate response with retry logic.
 
@@ -139,29 +142,24 @@ class AgentWrapper:
         Raises:
             RetryExhaustedError: If all retries fail
         """
+
         async def _do_generate() -> str:
             # Build full prompt with history
             full_prompt = self._build_prompt(prompt, history)
 
-            # Run the agent (synchronous API, run in executor)
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.agent.run(full_prompt)
-            )
+            # Run the agent (async API)
+            response = await self.agent.arun(full_prompt)
 
             if not response or not response.content:
                 raise APIError("Empty response from AI provider")
 
             return response.content
 
-        # Use retry logic
+        # Use retry logic with explicit config to avoid circular imports
         config = AsyncRetryConfig.from_settings(settings.retry)
         return await async_retry(_do_generate, config, operation_name="ai_generate")
 
-    def _build_prompt(
-        self, user_prompt: str, history: list[dict[str, Any]]
-    ) -> str:
+    def _build_prompt(self, user_prompt: str, history: list[dict[str, Any]]) -> str:
         """
         Build the full prompt with conversation history.
 
@@ -212,7 +210,33 @@ class AgentWrapper:
             discord_message_id=discord_message_id,
         )
 
-        await self.repository.create(message)
+        await self.repository.create_message(message)
+
+    async def run_cli(self, session_id: str = "cli_session") -> None:
+        """
+        Run an interactive CLI chat session with streaming.
+
+        Uses Agno's native acli_app for a rich terminal experience.
+
+        Args:
+            session_id: Session ID for conversation persistence
+        """
+        print("\n🤖 BotSalinha - Modo Chat CLI")
+        print("━" * 50)
+        print("Especialista em Direito Brasileiro e Concursos Públicos")
+        print("Digite 'sair', 'exit' ou 'quit' para encerrar.\n")
+
+        await self.agent.acli_app(
+            user="Você",
+            emoji="👤",
+            stream=True,
+            markdown=True,
+            session_id=session_id,
+            user_id="cli_user",
+            exit_on=["exit", "sair", "quit"],
+        )
+
+        print("\n👋 Sessão CLI encerrada. Até a próxima!")
 
 
 __all__ = ["AgentWrapper"]

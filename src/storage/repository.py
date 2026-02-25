@@ -24,7 +24,7 @@ class ConversationRepository(ABC):
     """
 
     @abstractmethod
-    async def create(self, conversation: ConversationCreate) -> Conversation:
+    async def create_conversation(self, conversation: ConversationCreate) -> Conversation:
         """
         Create a new conversation.
 
@@ -37,7 +37,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, conversation_id: str) -> Conversation | None:
+    async def get_conversation_by_id(self, conversation_id: str) -> Conversation | None:
         """
         Get a conversation by ID.
 
@@ -83,7 +83,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def update(
+    async def update_conversation(
         self, conversation_id: str, updates: ConversationUpdate
     ) -> Conversation | None:
         """
@@ -99,7 +99,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, conversation_id: str) -> bool:
+    async def delete_conversation(self, conversation_id: str) -> bool:
         """
         Delete a conversation.
 
@@ -133,7 +133,7 @@ class MessageRepository(ABC):
     """
 
     @abstractmethod
-    async def create(self, message: MessageCreate) -> Message:
+    async def create_message(self, message: MessageCreate) -> Message:
         """
         Create a new message.
 
@@ -146,7 +146,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, message_id: str) -> Message | None:
+    async def get_message_by_id(self, message_id: str) -> Message | None:
         """
         Get a message by ID.
 
@@ -199,7 +199,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def update(
+    async def update_message(
         self, message_id: str, updates: MessageUpdate
     ) -> Message | None:
         """
@@ -215,7 +215,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, message_id: str) -> bool:
+    async def delete_message(self, message_id: str) -> bool:
         """
         Delete a message.
 

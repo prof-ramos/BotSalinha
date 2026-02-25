@@ -12,8 +12,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from faker import Faker
+from freezegun import freeze_time
+from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
+import os
+# Set mock environment variables before any imports that trigger settings initialization
+os.environ["BOTSALINHA_DISCORD__TOKEN"] = "test_token_12345"
+os.environ["BOTSALINHA_GOOGLE__API_KEY"] = "test_api_key"
+os.environ["BOTSALINHA_DATABASE__URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["BOTSALINHA_APP__ENV"] = "testing"
 
 from src.config.settings import Settings
 from src.core.agent import AgentWrapper
@@ -24,6 +34,9 @@ from src.models.message import MessageCreate
 from src.storage.sqlite_repository import SQLiteRepository
 from src.storage.repository import ConversationRepository, MessageRepository
 from src.middleware.rate_limiter import RateLimiter
+
+# Initialize Faker for Brazilian Portuguese test data
+fake = Faker('pt_BR')
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -130,16 +143,26 @@ async def message_repository(test_engine) -> MessageRepository:
 def mock_discord_context():
     """Create a mock Discord command context."""
     ctx = MagicMock()
+    ctx.author = MagicMock()
     ctx.author.id = 123456789
     ctx.author.name = "TestUser"
     ctx.author.bot = False
+    ctx.author.mention = "<@123456789>"
+    ctx.guild = MagicMock()
     ctx.guild.id = 987654321
     ctx.guild.name = "TestGuild"
+    ctx.channel = MagicMock()
     ctx.channel.id = 111222333
     ctx.channel.name = "test-channel"
+    ctx.message = MagicMock()
     ctx.message.id = 999888777
+    ctx.message.content = ""
+    ctx.message.author = ctx.author
+    ctx.message.guild = ctx.guild
+    ctx.message.channel = ctx.channel
     ctx.send = AsyncMock()
     ctx.typing = AsyncMock()
+    ctx.reply = AsyncMock()
 
     return ctx
 
@@ -184,7 +207,7 @@ async def create_test_conversation(
     """Helper to create a test conversation."""
     from src.models.conversation import ConversationCreate
 
-    conv = await repo.create(
+    conv = await repo.create_conversation(
         ConversationCreate(
             user_id=user_id,
             guild_id=guild_id,
@@ -201,7 +224,7 @@ async def create_test_message(
     content: str = "Test message",
 ) -> Any:
     """Helper to create a test message."""
-    msg = await repo.create(
+    msg = await repo.create_message(
         MessageCreate(
             conversation_id=conversation_id,
             role=role,
@@ -209,3 +232,216 @@ async def create_test_message(
         )
     )
     return msg
+
+
+# ===== Additional Fixtures for E2E Testing =====
+
+def pytest_configure(config):
+    """
+    Configure custom pytest markers.
+
+    Markers can be used to categorize tests:
+    - pytest.mark.e2e: End-to-end tests
+    - pytest.mark.integration: Integration tests
+    - pytest.mark.unit: Unit tests
+    - pytest.mark.slow: Slow-running tests
+    - pytest.mark.discord: Tests requiring Discord mocks
+    - pytest.mark.gemini: Tests requiring Gemini API mocks
+    - pytest.mark.database: Tests requiring database
+    """
+    config.addinivalue_line("markers", "e2e: End-to-end tests")
+    config.addinivalue_line("markers", "integration: Integration tests")
+    config.addinivalue_line("markers", "unit: Unit tests")
+    config.addinivalue_line("markers", "slow: Slow-running tests")
+    config.addinivalue_line("markers", "discord: Tests requiring Discord mocks")
+    config.addinivalue_line("markers", "gemini: Tests requiring Gemini API mocks")
+    config.addinivalue_line("markers", "database: Tests requiring database")
+
+
+@pytest.fixture
+def mock_gemini_api():
+    """
+    Mock the Gemini API for testing using httpx.
+
+    NOTE: The google-genai SDK uses httpx internally. This fixture mocks
+    httpx.AsyncClient.send to intercept API calls.
+
+    For more reliable testing, consider using the agent_with_openrouter fixture
+    with a real OpenRouter API key instead.
+    """
+    from unittest.mock import AsyncMock, patch, MagicMock
+
+    gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+    # Mock httpx response
+    async def mock_send(request, **kwargs):
+        """Mock httpx send method."""
+        mock_response = MagicMock(spec=Response)
+        mock_response.status_code = 200
+        mock_response.headers = {}
+
+        # Mock json() method
+        mock_response.json = MagicMock(return_value={
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."}],
+                    "role": "model"
+                },
+                "finishReason": "STOP"
+            }]
+        })
+
+        # Mock aread() method for streaming
+        async def mock_aread():
+            return b'{"candidates": [{"content": {"parts": [{"text": "Test response"}]}}]}'
+        mock_response.aread = mock_aread
+
+        return mock_response
+
+    with patch("httpx.AsyncClient.send", new=AsyncMock(side_effect=mock_send)):
+        yield
+
+
+@pytest.fixture
+def openrouter_test_model(monkeypatch):
+    """
+    Configure test environment to use OpenRouter with free model.
+
+    This fixture overrides the model configuration to use OpenRouter's
+    free tier for testing, avoiding the need to mock HTTP requests.
+
+    Requires OPENROUTER_API_KEY environment variable to be set.
+    Free model used: google/gemma-2-9b-it:free
+
+    Usage in tests:
+        def test_my_agent(openrouter_test_model, agent_wrapper):
+            response = await agent_wrapper.generate_response(...)
+    """
+    # Set environment variables for OpenRouter
+    monkeypatch.setenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_API_KEY", "sk-test-key"))
+    monkeypatch.setenv("BOTSALINHA_GOOGLE__MODEL_ID", "openrouter:google/gemma-2-9b-it:free")
+
+    # Import here to avoid import errors if google-genai not installed
+    try:
+        from agno.models.openrouter import OpenRouter
+        return OpenRouter(
+            id="google/gemma-2-9b-it:free",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+        )
+    except ImportError:
+        # If OpenRouter not available, skip tests that use this fixture
+        pytest.skip("OpenRouter not available - install agno[openrouter] or set OPENROUTER_API_KEY")
+
+
+@pytest.fixture
+def agent_with_openrouter(openrouter_test_model, db_session):
+    """
+    Create an AgentWrapper configured with OpenRouter for testing.
+
+    This fixture provides a test-ready agent that uses OpenRouter's free tier
+    instead of Gemini, avoiding API mocking issues.
+
+    Example:
+        async def test_legal_question(agent_with_openrouter):
+            response = await agent_with_openrouter.generate_response(
+                prompt="Qual é o prazo de prescrição?",
+                conversation_id="test-conv-1",
+                user_id="test-user",
+            )
+            assert len(response) > 50
+    """
+    from unittest.mock import patch
+    from agno.agent import Agent
+    from agno.models.openrouter import OpenRouter
+
+    from src.core.agent import AgentWrapper
+    from src.config.yaml_config import yaml_config
+
+    # Create a test agent with OpenRouter
+    test_agent = Agent(
+        name="BotSalinhaTest",
+        model=openrouter_test_model,
+        instructions=yaml_config.prompt_content,
+        add_history_to_context=True,
+        num_history_runs=3,
+        add_datetime_to_context=True,
+        markdown=True,
+        debug_mode=False,
+    )
+
+    # Create a wrapper with the test agent
+    wrapper = AgentWrapper(repository=db_session)
+    wrapper.agent = test_agent  # Replace the Gemini agent with OpenRouter
+
+    return wrapper
+
+
+@pytest.fixture
+def frozen_time():
+    """
+    Freeze time for consistent testing.
+
+    Uses freezegun to freeze time at a fixed point.
+    """
+    from datetime import datetime
+
+    with freeze_time("2024-01-15 10:30:00"):
+        yield datetime(2024, 1, 15, 10, 30, 0)
+
+
+@pytest.fixture
+def test_user_id():
+    """Provide a consistent test user ID."""
+    return "123456789012345678"
+
+
+@pytest.fixture
+def test_guild_id():
+    """Provide a consistent test guild ID."""
+    return "987654321098765432"
+
+
+@pytest.fixture
+def test_channel_id():
+    """Provide a consistent test channel ID."""
+    return "111222333444555666"
+
+
+@pytest.fixture
+def fake_legal_question():
+    """
+    Generate a fake legal question.
+
+    Uses Faker to create realistic-looking Brazilian legal questions.
+    """
+    questions = [
+        "Qual é o prazo de prescrição para uma ação trabalhista?",
+        "Quais são os requisitos para ingressar no cargo de procurador?",
+        "Explique a diferença entre crime doloso e culposo.",
+        "Qual é a base de cálculo do ICMS?",
+        "Quais são os direitos fundamentais previstos na Constituição?",
+        "O que é jurisprudência e qual o seu valor?",
+        "Explique o princípio da dignidade da pessoa humana.",
+        "Quais são os tipos de penas previstas no Código Penal?",
+    ]
+    return fake.random_element(questions)
+
+
+@pytest.fixture
+def fake_legal_response():
+    """
+    Generate a fake legal response.
+
+    Uses Faker to create realistic-looking legal responses.
+    """
+    responses = [
+        "De acordo com a Constituição Federal de 1988, o prazo é de 5 anos para ações trabalhistas.",
+        "Os requisitos incluem bacharelado em Direito, aprovação em concurso público e posse.",
+        "Crime doloso ocorre quando há intenção do agente, enquanto crime culposo resulta de negligência.",
+        "A base de cálculo do ICMS é o valor da operação, conforme artigo 13 da Lei Complementar 87/1996.",
+        "Os direitos fundamentais estão previstos no artigo 5º da Constituição Federal.",
+        "A jurisprudência é o conjunto de decisões reiteradas dos tribunais sobre uma matéria.",
+        "O princípio da dignidade da pessoa humana está no artigo 1º, inciso III da Constituição.",
+        "O Código Penal prevê penas privativas de liberdade, restritivas de direitos e multa.",
+    ]
+    return fake.random_element(responses)

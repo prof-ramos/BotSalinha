@@ -18,8 +18,6 @@ from structlog.contextvars import (
     merge_contextvars,
 )
 
-from ..config.settings import settings
-
 
 def configure_logging(
     log_level: str | None = None,
@@ -34,7 +32,10 @@ def configure_logging(
         log_format: Format type (json or text)
         log_file: Optional file path for logging
     """
-    level = log_level or settings.log_level
+    if log_level is None:
+        level = "INFO"
+    else:
+        level = log_level
 
     # Standard library logging configuration
     logging.basicConfig(
@@ -64,14 +65,11 @@ def configure_logging(
         processors.append(structlog.processors.JSONRenderer())
     else:
         # Console renderer with colors for development
-        if settings.is_development:
-            processors.append(
-                structlog.dev.ConsoleRenderer(
-                    colors=True, exception_formatter=structlog.dev.plain_traceback
-                )
+        processors.append(
+            structlog.dev.ConsoleRenderer(
+                colors=True, exception_formatter=structlog.dev.plain_traceback
             )
-        else:
-            processors.append(structlog.processors.KeyValueRenderer(sort_keys=True))
+        )
 
     # Configure structlog
     structlog.configure(
@@ -96,7 +94,13 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
 
 
-def setup_logging() -> structlog.stdlib.BoundLogger:
+def setup_logging(
+    log_level: str = "INFO",
+    log_format: str = "json",
+    app_version: str = "unknown",
+    app_env: str = "unknown",
+    debug: bool = False,
+) -> structlog.stdlib.BoundLogger:
     """
     Setup logging and return the main logger.
 
@@ -105,15 +109,15 @@ def setup_logging() -> structlog.stdlib.BoundLogger:
     Returns:
         Configured logger instance
     """
-    configure_logging()
+    configure_logging(log_level=log_level, log_format=log_format)
     log = get_logger("botsalinha")
 
     # Log startup
     log.info(
         "BotSalinha starting",
-        app_version=settings.app_version,
-        app_env=settings.app_env,
-        debug=settings.debug,
+        app_version=app_version,
+        app_env=app_env,
+        debug=debug,
     )
 
     return log

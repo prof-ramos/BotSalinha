@@ -149,7 +149,7 @@ class BotSalinhaBot(commands.Bot):
 
     @commands.command(name="ask")
     @commands.cooldown(
-        rate_limit=1,
+        rate=1,
         per=60.0,
         type=commands.BucketType.user,
     )
@@ -163,18 +163,6 @@ class BotSalinhaBot(commands.Bot):
             ctx: Command context
             question: User's question
         """
-        # Check rate limit
-        try:
-            await rate_limiter.check_rate_limit(
-                user_id=ctx.author.id,
-                guild_id=ctx.guild.id if ctx.guild else None,
-            )
-        except Exception as e:
-            if isinstance(e, BotRateLimitError):
-                await ctx.send(f"⏱️ {e.message}")
-                return
-            raise
-
         # Send typing indicator
         await ctx.typing()
 
@@ -279,7 +267,7 @@ Desenvolvido com ❤️ usando Agno + Gemini
         # Find conversation in this channel
         for conv in conversations:
             if conv.channel_id == str(ctx.channel.id):
-                await self.repository.delete(conv.id)
+                await self.repository.delete_conversation(conv.id)
                 await ctx.send("✅ Histórico da conversa limpo.")
                 return
 

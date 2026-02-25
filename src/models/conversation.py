@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import DateTime, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 if TYPE_CHECKING:
     from .message import Message
@@ -27,6 +27,10 @@ class ConversationORM(Base):
     SQLAlchemy ORM model for conversations.
 
     Represents a conversation between a user and the bot in a specific guild.
+
+    Note: Relationship to messages is not defined here to avoid circular import
+    issues since MessageORM is created dynamically. Messages are queried separately
+    through the repository.
     """
 
     __tablename__ = "conversations"
@@ -48,18 +52,10 @@ class ConversationORM(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
-    metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # Relationship to messages
-    messages: Mapped[list["MessageORM"]] = relationship(
-        "MessageORM", back_populates="conversation", cascade="all, delete-orphan"
-    )
+    meta_data: Mapped[str | None] = mapped_column(Text, nullable=True, name="meta_data")
 
     def __repr__(self) -> str:
-        return (
-            f"<ConversationORM(id={self.id!r}, user_id={self.user_id!r}, "
-            f"guild_id={self.guild_id!r})>"
-        )
+        return f"<ConversationORM(id={self.id!r}, user_id={self.user_id!r}, guild_id={self.guild_id!r})>"
 
 
 # Pydantic schemas
@@ -69,7 +65,7 @@ class ConversationBase(BaseModel):
     user_id: str = Field(..., description="Discord user ID")
     guild_id: str | None = Field(None, description="Discord guild/server ID")
     channel_id: str = Field(..., description="Discord channel ID")
-    metadata: str | None = Field(None, description="Additional metadata as JSON")
+    meta_data: str | None = Field(None, description="Additional metadata as JSON")
 
 
 class ConversationCreate(ConversationBase):
@@ -81,7 +77,7 @@ class ConversationCreate(ConversationBase):
 class ConversationUpdate(BaseModel):
     """Schema for updating a conversation."""
 
-    metadata: str | None = None
+    meta_data: str | None = Field(None, description="Additional metadata as JSON")
 
 
 class Conversation(ConversationBase):

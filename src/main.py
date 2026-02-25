@@ -2,8 +2,10 @@
 Main entry point for BotSalinha.
 
 This module initializes the bot and starts the Discord client.
+Supports both Discord mode (default) and CLI chat mode (--chat).
 """
 
+import argparse
 import asyncio
 from contextlib import suppress
 
@@ -19,26 +21,36 @@ from .utils.logger import setup_logging
 load_dotenv()
 
 
-async def main() -> None:
-    """Main entry point for the application."""
-    # Setup logging
-    log = setup_logging()
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        prog="botsalinha",
+        description="BotSalinha - Assistente de Direito e Concursos Públicos",
+    )
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Iniciar modo chat interativo no terminal (sem Discord)",
+    )
+    return parser.parse_args()
 
-    log.info(
-        "botsalinha_starting",
-        version=settings.app_version,
-        environment=settings.app_env,
+
+async def run_discord_bot() -> None:
+    """Run the Discord bot (default mode)."""
+    log = setup_logging(
+        log_level=settings.log_level,
+        log_format=settings.log_format,
+        app_version=settings.app_version,
+        app_env=settings.app_env,
+        debug=settings.debug,
     )
 
-    # Create bot
     bot = BotSalinhaBot()
 
-    # Define shutdown coroutine
     async def shutdown_bot():
         log.info("closing_discord_connection")
         await bot.close()
 
-    # Run with lifecycle management
     await run_with_lifecycle(
         start_coro=bot.start(settings.discord.token),
         shutdown_coro=shutdown_bot,
@@ -47,10 +59,44 @@ async def main() -> None:
     log.info("botsalinha_stopped")
 
 
+async def run_cli_chat() -> None:
+    """Run the interactive CLI chat mode with streaming."""
+    # Use text logging for better terminal readability
+    log = setup_logging(
+        log_level="WARNING",
+        log_format="text",
+        app_version=settings.app_version,
+        app_env=settings.app_env,
+        debug=False,
+    )
+
+    from .core.agent import AgentWrapper
+    from .storage.sqlite_repository import SQLiteRepository
+
+    # Initialize database for CLI mode
+    repo = SQLiteRepository()
+    try:
+        await repo.initialize_database()
+        await repo.create_tables()
+
+        agent = AgentWrapper(repository=repo)
+        await agent.run_cli()
+    finally:
+        # Ensure repository is properly closed
+        if hasattr(repo, 'close'):
+            await repo.close()
+        log.info("cli_session_ended")
+
+
 def cli_main() -> None:
     """CLI entry point."""
+    args = parse_args()
+
     try:
-        asyncio.run(main())
+        if args.chat:
+            asyncio.run(run_cli_chat())
+        else:
+            asyncio.run(run_discord_bot())
     except KeyboardInterrupt:
         print("\n👋 BotSalinha encerrado.")
     except Exception as e:

@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 if TYPE_CHECKING:
     from .conversation import ConversationORM, Conversation
@@ -45,7 +45,7 @@ class MessageBase(BaseModel):
 
     role: MessageRole = Field(..., description="Message role (user/assistant/system)")
     content: str = Field(..., description="Message content")
-    metadata: str | None = Field(None, description="Additional metadata as JSON")
+    meta_data: str | None = Field(None, description="Additional metadata as JSON", alias="metadata")
 
 
 class MessageCreate(MessageBase):
@@ -59,7 +59,7 @@ class MessageUpdate(BaseModel):
     """Schema for updating a message."""
 
     content: str | None = None
-    metadata: str | None = None
+    meta_data: str | None = Field(None, alias="metadata")
 
 
 class Message(MessageBase):
@@ -82,11 +82,7 @@ class MessageWithConversation(Message):
     conversation: "Conversation" = Field(..., description="Associated conversation")
 
 
-# Forward reference resolution
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .conversation import Conversation
+# Forward reference resolution already handled at top of file
 
 
 # Full ORM class definition for use in repository
@@ -125,12 +121,7 @@ def create_message_orm(base: type) -> type:
             default=lambda: datetime.now(timezone.utc),
             nullable=False,
         )
-        metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-        # Relationship to conversation
-        conversation: Mapped["ConversationORM"] = relationship(
-            "ConversationORM", back_populates="messages"
-        )
+        meta_data: Mapped[str | None] = mapped_column(Text, nullable=True, name="meta_data")
 
         def __repr__(self) -> str:
             return (
@@ -149,4 +140,5 @@ __all__ = [
     "Message",
     "MessageWithConversation",
     "create_message_orm",
+    "MessageORM",  # Will be set by sqlite_repository
 ]

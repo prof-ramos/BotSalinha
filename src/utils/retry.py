@@ -21,7 +21,6 @@ from tenacity import (
 )
 
 from .errors import APIError, RetryExhaustedError
-from ..config.settings import settings
 
 log = structlog.get_logger()
 
@@ -82,7 +81,8 @@ async def async_retry(
         RetryExhaustedError: When all retry attempts are exhausted
     """
     if config is None:
-        config = AsyncRetryConfig.from_settings(settings.retry)
+        # Fallback to default config if none provided
+        config = AsyncRetryConfig()
 
     op_name = operation_name or func.__name__
 

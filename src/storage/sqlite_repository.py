@@ -17,6 +17,7 @@ import structlog
 
 from ..config.settings import settings
 from ..models.conversation import (
+    Base,
     Conversation,
     ConversationCreate,
     ConversationUpdate,
@@ -36,7 +37,7 @@ from .repository import ConversationRepository, MessageRepository
 log = structlog.get_logger()
 
 # Create MessageORM with the correct base
-MessageORM = create_message_orm(ConversationORM)
+MessageORM = create_message_orm(Base)
 
 
 class SQLiteRepository(ConversationRepository, MessageRepository):
@@ -109,13 +110,13 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     # Conversation Repository Methods
 
-    async def create(self, conversation: ConversationCreate) -> Conversation:
+    async def create_conversation(self, conversation: ConversationCreate) -> Conversation:
         async with self.async_session_maker() as session:
             orm = ConversationORM(
                 user_id=conversation.user_id,
                 guild_id=conversation.guild_id,
                 channel_id=conversation.channel_id,
-                metadata=conversation.metadata,
+                meta_data=conversation.meta_data,
             )
             session.add(orm)
             await session.commit()
@@ -123,7 +124,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
             return Conversation.model_validate(orm)
 
-    async def get_by_id(self, conversation_id: str) -> Conversation | None:
+    async def get_conversation_by_id(self, conversation_id: str) -> Conversation | None:
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(
                 ConversationORM.id == conversation_id
@@ -171,9 +172,9 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             guild_id=guild_id,
             channel_id=channel_id,
         )
-        return await self.create(create_data)
+        return await self.create_conversation(create_data)
 
-    async def update(
+    async def update_conversation(
         self, conversation_id: str, updates: ConversationUpdate
     ) -> Conversation | None:
         async with self.async_session_maker() as session:
@@ -186,15 +187,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             if orm is None:
                 return None
 
-            if updates.metadata is not None:
-                orm.metadata = updates.metadata
+            if updates.meta_data is not None:
+                orm.meta_data = updates.meta_data
 
             await session.commit()
             await session.refresh(orm)
 
             return Conversation.model_validate(orm)
 
-    async def delete(self, conversation_id: str) -> bool:
+    async def delete_conversation(self, conversation_id: str) -> bool:
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(
                 ConversationORM.id == conversation_id
@@ -231,14 +232,14 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     # Message Repository Methods
 
-    async def create(self, message: MessageCreate) -> Message:
+    async def create_message(self, message: MessageCreate) -> Message:
         async with self.async_session_maker() as session:
             orm = MessageORM(
                 conversation_id=message.conversation_id,
                 role=message.role.value,
                 content=message.content,
                 discord_message_id=message.discord_message_id,
-                metadata=message.metadata,
+                meta_data=message.meta_data,
             )
             session.add(orm)
             await session.commit()
@@ -246,7 +247,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
             return Message.model_validate(orm)
 
-    async def get_by_id(self, message_id: str) -> Message | None:
+    async def get_message_by_id(self, message_id: str) -> Message | None:
         async with self.async_session_maker() as session:
             stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)
@@ -311,7 +312,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
         return system_messages + user_assistant
 
-    async def update(
+    async def update_message(
         self, message_id: str, updates: MessageUpdate
     ) -> Message | None:
         async with self.async_session_maker() as session:
@@ -324,15 +325,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
             if updates.content is not None:
                 orm.content = updates.content
-            if updates.metadata is not None:
-                orm.metadata = updates.metadata
+            if updates.meta_data is not None:
+                orm.meta_data = updates.meta_data
 
             await session.commit()
             await session.refresh(orm)
 
             return Message.model_validate(orm)
 
-    async def delete(self, message_id: str) -> bool:
+    async def delete_message(self, message_id: str) -> bool:
         async with self.async_session_maker() as session:
             stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)

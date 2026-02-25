@@ -73,3 +73,16 @@ logs/
 
 # Alembic
 migrations/versions/*.pyc
+
+# Code review/debug artifacts
+*debug.md
+coderabbit-*.md
+*-review*.md
+.claude
+.agents
+.cline
+.walkthrough
+.task
+.implementationplan
+.omc/
+repomix-output.xml

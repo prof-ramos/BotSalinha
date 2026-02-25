@@ -1,224 +1,355 @@
-# BotSalinha
+# 🤖 BotSalinha
 
-> Discord bot specialized in Brazilian law and public contests, powered by Agno and Gemini Flash 2.0.
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+<!-- markdownlint-enable MD033 -->
 
-BotSalinha is an intelligent assistant that answers questions about Brazilian law, legislation, jurisprudence, and public contest preparation. It maintains conversation context across multiple messages and provides formatted responses in Portuguese.
+**Bot do Discord especializado em direito brasileiro e concursos públicos**
+_Alimentado por Agno e Gemini 2.0 Flash_
 
-## Features
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Discord.py](https://img.shields.io/badge/Discord.py-2.4+-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discordpy.readthedocs.io/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Code style: Ruff](https://img.shields.io/badge/Code%20Style-Ruff-D7FFDB?style=for-the-badge)](https://docs.astral.sh/ruff/)
 
-- 🤖 **AI-Powered**: Uses Google Gemini Flash 2.0 via Agno framework
-- 💬 **Contextual Conversations**: Remembers up to 3 message pairs per conversation
-- 🗃️ **Persistent Storage**: SQLite database for conversation history
-- 🛡️ **Rate Limiting**: Per-user rate limiting with token bucket algorithm
-- 🔄 **Automatic Retry**: Exponential backoff for failed API calls
-- 📊 **Structured Logging**: JSON logs with request tracing
-- 🐳 **Docker Ready**: Multi-stage Dockerfile for easy deployment
-- 🧪 **Tested**: Comprehensive test suite with pytest
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 
-## Quick Start
+<!-- markdownlint-disable MD033 -->
+</div>
+<!-- markdownlint-enable MD033 -->
 
-### Prerequisites
+---
 
-- Python 3.12+
-- Discord Bot Token ([Discord Developer Portal](https://discord.com/developers/applications))
-- Google API Key ([AI Studio](https://ai.google.dev/))
+## 📖 Sobre
 
-### Installation
+BotSalinha é um assistente inteligente para Discord que responde perguntas sobre **direito brasileiro**, **legislação**, **jurisprudência** e **preparação para concursos públicos**.
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd BotSalinha
-   ```
+### ✨ Destaques
 
-2. **Install dependencies** (requires [uv](https://github.com/astral-sh/uv))
-   ```bash
-   uv sync
-   ```
+- 🧠 **IA Avançada**: Powered by Google Gemini 2.0 Flash via framework Agno
+- 💬 **Conversas Contextuais**: Memória de até 3 pares de mensagens por conversa
+- 🗃️ **Persistência**: Banco de dados SQLite para histórico de conversas
+- 🛡️ **Rate Limiting**: Proteção contra abuso com algoritmo token bucket
+- 🔄 **Resiliência**: Retentativa automática com backoff exponencial
+- 📊 **Observabilidade**: Logs estruturados JSON com rastreamento de requisições
+- 🐳 **DevOps Ready**: Dockerfile multi-stage e docker-compose
 
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   ```
+---
 
-   Edit `.env` and add your credentials:
-   ```env
-   DISCORD_BOT_TOKEN=your_discord_bot_token_here
-   GOOGLE_API_KEY=your_google_api_key_here
-   ```
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+<!-- markdownlint-enable MD033 -->
 
-4. **Run the bot**
-   ```bash
-   uv run bot.py
-   ```
+**Desenvolvido com ❤️ usando [Agno](https://github.com/agno-agi/agno) + [Gemini 2.0 Flash](https://ai.google.dev/)**
 
-## Docker Deployment
+[⬆️ Voltar ao topo](#-botsalinha)
 
-### Development
+<!-- markdownlint-disable MD033 -->
+</div>
+<!-- markdownlint-enable MD033 -->
+
+---
+
+## 🚀 Início Rápido
+
+### Pré-requisitos
+
+| Requisito         | Versão | Link                                                                    |
+| ----------------- | ------ | ----------------------------------------------------------------------- |
+| Python            | 3.12+  | [python.org](https://www.python.org/)                                   |
+| uv                | latest | [astral.sh/uv](https://github.com/astral-sh/uv)                         |
+| Discord Bot Token | -      | [Discord Developer Portal](https://discord.com/developers/applications) |
+| Google API Key    | -      | [AI Studio](https://ai.google.dev/)                                     |
+
+### Instalação
 
 ```bash
-docker-compose up -d
+# 1. Clone o repositório
+git clone https://github.com/prof-ramos/BotSalinha.git
+cd BotSalinha
+
+# 2. Instale as dependências com uv
+uv sync
+
+# 3. Configure as variáveis de ambiente
+cp .env.example .env
 ```
 
-### Production
+Edite o arquivo `.env` com suas credenciais:
+
+```env
+DISCORD_BOT_TOKEN=seu_discord_bot_token_aqui
+GOOGLE_API_KEY=sua_google_api_key_aqui
+```
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+# 4. Execute o bot
+uv run bot.py
 ```
 
-See [docs/deployment.md](docs/deployment.md) for detailed deployment instructions.
+---
 
-## Commands
+## 💻 Comandos
 
-| Command | Description |
-|---------|-------------|
-| `!ask <pergunta>` | Ask a question about law or contests |
-| `!ping` | Check bot latency |
-| `!ajuda` | Show help message |
-| `!info` | Show bot information |
-| `!limpar` | Clear conversation history |
+| Comando           | Descrição                                    | Exemplo                       |
+| ----------------- | -------------------------------------------- | ----------------------------- |
+| `!ask <pergunta>` | Faça uma pergunta sobre direito ou concursos | `!ask O que é habeas corpus?` |
+| `!ping`           | Verifique a latência do bot                  | `!ping`                       |
+| `!ajuda`          | Mostra mensagem de ajuda                     | `!ajuda`                      |
+| `!info`           | Mostra informações do bot                    | `!info`                       |
+| `!limpar`         | Limpa o histórico da conversa                | `!limpar`                     |
 
-## Project Structure
+---
 
+## ⚙️ Configuração
+
+Toda a configuração é feita através de variáveis de ambiente.
+
+### Variáveis Principais
+
+| Variável                    | Padrão                         | Descrição                                  |
+| --------------------------- | ------------------------------ | ------------------------------------------ |
+| `DISCORD_BOT_TOKEN`         | _obrigatório_                  | Token do bot Discord                       |
+| `GOOGLE_API_KEY`            | _obrigatório_                  | Chave da API Google Gemini                 |
+| `HISTORY_RUNS`              | `3`                            | Pares de mensagens no histórico            |
+| `RATE_LIMIT_REQUESTS`       | `10`                           | Máximo de requisições por janela           |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60`                           | Janela de tempo (segundos)                 |
+| `DATABASE_URL`              | `sqlite:///data/botsalinha.db` | URL de conexão do banco                    |
+| `LOG_LEVEL`                 | `INFO`                         | Nível de log (DEBUG, INFO, WARNING, ERROR) |
+
+> 📄 Veja [`.env.example`](.env.example) para todas as opções disponíveis.
+
+---
+
+## 🏗️ Arquitetura
+
+BotSalinha segue uma arquitetura modular com separação clara de responsabilidades:
+
+```text
+┌─────────────┐     ┌─────────────────┐     ┌────────────────┐
+│   Discord   │────▶│  BotSalinhaBot  │────▶│   RateLimiter  │
+└─────────────┘     └─────────────────┘     └───────┬────────┘
+                                                    │
+                    ┌───────────────────────────────┘
+                    ▼
+            ┌───────────────┐     ┌──────────────────────┐
+            │ AgentWrapper  │────▶│   Gemini 2.0 Flash   │
+            └───────┬───────┘     └──────────────────────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │ SQLiteRepo    │
+            └───────────────┘
 ```
+
+### Componentes
+
+| Componente             | Tecnologia          | Descrição              |
+| ---------------------- | ------------------- | ---------------------- |
+| **Integração Discord** | `discord.py`        | Framework de comandos  |
+| **Limitação de Taxa**  | Token Bucket        | Algoritmo em memória   |
+| **Agente IA**          | Agno + Gemini       | Contexto de conversa   |
+| **Persistência**       | SQLAlchemy + SQLite | ORM com backend SQLite |
+| **Logging**            | structlog           | Logs estruturados JSON |
+
+### Estrutura do Projeto
+
+```text
 botsalinha/
-├── bot.py                 # Entry point
+├── bot.py                 # Ponto de entrada
 ├── src/
-│   ├── config/            # Pydantic settings
-│   ├── core/              # Bot and agent wrappers
-│   ├── models/            # Data models (conversations, messages)
-│   ├── storage/           # Repository layer (SQLite)
-│   ├── utils/             # Logging, errors, retry logic
+│   ├── config/            # Configurações Pydantic
+│   ├── core/              # Wrappers do bot e agente
+│   ├── models/            # Modelos de dados
+│   ├── storage/           # Camada de repositório
+│   ├── utils/             # Logs, erros, retry
 │   └── middleware/        # Rate limiting
-├── tests/                 # Pytest tests
-├── migrations/            # Alembic database migrations
-├── scripts/               # Backup utilities
-├── docs/                  # Deployment and operations docs
-└── data/                  # SQLite database (gitignored)
+├── tests/                 # Testes pytest
+├── migrations/            # Migrações Alembic
+├── scripts/               # Utilitários de backup
+├── docs/                  # Documentação
+└── data/                  # Banco SQLite (gitignore)
 ```
 
-## Configuration
+---
 
-All configuration is done via environment variables. See [`.env.example`](.env.example) for all available options.
+## 🔧 Desenvolvimento
 
-Key settings:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DISCORD_BOT_TOKEN` | *required* | Discord bot token |
-| `GOOGLE_API_KEY` | *required* | Google Gemini API key |
-| `HISTORY_RUNS` | `3` | Conversation history to keep |
-| `RATE_LIMIT_REQUESTS` | `10` | Max requests per window |
-| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate limit time window |
-| `DATABASE_URL` | `sqlite:///data/botsalinha.db` | Database connection URL |
-
-## Development
-
-### Running Tests
+### Executar Testes
 
 ```bash
+# Executar todos os testes com cobertura
 uv run pytest
+
+# Executar com verbose
+uv run pytest -v
+
+# Executar arquivo específico
+uv run pytest tests/test_settings.py
 ```
 
-### Code Quality
+### Qualidade do Código
 
 ```bash
 # Linting
 uv run ruff check src/
 
-# Formatting
+# Formatação
 uv run ruff format src/
 
-# Type checking
+# Verificação de tipos
 uv run mypy src/
+
+# Executar todas as verificações
+uv run ruff check src/ && uv run ruff format src/ && uv run mypy src/
 ```
 
-### Database Migrations
+### Migrações do Banco de Dados
 
 ```bash
-# Create a new migration
-uv run alembic revision --autogenerate -m "description"
+# Criar nova migração
+uv run alembic revision --autogenerate -m "descrição da mudança"
 
-# Apply migrations
+# Aplicar migrações
 uv run alembic upgrade head
 
-# Rollback
+# Reverter última migração
 uv run alembic downgrade -1
 ```
 
-### Backup
+### Backup e Restore
 
 ```bash
-# Create backup
+# Criar backup
 uv run python scripts/backup.py backup
 
-# List backups
+# Listar backups
 uv run python scripts/backup.py list
 
-# Restore from backup
-uv run python scripts/backup.py restore --restore-from backups/file.db
+# Restaurar do backup
+uv run python scripts/backup.py restore --restore-from backups/arquivo.db
 ```
 
-## Architecture
+---
 
-BotSalinha follows a modular architecture with clear separation of concerns:
+## 🐳 Implantação Docker
 
+### Desenvolvimento
+
+```bash
+docker-compose up -d
 ```
-Discord → BotSalinhaBot → RateLimiter → AgentWrapper → Gemini Flash 2.0
-                              ↓
-                        SQLiteRepository
+
+### Produção
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-- **Discord Integration**: `discord.py` with command framework
-- **Rate Limiting**: Token bucket algorithm with in-memory storage
-- **AI Agent**: Agno wrapper with conversation context
-- **Persistence**: SQLAlchemy ORM with SQLite backend
-- **Logging**: Structured logging with structlog
+> 📖 Veja [docs/deployment.md](docs/deployment.md) para instruções detalhadas.
 
-## Troubleshooting
+---
 
-### Bot doesn't respond to commands
+## 🐛 Solução de Problemas
 
-1. Verify MESSAGE_CONTENT Intent is enabled in Discord Developer Portal
-2. Check the bot has necessary permissions (Send Messages, Read Message History)
-3. Ensure the bot is online in your server
+### O bot não responde aos comandos
 
-### Database errors
+1. ✅ Verifique se **MESSAGE_CONTENT Intent** está habilitado no [Discord Developer Portal](https://discord.com/developers/applications)
+2. ✅ Confirme que o bot tem as permissões necessárias (`Send Messages`, `Read Message History`)
+3. ✅ Certifique-se de que o bot está online no seu servidor
 
-1. Ensure the `data/` directory exists and is writable
-2. Check that SQLite is properly configured
-3. Run migrations: `uv run alembic upgrade head`
+### Erros de banco de dados
 
-### Rate limiting issues
+```bash
+# Verifique se o diretório existe
+mkdir -p data/
 
-Adjust settings in `.env`:
+# Aplique migrações
+uv run alembic upgrade head
+```
+
+### Problemas de limitação de taxa
+
+Ajuste as configurações no `.env`:
+
 ```env
 RATE_LIMIT_REQUESTS=20
 RATE_LIMIT_WINDOW_SECONDS=60
 ```
 
-## Roadmap
+---
 
-- [ ] Additional LLM model support
-- [ ] Citation system for legal sources
-- [ ] Legislation and jurisprudence index
-- [ ] Web UI for conversation management
-- [ ] Analytics dashboard
+## 🗺️ Roadmap
 
-## License
-
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines and submit pull requests to the main repository.
-
-## Support
-
-- 📖 [PRD.md](PRD.md) - Product Requirements Document
-- 🚀 [docs/deployment.md](docs/deployment.md) - Deployment Guide
-- 🔧 [docs/operations.md](docs/operations.md) - Operations Runbook
+- [ ] Suporte para modelos LLM adicionais (Claude, GPT)
+- [ ] Sistema de citação de fontes jurídicas
+- [ ] Índice de legislação e jurisprudência
+- [ ] Interface web para gerenciamento de conversas
+- [ ] Dashboard de analytics
+- [ ] Suporte a múltiplos idiomas
 
 ---
 
-**Built with ❤️ using Agno + Gemini Flash 2.0**
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Por favor, siga estas etapas:
+
+1. **Fork** o repositório
+2. **Crie** uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
+3. **Faça** commit das suas mudanças (`git commit -m 'feat: adiciona nova funcionalidade'`)
+4. **Push** para a branch (`git push origin feature/nova-funcionalidade`)
+5. **Abra** um Pull Request
+
+### Padrões de Commit
+
+Este projeto segue [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` - Nova funcionalidade
+- `fix:` - Correção de bug
+- `docs:` - Documentação
+- `style:` - Formatação
+- `refactor:` - Refatoração
+- `test:` - Testes
+- `chore:` - Tarefas de manutenção
+
+---
+
+## 📚 Documentação
+
+| Documento                                          | Descrição                          |
+| -------------------------------------------------- | ---------------------------------- |
+| [PRD.md](PRD.md)                                   | Documento de Requisitos do Produto |
+| [docs/deployment.md](docs/deployment.md)           | Guia de Implantação                |
+| [docs/operations.md](docs/operations.md)           | Manual de Operações                |
+| [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Guia do Desenvolvedor              |
+
+---
+
+## 📄 Licença
+
+Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+---
+
+## 📞 Suporte
+
+Encontrou um problema? Tem uma sugestão?
+
+- 🐛 **Bugs**: [Abra uma issue](https://github.com/prof-ramos/BotSalinha/issues)
+- 💡 **Sugestões**: [Discussions](https://github.com/prof-ramos/BotSalinha/discussions)
+- 📧 **Contato**: Via GitHub
+
+---
+
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+<!-- markdownlint-enable MD033 -->
+
+**Desenvolvido com ❤️ usando [Agno](https://github.com/agno-agi/agno) + [Gemini 2.0 Flash](https://ai.google.dev/)**
+
+[⬆️ Voltar ao topo](#-botsalinha)
+
+<!-- markdownlint-disable MD033 -->
+</div>
+<!-- markdownlint-enable MD033 -->
