@@ -67,7 +67,7 @@ async def run_cli_chat() -> None:
         log_format="text",
         app_version=settings.app_version,
         app_env=settings.app_env,
-        debug=False,
+        debug=settings.debug,
     )
 
     from .core.agent import AgentWrapper
@@ -83,8 +83,7 @@ async def run_cli_chat() -> None:
         await agent.run_cli()
     finally:
         # Ensure repository is properly closed
-        if hasattr(repo, 'close'):
-            await repo.close()
+        await repo.close()
         log.info("cli_session_ended")
 
 

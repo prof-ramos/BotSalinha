@@ -43,6 +43,8 @@ class MessageORM:
 class MessageBase(BaseModel):
     """Base schema for message."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     role: MessageRole = Field(..., description="Message role (user/assistant/system)")
     content: str = Field(..., description="Message content")
     meta_data: str | None = Field(None, description="Additional metadata as JSON", alias="metadata")
@@ -58,6 +60,8 @@ class MessageCreate(MessageBase):
 class MessageUpdate(BaseModel):
     """Schema for updating a message."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     content: str | None = None
     meta_data: str | None = Field(None, alias="metadata")
 
@@ -65,7 +69,7 @@ class MessageUpdate(BaseModel):
 class Message(MessageBase):
     """Schema for message response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str = Field(..., description="Message ID")
     conversation_id: str = Field(..., description="Associated conversation ID")

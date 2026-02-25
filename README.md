@@ -33,7 +33,7 @@ BotSalinha é um assistente inteligente para Discord que responde perguntas sobr
 - 🛡️ **Rate Limiting**: Proteção contra abuso com algoritmo token bucket
 - 🔄 **Resiliência**: Retentativa automática com backoff exponencial
 - 📊 **Observabilidade**: Logs estruturados JSON com rastreamento de requisições
-- 🐳 **DevOps Ready**: Dockerfile multi-stage e docker-compose
+- 🐳 **DevOps Ready**: Dockerfile multi-stage e docker compose
 
 ---
 
@@ -238,13 +238,13 @@ uv run python scripts/backup.py restore --restore-from backups/arquivo.db
 ### Desenvolvimento
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Produção
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker compose.prod.yml up -d
 ```
 
 > 📖 Veja [docs/deployment.md](docs/deployment.md) para instruções detalhadas.

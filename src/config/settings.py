@@ -5,7 +5,7 @@ This module uses environment variables with validation, following best practices
 - Nested models for structured configuration
 - Environment variable prefixing
 - Type validation with defaults
-- Extra fields forbidden to catch typos
+- Extra fields are ignored (unknown BOTSALINHA_ env vars are silently skipped)
 """
 
 from functools import lru_cache
@@ -35,7 +35,7 @@ class GoogleConfig(BaseModel):
     @classmethod
     def validate_model_id(cls, v: str) -> str:
         """Ensure model_id is not an empty string."""
-        if v is None or v.strip() == "":
+        if v.strip() == "":
             return "gemini-2.0-flash"
         return v.strip()
 
