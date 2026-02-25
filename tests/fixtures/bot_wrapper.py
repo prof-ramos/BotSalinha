@@ -6,9 +6,7 @@ without requiring actual Discord connection.
 """
 
 from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, PropertyMock
-
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 
 class DiscordBotWrapper:
@@ -203,7 +201,7 @@ class DiscordBotWrapper:
 
         # Async methods
         ctx.send = AsyncMock(return_value=None)
-        ctx.typing = AsyncMock(return_value=None)
+        ctx.typing = MagicMock()
         ctx.reply = AsyncMock(return_value=None)
 
         # Command setup

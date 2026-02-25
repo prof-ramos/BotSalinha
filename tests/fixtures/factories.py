@@ -65,6 +65,11 @@ class DiscordFactory:
         return str(fake.random_int(min=100000000000000000, max=999999999999999999))
 
     @staticmethod
+    def message_id() -> str:
+        """Generate a realistic Discord message ID."""
+        return str(fake.random_int(min=100000000000000000, max=999999999999999999))
+
+    @staticmethod
     def username() -> str:
         """Generate a realistic Discord username."""
         return fake.user_name()
@@ -216,7 +221,7 @@ class ConversationFactory:
             messages.append({
                 "role": "user",
                 "content": LegalContentFactory.legal_question(),
-                "discord_message_id": DiscordFactory.channel_id(),
+                "discord_message_id": DiscordFactory.message_id(),
             })
             # Assistant response
             messages.append({
@@ -270,7 +275,7 @@ class MessageFactory:
                 content = fake.sentence()
 
         if discord_message_id is None and role == "user":
-            discord_message_id = DiscordFactory.channel_id()
+            discord_message_id = DiscordFactory.message_id()
 
         return {
             "conversation_id": conversation_id,

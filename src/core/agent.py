@@ -43,7 +43,7 @@ class AgentWrapper:
         # Load prompt from external file (configured in config.yaml)
         prompt_content = yaml_config.prompt_content
 
-        # Use model ID from YAML config (can be overridden by .env)
+        # Use model ID from .env (falls back to YAML config)
         model_id = settings.google.model_id or yaml_config.model.id
 
         # Get temperature from YAML config
@@ -54,7 +54,7 @@ class AgentWrapper:
             name="BotSalinha",
             model=Gemini(id=model_id, temperature=temperature),
             instructions=prompt_content,
-            add_history_to_context=True,
+            add_history_to_context=False,
             num_history_runs=settings.history_runs,
             add_datetime_to_context=yaml_config.agent.add_datetime,
             markdown=yaml_config.agent.markdown,

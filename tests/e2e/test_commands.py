@@ -5,18 +5,20 @@ Tests the full flow from Discord command to database persistence
 and bot response, using mocked Discord and Gemini APIs.
 """
 
-from uuid import uuid4
-
 import pytest
 import pytest_asyncio
 
+from src.models.conversation import ConversationCreate
 from tests.fixtures.bot_wrapper import DiscordBotWrapper, TestScenario
-from tests.fixtures.factories import (
-    ConversationFactory,
-    DiscordFactory,
-    LegalContentFactory,
-    MessageFactory,
-)
+from tests.fixtures.factories import DiscordFactory
+
+
+@pytest_asyncio.fixture
+async def bot_wrapper(conversation_repository):
+    """Create bot wrapper with test repository."""
+    wrapper = DiscordBotWrapper(repository=conversation_repository)
+    yield wrapper
+    await wrapper.cleanup()
 
 
 @pytest.mark.e2e
@@ -34,13 +36,6 @@ class TestAskCommand:
     5. Response is saved to database
     6. Response is sent back to user
     """
-
-    @pytest_asyncio.fixture
-    async def bot_wrapper(self, conversation_repository):
-        """Create bot wrapper with test repository."""
-        wrapper = DiscordBotWrapper(repository=conversation_repository)
-        yield wrapper
-        await wrapper.cleanup()
 
     @pytest.mark.asyncio
     async def test_ask_command_success(
@@ -215,13 +210,6 @@ class TestBasicCommands:
     Tests ping, help, and info commands.
     """
 
-    @pytest_asyncio.fixture
-    async def bot_wrapper(self, conversation_repository):
-        """Create bot wrapper with test repository."""
-        wrapper = DiscordBotWrapper(repository=conversation_repository)
-        yield wrapper
-        await wrapper.cleanup()
-
     @pytest.mark.asyncio
     async def test_ping_command(self, bot_wrapper: DiscordBotWrapper):
         """Test the !ping command."""
@@ -286,13 +274,6 @@ class TestConversationCommands:
     """
 
     @pytest_asyncio.fixture
-    async def bot_wrapper(self, conversation_repository):
-        """Create bot wrapper with test repository."""
-        wrapper = DiscordBotWrapper(repository=conversation_repository)
-        yield wrapper
-        await wrapper.cleanup()
-
-    @pytest_asyncio.fixture
     async def existing_conversation(
         self,
         bot_wrapper: DiscordBotWrapper,
@@ -301,8 +282,6 @@ class TestConversationCommands:
         test_channel_id,
     ):
         """Create an existing conversation for testing."""
-        from src.models.conversation import ConversationCreate
-
         conv = await bot_wrapper.bot.repository.create_conversation(
             ConversationCreate(
                 user_id=test_user_id,
@@ -390,8 +369,6 @@ class TestConversationCommands:
         channel1 = DiscordFactory.channel_id()
         channel2 = DiscordFactory.channel_id()
 
-        from src.models.conversation import ConversationCreate
-
         await bot_wrapper.bot.repository.create_conversation(
             ConversationCreate(
                 user_id=test_user_id,
@@ -434,13 +411,6 @@ class TestConversationContext:
 
     Tests that the bot maintains context across multiple messages.
     """
-
-    @pytest_asyncio.fixture
-    async def bot_wrapper(self, conversation_repository):
-        """Create bot wrapper with test repository."""
-        wrapper = DiscordBotWrapper(repository=conversation_repository)
-        yield wrapper
-        await wrapper.cleanup()
 
     @pytest.mark.asyncio
     async def test_conversation_history_maintained(

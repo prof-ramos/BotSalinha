@@ -32,10 +32,7 @@ def configure_logging(
         log_format: Format type (json or text)
         log_file: Optional file path for logging
     """
-    if log_level is None:
-        level = "INFO"
-    else:
-        level = log_level
+    level = log_level or "INFO"
 
     # Standard library logging configuration
     logging.basicConfig(
@@ -64,10 +61,10 @@ def configure_logging(
     if log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
     else:
-        # Console renderer with colors for development
+        # Console renderer with colors only when attached to a terminal
         processors.append(
             structlog.dev.ConsoleRenderer(
-                colors=True, exception_formatter=structlog.dev.plain_traceback
+                colors=sys.stdout.isatty(), exception_formatter=structlog.dev.plain_traceback
             )
         )
 

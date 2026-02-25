@@ -47,7 +47,7 @@ class PromptConfig(BaseModel):
         valid_extensions = {".md", ".json"}
         suffix = Path(v).suffix.lower()
         if suffix not in valid_extensions:
-            raise ValidationError(
+            raise ValueError(
                 f"Extensão de prompt inválida: '{suffix}'. Extensões suportadas: {valid_extensions}"
             )
         return v
