@@ -123,11 +123,6 @@ class LegalContentFactory:
         """Generate a realistic legal response."""
         return fake.random_element(cls.RESPONSES)
 
-    @staticmethod
-    def message_id() -> str:
-        """Generate a realistic Discord message ID."""
-        return str(fake.random_int(min=100000000000000000, max=999999999999999999))
-
     @classmethod
     def complex_legal_response(cls) -> str:
         """Generate a multi-paragraph legal response."""

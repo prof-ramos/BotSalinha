@@ -88,7 +88,7 @@ async def run_cli_chat() -> None:
         if session_started:
             log.info("cli_session_ended")
         else:
-            log.info("cli_session_init_failed")
+            log.warning("cli_session_init_failed")
 
 
 def cli_main() -> None:

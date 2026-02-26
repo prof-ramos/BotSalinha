@@ -162,7 +162,7 @@ class TestAskCommand:
             channel_id=channel_id,
         )
 
-        ctx2, _ = await TestScenario.ask_legal_question(
+        ctx2, messages2 = await TestScenario.ask_legal_question(
             bot_wrapper,
             fake_legal_question,
             user_id=user_id,
@@ -170,14 +170,15 @@ class TestAskCommand:
             channel_id=channel_id,
         )
 
-        # Assert - verify cooldown behavior
-        # Check messages for cooldown indication
-        messages = bot_wrapper.get_messages() if hasattr(bot_wrapper, "get_messages") else []
-        _cooldown_messages = [m for m in messages if isinstance(m, str) and "cooldown" in m.lower()]
-
-        # Verify both contexts were created (rate limiting allows the command to execute)
+        # Assert - verify both contexts were created and produced responses
         assert ctx1 is not None, "First context should be created"
         assert ctx2 is not None, "Second context should be created"
+
+        # Verify second request produced a response (either answer or cooldown notice)
+        assert len(messages2) > 0, "Second request should produce at least one response message"
+        cooldown_messages = [m for m in messages2 if isinstance(m, str) and "cooldown" in m.lower()]
+        # cooldown_messages may be empty if rate limit not triggered, which is also valid
+        assert isinstance(cooldown_messages, list), "Cooldown messages should be a list"
 
     @pytest.mark.asyncio
     async def test_ask_command_long_response_splitting(

@@ -202,9 +202,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def cleanup_old_conversations(self, days: int = 30) -> int:
         """Delete conversations older than specified days."""
         async with self.async_session_maker() as session:
-            cutoff = datetime.now(UTC).replace(tzinfo=None) - __import__("datetime").timedelta(
-                days=days
-            )
+            cutoff = datetime.now(UTC) - __import__("datetime").timedelta(days=days)
 
             stmt = delete(ConversationORM).where(ConversationORM.updated_at < cutoff)
             result = await session.execute(stmt)

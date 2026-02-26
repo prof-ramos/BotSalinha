@@ -34,9 +34,11 @@ cd BotSalinha
 
 ```bash
 # Instalar uv se não tiver instalado
-# **Security Note:** Pipe-to-shell (`curl | sh`) should be avoided in production.
-# Download the script first, review it, then execute.
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Download the installer script, review it, then execute:
+curl -LsSf https://astral.sh/uv/install.sh -o install_uv.sh
+# Review install_uv.sh before proceeding
+sh install_uv.sh
+rm install_uv.sh
 
 # Sincronizar dependências
 uv sync

@@ -106,7 +106,7 @@ def setup_logging(
         Configured logger instance
     """
     # When debug mode is enabled, upgrade INFO to DEBUG
-    if debug and log_level == "INFO":
+    if debug and log_level.upper() == "INFO":
         log_level = "DEBUG"
 
     configure_logging(log_level=log_level, log_format=log_format)

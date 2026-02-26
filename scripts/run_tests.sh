@@ -56,7 +56,7 @@ EXAMPLES:
     $0 --all --no-coverage
 
 EOF
-    exit 0
+    exit "${1:-0}"
 }
 
 # Parse command line arguments
@@ -103,8 +103,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            usage
-            exit 1
+            usage 1
             ;;
     esac
 done
