@@ -5,15 +5,12 @@ Provides factory classes for generating test data following
 the Factory pattern for consistent, realistic test data.
 """
 
-from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from faker import Faker
 
-
 # Brazilian Portuguese Faker instance
-fake = Faker('pt_BR')
+fake = Faker("pt_BR")
 
 
 class DiscordFactory:
@@ -22,32 +19,6 @@ class DiscordFactory:
 
     Generates realistic Discord IDs, usernames, guild names, etc.
     """
-
-    QUESTIONS = [
-        "Qual é o prazo de prescrição para uma ação trabalhista?",
-        "Quais são os requisitos para ingressar no cargo de procurador?",
-        "Explique a diferença entre crime doloso e culposo.",
-        "Qual é a base de cálculo do ICMS?",
-        "Quais são os direitos fundamentais previstos na Constituição?",
-        "O que é jurisprudência e qual o seu valor?",
-        "Explique o princípio da dignidade da pessoa humana.",
-        "Quais são os tipos de penas previstas no Código Penal?",
-        "O que é coisa julgada?",
-        "Explique o princípio da legalidade no Direito Administrativo.",
-    ]
-
-    RESPONSES = [
-        "De acordo com a Constituição Federal de 1988, o prazo é de 5 anos para ações trabalhistas, conforme artigo 7º, inciso XXIX.",
-        "Os requisitos incluem bacharelado em Direito, reconhecido pela MEC, aprovação em concurso público e posse no cargo.",
-        "Crime doloso ocorre quando há intenção do agente (dolo), enquanto crime culposo resulta de negligência, imprudência ou imperícia.",
-        "A base de cálculo do ICMS é o valor da operação, conforme artigo 13 da Lei Complementar 87/1996 (Lei Kandir).",
-        "Os direitos fundamentais estão previstos no artigo 5º da Constituição Federal, com mais de 70 incisos.",
-        "A jurisprudência é o conjunto de decisões reiteradas dos tribunais sobre uma matéria, tendo função de orientar decisões.",
-        "O princípio da dignidade da pessoa humana está no artigo 1º, inciso III da Constituição, sendo fundamento da República.",
-        "O Código Penal prevê penas privativas de liberdade (reclusão, detenção), restritivas de direitos e multa.",
-        "Coisa julgada é a qualidade que torna imutável e indiscutível a decisão judicial transitada em julgado.",
-        "O princípio da legalidade estabelece que a Administração Pública só pode agir conforme a lei determina.",
-    ]
 
     @staticmethod
     def user_id() -> str:
@@ -126,7 +97,7 @@ class LegalContentFactory:
         "O princípio da legalidade estabelece que a Administração Pública só pode agir conforme a lei determina.",
     ]
 
-    CITATIONS = [
+    CITATIONS = (
         "Constituição Federal de 1988, art. 5º",
         "Código Civil, art. 186",
         "Código Penal, art. 13",
@@ -135,7 +106,7 @@ class LegalContentFactory:
         "Lei 8.112/1990 (Estatuto do Servidor Público)",
         "Súmula Vinculante 11 do STF",
         "Lei Complementar 87/1996 (Lei Kandir)",
-    ]
+    )
 
     @classmethod
     def legal_question(cls) -> str:
@@ -147,10 +118,10 @@ class LegalContentFactory:
         """Generate a realistic legal response."""
         return fake.random_element(cls.RESPONSES)
 
-    @classmethod
-    def legal_citation(cls) -> str:
-        """Generate a realistic legal citation."""
-        return fake.random_element(cls.CITATIONS)
+    @staticmethod
+    def message_id() -> str:
+        """Generate a realistic Discord message ID."""
+        return str(fake.random_int(min=100000000000000000, max=999999999999999999))
 
     @classmethod
     def complex_legal_response(cls) -> str:
@@ -211,19 +182,23 @@ class ConversationFactory:
         channel_id = DiscordFactory.channel_id()
 
         messages = []
-        for i in range(message_count):
+        for _i in range(message_count):
             # User message
-            messages.append({
-                "role": "user",
-                "content": LegalContentFactory.legal_question(),
-                "discord_message_id": DiscordFactory.channel_id(),
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": LegalContentFactory.legal_question(),
+                    "discord_message_id": DiscordFactory.message_id(),
+                }
+            )
             # Assistant response
-            messages.append({
-                "role": "assistant",
-                "content": LegalContentFactory.legal_response(),
-                "discord_message_id": None,
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": LegalContentFactory.legal_response(),
+                    "discord_message_id": None,
+                }
+            )
 
         return {
             "conversation": {
@@ -270,7 +245,7 @@ class MessageFactory:
                 content = fake.sentence()
 
         if discord_message_id is None and role == "user":
-            discord_message_id = DiscordFactory.channel_id()
+            discord_message_id = DiscordFactory.message_id()
 
         return {
             "conversation_id": conversation_id,

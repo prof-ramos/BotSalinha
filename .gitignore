@@ -78,11 +78,11 @@ migrations/versions/*.pyc
 *debug.md
 coderabbit-*.md
 *-review*.md
-.claude
-.agents
-.cline
-.walkthrough
-.task
-.implementationplan
+.claude/
+.agents/
+.cline/
+.walkthrough/
+.task/
+.implementationplan/
 .omc/
 repomix-output.xml

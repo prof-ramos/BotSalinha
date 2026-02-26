@@ -7,8 +7,8 @@ for clean bot shutdown.
 
 import asyncio
 import signal
-from contextlib import asynccontextmanager
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 
@@ -32,9 +32,7 @@ class GracefulShutdown:
         self._cleanup_tasks: list[Callable[[], Awaitable[None]]] = []
         self._loop: asyncio.AbstractEventLoop | None = None
 
-    def register_cleanup_task(
-        self, task: Callable[[], Awaitable[None]]
-    ) -> None:
+    def register_cleanup_task(self, task: Callable[[], Awaitable[None]]) -> None:
         """
         Register a cleanup task to run on shutdown.
 
@@ -44,9 +42,7 @@ class GracefulShutdown:
         self._cleanup_tasks.append(task)
         log.debug("cleanup_task_registered", task_count=len(self._cleanup_tasks))
 
-    def setup_signal_handlers(
-        self, loop: asyncio.AbstractEventLoop | None = None
-    ) -> None:
+    def setup_signal_handlers(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         """
         Setup signal handlers for graceful shutdown.
 
@@ -208,10 +204,8 @@ async def run_with_lifecycle(
     # Cancel pending tasks
     for task in pending:
         task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     # If startup failed, propagate error
     if start_task in done:

@@ -4,9 +4,9 @@ Message data models for BotSalinha.
 Defines SQLAlchemy ORM models and Pydantic schemas for messages.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,7 +14,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 if TYPE_CHECKING:
-    from .conversation import ConversationORM, Conversation
+    from .conversation import Conversation
 
 
 class MessageRole(str, Enum):
@@ -43,9 +43,13 @@ class MessageORM:
 class MessageBase(BaseModel):
     """Base schema for message."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     role: MessageRole = Field(..., description="Message role (user/assistant/system)")
     content: str = Field(..., description="Message content")
-    meta_data: str | None = Field(None, description="Additional metadata as JSON", alias="metadata")
+    meta_data: str | None = Field(
+        None, description="Additional metadata as JSON", validation_alias="metadata"
+    )
 
 
 class MessageCreate(MessageBase):
@@ -58,14 +62,19 @@ class MessageCreate(MessageBase):
 class MessageUpdate(BaseModel):
     """Schema for updating a message."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     content: str | None = None
-    meta_data: str | None = Field(None, alias="metadata")
+    meta_data: str | None = Field(None, validation_alias="metadata")
 
 
 class Message(MessageBase):
     """Schema for message response."""
 
     model_config = ConfigDict(from_attributes=True)
+
+    # Override meta_data to remove validation_alias (conflicts with from_attributes when ORM has metadata attribute)
+    meta_data: str | None = Field(None, description="Additional metadata as JSON")
 
     id: str = Field(..., description="Message ID")
     conversation_id: str = Field(..., description="Associated conversation ID")
@@ -102,9 +111,7 @@ def create_message_orm(base: type) -> type:
 
         __tablename__ = "messages"
 
-        id: Mapped[str] = mapped_column(
-            String(36), primary_key=True, default=lambda: str(uuid4())
-        )
+        id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
         conversation_id: Mapped[str] = mapped_column(
             String(36),
             ForeignKey("conversations.id", ondelete="CASCADE"),
@@ -118,10 +125,10 @@ def create_message_orm(base: type) -> type:
         )
         created_at: Mapped[datetime] = mapped_column(
             DateTime(timezone=True),
-            default=lambda: datetime.now(timezone.utc),
+            default=lambda: datetime.now(UTC),
             nullable=False,
         )
-        meta_data: Mapped[str | None] = mapped_column(Text, nullable=True, name="meta_data")
+        meta_data: Mapped[str | None] = mapped_column(Text, name="meta_data")
 
         def __repr__(self) -> str:
             return (

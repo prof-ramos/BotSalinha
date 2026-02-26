@@ -11,7 +11,6 @@ from ..models.conversation import (
     Conversation,
     ConversationCreate,
     ConversationUpdate,
-    ConversationWithMessages,
 )
 from ..models.message import Message, MessageCreate, MessageRole, MessageUpdate
 
@@ -199,9 +198,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def update_message(
-        self, message_id: str, updates: MessageUpdate
-    ) -> Message | None:
+    async def update_message(self, message_id: str, updates: MessageUpdate) -> Message | None:
         """
         Update a message.
 
@@ -228,9 +225,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete_conversation_messages(
-        self, conversation_id: str
-    ) -> int:
+    async def delete_conversation_messages(self, conversation_id: str) -> int:
         """
         Delete all messages in a conversation.
 

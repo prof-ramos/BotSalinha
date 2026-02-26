@@ -9,26 +9,16 @@ Inclui delay entre chamadas para respeitar rate limits do free tier.
 """
 
 import asyncio
-import os
 import sys
 import time
 from pathlib import Path
 
+import pytest
+
 # Garantir que o projeto está no path (adiciona diretório raiz do projeto)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agno.agent import Agent
-from agno.models.google import Gemini
-
 from dotenv import load_dotenv
-
-from src.config.settings import settings
-from src.config.yaml_config import (
-    AgentBehaviorConfig,
-    ModelConfig,
-    PromptConfig,
-    YamlConfig,
-)
 
 load_dotenv()
 
@@ -82,7 +72,7 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
     # Chamar a API real
     start_time = time.time()
     try:
-        response = await agent.arun(question)
+        response = await asyncio.wait_for(agent.arun(question), timeout=30.0)
         elapsed = time.time() - start_time
 
         if response and response.content:
@@ -143,6 +133,15 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
                 "time_s": round(elapsed, 2),
                 "response_chars": 0,
             }
+    except TimeoutError:
+        elapsed = time.time() - start_time
+        print("\n⏱️  Timeout após 30s")
+        return {
+            "prompt": prompt_file,
+            "status": "TIMEOUT",
+            "time_s": round(elapsed, 2),
+            "response_chars": 0,
+        }
     except Exception as e:
         elapsed = time.time() - start_time
         error_msg = str(e)
@@ -208,3 +207,17 @@ async def main() -> int:
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)
+
+
+@pytest.mark.e2e
+@pytest.mark.gemini
+@pytest.mark.asyncio
+async def test_e2e_prompts():
+    """
+    Pytest wrapper for E2E prompt tests.
+
+    This test runs the same logic as the standalone main() function
+    but in a pytest-compatible format.
+    """
+    result = await main()
+    assert result == 0, f"E2E prompts failed with code {result}"

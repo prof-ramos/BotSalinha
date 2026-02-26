@@ -5,8 +5,8 @@ Uses best practices from Context7 for fixture management.
 """
 
 import asyncio
-from collections.abc import AsyncGenerator, Generator
-from pathlib import Path
+from collections.abc import Generator
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -18,28 +18,26 @@ from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-import os
-# Set mock environment variables before any imports that trigger settings initialization
-os.environ["BOTSALINHA_DISCORD__TOKEN"] = "test_token_12345"
-os.environ["BOTSALINHA_GOOGLE__API_KEY"] = "test_api_key"
-os.environ["BOTSALINHA_DATABASE__URL"] = "sqlite+aiosqlite:///:memory:"
-os.environ["BOTSALINHA_APP__ENV"] = "testing"
-
 from src.config.settings import Settings
 from src.core.agent import AgentWrapper
-from src.core.discord import BotSalinhaBot
-from src.models.conversation import ConversationORM
-from src.models.message import create_message_orm, MessageRole
-from src.models.message import MessageCreate
-from src.storage.sqlite_repository import SQLiteRepository
-from src.storage.repository import ConversationRepository, MessageRepository
 from src.middleware.rate_limiter import RateLimiter
-
-# Initialize Faker for Brazilian Portuguese test data
-fake = Faker('pt_BR')
+from src.models.conversation import ConversationORM
+from src.models.message import MessageCreate, MessageRole
+from src.storage.repository import ConversationRepository, MessageRepository
+from src.storage.sqlite_repository import SQLiteRepository
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# Initialize Faker for Brazilian Portuguese test data
+fake = Faker("pt_BR")
+
+
+@pytest.fixture(autouse=True)
+def seed_faker():
+    """Seed Faker for deterministic test data across runs."""
+    Faker.seed(12345)
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -59,7 +57,7 @@ def test_settings(monkeypatch) -> Settings:
     """
     Provide test settings with minimal configuration.
 
-    Environment variables are reset per test.
+    Environment variables are reset per test using monkeypatch.
     """
     monkeypatch.setenv("BOTSALINHA_DISCORD__TOKEN", "test_token_12345")
     monkeypatch.setenv("BOTSALINHA_GOOGLE__API_KEY", "test_api_key")
@@ -67,9 +65,8 @@ def test_settings(monkeypatch) -> Settings:
     monkeypatch.setenv("BOTSALINHA_APP__ENV", "testing")
     monkeypatch.setenv("BOTSALINHA_RATE__LIMIT__REQUESTS", "100")
 
-    from src.config.settings import settings
-    # Clear cache to reload settings
     from src.config.settings import get_settings
+
     get_settings.cache_clear()
 
     return get_settings()
@@ -107,9 +104,7 @@ async def db_session(test_engine):
 
     Provides a clean session for each test.
     """
-    async_session_maker = sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_maker = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session_maker() as session:
         yield session
@@ -192,6 +187,7 @@ async def clear_contextvars():
     This ensures context doesn't leak between tests.
     """
     from structlog.contextvars import clear_contextvars
+
     clear_contextvars()
     yield
     clear_contextvars()
@@ -236,6 +232,7 @@ async def create_test_message(
 
 # ===== Additional Fixtures for E2E Testing =====
 
+
 def pytest_configure(config):
     """
     Configure custom pytest markers.
@@ -269,9 +266,7 @@ def mock_gemini_api():
     For more reliable testing, consider using the agent_with_openrouter fixture
     with a real OpenRouter API key instead.
     """
-    from unittest.mock import AsyncMock, patch, MagicMock
-
-    gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Mock httpx response
     async def mock_send(request, **kwargs):
@@ -281,19 +276,28 @@ def mock_gemini_api():
         mock_response.headers = {}
 
         # Mock json() method
-        mock_response.json = MagicMock(return_value={
-            "candidates": [{
-                "content": {
-                    "parts": [{"text": "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."}],
-                    "role": "model"
-                },
-                "finishReason": "STOP"
-            }]
-        })
+        mock_response.json = MagicMock(
+            return_value={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
+                                }
+                            ],
+                            "role": "model",
+                        },
+                        "finishReason": "STOP",
+                    }
+                ]
+            }
+        )
 
         # Mock aread() method for streaming
         async def mock_aread():
             return b'{"candidates": [{"content": {"parts": [{"text": "Test response"}]}}]}'
+
         mock_response.aread = mock_aread
 
         return mock_response
@@ -317,24 +321,31 @@ def openrouter_test_model(monkeypatch):
         def test_my_agent(openrouter_test_model, agent_wrapper):
             response = await agent_wrapper.generate_response(...)
     """
+    import os
+
+    # Check if API key is set
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        pytest.skip("OPENROUTER_API_KEY not set")
+
     # Set environment variables for OpenRouter
-    monkeypatch.setenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_API_KEY", "sk-test-key"))
+    monkeypatch.setenv("OPENROUTER_API_KEY", api_key)
     monkeypatch.setenv("BOTSALINHA_GOOGLE__MODEL_ID", "openrouter:google/gemma-2-9b-it:free")
 
     # Import here to avoid import errors if google-genai not installed
     try:
         from agno.models.openrouter import OpenRouter
+
         return OpenRouter(
             id="google/gemma-2-9b-it:free",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            api_key=api_key,
         )
     except ImportError:
-        # If OpenRouter not available, skip tests that use this fixture
-        pytest.skip("OpenRouter not available - install agno[openrouter] or set OPENROUTER_API_KEY")
+        pytest.skip("OpenRouter not available - install agno[openrouter]")
 
 
 @pytest.fixture
-def agent_with_openrouter(openrouter_test_model, db_session):
+def agent_with_openrouter(openrouter_test_model, conversation_repository):
     """
     Create an AgentWrapper configured with OpenRouter for testing.
 
@@ -350,12 +361,10 @@ def agent_with_openrouter(openrouter_test_model, db_session):
             )
             assert len(response) > 50
     """
-    from unittest.mock import patch
     from agno.agent import Agent
-    from agno.models.openrouter import OpenRouter
 
-    from src.core.agent import AgentWrapper
     from src.config.yaml_config import yaml_config
+    from src.core.agent import AgentWrapper
 
     # Create a test agent with OpenRouter
     test_agent = Agent(
@@ -370,7 +379,7 @@ def agent_with_openrouter(openrouter_test_model, db_session):
     )
 
     # Create a wrapper with the test agent
-    wrapper = AgentWrapper(repository=db_session)
+    wrapper = AgentWrapper(repository=conversation_repository)
     wrapper.agent = test_agent  # Replace the Gemini agent with OpenRouter
 
     return wrapper
@@ -383,10 +392,8 @@ def frozen_time():
 
     Uses freezegun to freeze time at a fixed point.
     """
-    from datetime import datetime
-
     with freeze_time("2024-01-15 10:30:00"):
-        yield datetime(2024, 1, 15, 10, 30, 0)
+        yield datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -445,3 +452,17 @@ def fake_legal_response():
         "O Código Penal prevê penas privativas de liberdade, restritivas de direitos e multa.",
     ]
     return fake.random_element(responses)
+
+
+@pytest_asyncio.fixture
+async def bot_wrapper(conversation_repository):
+    """
+    Create bot wrapper with test repository.
+
+    This is a shared fixture for E2E tests that need a Discord bot wrapper.
+    """
+    from tests.fixtures.bot_wrapper import DiscordBotWrapper
+
+    wrapper = DiscordBotWrapper(repository=conversation_repository)
+    yield wrapper
+    await wrapper.cleanup()

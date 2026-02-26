@@ -34,6 +34,8 @@ cd BotSalinha
 
 ```bash
 # Instalar uv se não tiver instalado
+# **Security Note:** Pipe-to-shell (`curl | sh`) should be avoided in production.
+# Download the script first, review it, then execute.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Sincronizar dependências
@@ -57,8 +59,16 @@ cp .env.example .env
 ```bash
 # O uv cria o ambiente automaticamente
 source .venv/bin/activate  # Linux/macOS
-# ou
-.venv\Scripts\activate     # Windows
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
 #### 5. Instale Hooks de Pre-commit
@@ -92,7 +102,7 @@ uv run mypy src/
 ### Diretórios Principais
 
 ```text
-botsalinha/
+BotSalinha/
 ├── bot.py                      # Ponto de entrada principal
 ├── pyproject.toml              # Dependências e configuração do projeto
 ├── .env.example                # Template de variáveis de ambiente
@@ -212,9 +222,9 @@ Discord Bot → Rate Limiter → Agent Wrapper
 ```text
 main           ← Branch de produção
 ├── develop    ← Branch de desenvolvimento
-    ├── feature/feature-name    ← Novas funcionalidades
-    ├── bugfix/bug-name         ← Correções de bugs
-    └── hotfix/issue-name       ← Correções urgentes
+│   ├── feature/feature-name    ← Novas funcionalidades
+│   └── bugfix/bug-name         ← Correções de bugs
+└── hotfix/issue-name           ← Correções urgentes (branch a partir de main)
 ```
 
 ### Processo de Desenvolvimento
@@ -426,6 +436,7 @@ class TestRateLimiter:
 
 ```python
 import pytest
+import pytest_asyncio
 from src.storage.sqlite_repository import SQLiteRepository
 
 @pytest_asyncio.fixture
@@ -512,7 +523,7 @@ cp .env.example .env
 # Editar .env com valores corretos
 ```
 
-#### 3. Erro: "discord.py.errors.LoginFailure"
+#### 3. Erro: "discord.errors.LoginFailure"
 
 **Causa:** Token do Discord inválido.
 
@@ -571,7 +582,8 @@ curl -w "@curl-format.txt" -o /dev/null -s "https://generativelanguage.googleapi
 
 **Soluções:**
 
-- Aumentar `HISTORY_RUNS` para reduzir contexto
+- Diminuir `HISTORY_RUNS` para reduzir contexto e melhorar velocidade
+- Aumentar `HISTORY_RUNS` para incluir mais histórico nas respostas
 - Verificar latência de rede
 - Usar cache para respostas comuns
 

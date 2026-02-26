@@ -5,10 +5,14 @@ Provides a clean interface for testing Discord bot interactions
 without requiring actual Discord connection.
 """
 
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, PropertyMock
+from contextlib import suppress
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
-import pytest
+# Default test constants
+DEFAULT_USER_ID = "123456789"
+DEFAULT_GUILD_ID = "987654321"
+DEFAULT_CHANNEL_ID = "111222333"
 
 
 class DiscordBotWrapper:
@@ -22,7 +26,7 @@ class DiscordBotWrapper:
     going through discord.py's command system to avoid complex mocking.
     """
 
-    def __init__(self, repository: Optional[Any] = None):
+    def __init__(self, repository: Any | None = None):
         """
         Initialize the bot wrapper.
 
@@ -46,24 +50,21 @@ class DiscordBotWrapper:
         # Replace repository if provided
         if self.repository:
             self.bot.repository = self.repository
-            self.bot.agent.repository = self.repository
+            if self.bot.agent is not None:
+                self.bot.agent.repository = self.repository
 
         # Mock the latency property (used by ping_command)
         patch_latency = patch.object(
             type(self.bot),
-            'latency',
+            "latency",
             new_callable=PropertyMock,
-            return_value=0.05  # 50ms latency
+            return_value=0.05,  # 50ms latency
         )
         patch_latency.start()
         self._patches.append(patch_latency)
 
     async def _call_command_method(
-        self,
-        command_name: str,
-        ctx: MagicMock,
-        *args,
-        **kwargs
+        self, command_name: str, ctx: MagicMock, *args, **kwargs
     ) -> list[str]:
         """
         Directly call the command method on the bot.
@@ -83,14 +84,16 @@ class DiscordBotWrapper:
             "ask": "ask_command",
             "ping": "ping_command",
             "ajuda": "help_command",  # Method is help_command, command name is ajuda
-            "help": "help_command",   # Alias for ajuda
+            "help": "help_command",  # Alias for ajuda
             "limpar": "clear_command",
             "clear": "clear_command",
             "info": "info_command",
         }
 
         if command_name not in command_attributes:
-            raise ValueError(f"Command '{command_name}' not found. Available: {list(command_attributes.keys())}")
+            raise ValueError(
+                f"Command '{command_name}' not found. Available: {list(command_attributes.keys())}"
+            )
 
         attr_name = command_attributes[command_name]
 
@@ -101,13 +104,17 @@ class DiscordBotWrapper:
             command_obj = getattr(type(self.bot), attr_name, None)
 
         if command_obj is None:
-            raise ValueError(f"Command object for '{command_name}' (attribute '{attr_name}') is None")
+            raise ValueError(
+                f"Command object for '{command_name}' (attribute '{attr_name}') is None"
+            )
 
         # Call the command callback directly (pass self=bot)
         # The callback is an unbound function that needs (self, ctx, ...)
+        from discord.ext.commands import CommandError
+
         try:
             await command_obj.callback(self.bot, ctx, *args, **kwargs)
-        except Exception as e:
+        except CommandError as e:
             # Store error in context for test inspection
             ctx.error = e
 
@@ -128,10 +135,10 @@ class DiscordBotWrapper:
         self,
         command_name: str,
         *args,
-        user_id: str = "123456789",
-        guild_id: str = "987654321",
-        channel_id: str = "111222333",
-        **kwargs
+        user_id: str = DEFAULT_USER_ID,
+        guild_id: str = DEFAULT_GUILD_ID,
+        channel_id: str = DEFAULT_CHANNEL_ID,
+        **kwargs,
     ) -> tuple[Any, list[str]]:
         """
         Simulate sending a Discord command.
@@ -159,10 +166,7 @@ class DiscordBotWrapper:
         return ctx, sent_messages
 
     def _create_mock_context(
-        self,
-        user_id: str,
-        guild_id: str,
-        channel_id: str
+        self, user_id: str, guild_id: str | None, channel_id: str
     ) -> MagicMock:
         """
         Create a mock Discord command context.
@@ -185,13 +189,13 @@ class DiscordBotWrapper:
 
         # Guild setup
         if guild_id:
-            ctx.guild.id = int(guild_id) if guild_id.isdigit() else guild_id
-            ctx.guild.name = f"TestGuild_{guild_id[:8]}"
+            ctx.guild.id = int(guild_id) if str(guild_id).isdigit() else guild_id
+            ctx.guild.name = f"TestGuild_{str(guild_id)[:8]}"
         else:
             ctx.guild = None
 
         # Channel setup
-        ctx.channel.id = int(channel_id) if channel_id.isdigit() else channel_id
+        ctx.channel.id = int(channel_id) if str(channel_id).isdigit() else channel_id
         ctx.channel.name = f"test-channel-{channel_id[:6]}"
 
         # Message setup
@@ -202,9 +206,9 @@ class DiscordBotWrapper:
         ctx.message.channel = ctx.channel
 
         # Async methods
-        ctx.send = AsyncMock(return_value=None)
-        ctx.typing = AsyncMock(return_value=None)
-        ctx.reply = AsyncMock(return_value=None)
+        ctx.typing = MagicMock()  # provides __aenter__/__aexit__ by default
+        ctx.send = AsyncMock()
+        ctx.reply = AsyncMock()
 
         # Command setup
         ctx.command = MagicMock()
@@ -216,18 +220,14 @@ class DiscordBotWrapper:
         """Clean up resources after testing."""
         # Stop all patches
         for p in self._patches:
-            try:
+            with suppress(Exception):
                 p.stop()
-            except Exception:
-                pass
         self._patches.clear()
 
         # Close the bot
         if self.bot:
-            try:
+            with suppress(Exception):
                 await self.bot.close()
-            except Exception:
-                pass  # Ignore cleanup errors
 
 
 class TestScenario:
@@ -241,9 +241,9 @@ class TestScenario:
     async def ask_legal_question(
         bot_wrapper: DiscordBotWrapper,
         question: str,
-        user_id: str = "123456789",
-        guild_id: str = "987654321",
-        channel_id: str = "111222333"
+        user_id: str = DEFAULT_USER_ID,
+        guild_id: str = DEFAULT_GUILD_ID,
+        channel_id: str = DEFAULT_CHANNEL_ID,
     ) -> tuple[Any, list[str]]:
         """
         Scenario: User asks a legal question.
@@ -259,19 +259,15 @@ class TestScenario:
             Tuple of (context, sent_messages)
         """
         return await bot_wrapper.send_command(
-            "ask",
-            question,
-            user_id=user_id,
-            guild_id=guild_id,
-            channel_id=channel_id
+            "ask", question, user_id=user_id, guild_id=guild_id, channel_id=channel_id
         )
 
     @staticmethod
     async def ping_bot(
         bot_wrapper: DiscordBotWrapper,
-        user_id: str = "123456789",
-        guild_id: str = "987654321",
-        channel_id: str = "111222333"
+        user_id: str = DEFAULT_USER_ID,
+        guild_id: str = DEFAULT_GUILD_ID,
+        channel_id: str = DEFAULT_CHANNEL_ID,
     ) -> tuple[Any, list[str]]:
         """
         Scenario: User pings the bot.
@@ -286,18 +282,15 @@ class TestScenario:
             Tuple of (context, sent_messages)
         """
         return await bot_wrapper.send_command(
-            "ping",
-            user_id=user_id,
-            guild_id=guild_id,
-            channel_id=channel_id
+            "ping", user_id=user_id, guild_id=guild_id, channel_id=channel_id
         )
 
     @staticmethod
     async def clear_conversation(
         bot_wrapper: DiscordBotWrapper,
-        user_id: str = "123456789",
-        guild_id: str = "987654321",
-        channel_id: str = "111222333"
+        user_id: str = DEFAULT_USER_ID,
+        guild_id: str = DEFAULT_GUILD_ID,
+        channel_id: str = DEFAULT_CHANNEL_ID,
     ) -> tuple[Any, list[str]]:
         """
         Scenario: User clears their conversation history.
@@ -312,14 +305,14 @@ class TestScenario:
             Tuple of (context, sent_messages)
         """
         return await bot_wrapper.send_command(
-            "limpar",
-            user_id=user_id,
-            guild_id=guild_id,
-            channel_id=channel_id
+            "limpar", user_id=user_id, guild_id=guild_id, channel_id=channel_id
         )
 
 
 __all__ = [
     "DiscordBotWrapper",
     "TestScenario",
+    "DEFAULT_USER_ID",
+    "DEFAULT_GUILD_ID",
+    "DEFAULT_CHANNEL_ID",
 ]
