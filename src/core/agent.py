@@ -20,6 +20,12 @@ from ..utils.retry import AsyncRetryConfig, async_retry
 
 log = structlog.get_logger()
 
+# Prompt structure constants
+PROMPT_HISTORY_HEADER = "=== Histórico da Conversa ==="
+PROMPT_NEW_MESSAGE_HEADER = "=== Nova Mensagem ==="
+PROMPT_USER_LABEL = "Usuário"
+PROMPT_BOT_LABEL = "BotSalinha"
+
 
 class AgentWrapper:
     """
@@ -184,15 +190,15 @@ class AgentWrapper:
         parts = []
 
         # Add system instruction
-        parts.append("=== Histórico da Conversa ===")
+        parts.append(PROMPT_HISTORY_HEADER)
 
         # Add history
         for msg in history:
-            role_display = "Usuário" if msg["role"] == "user" else "BotSalinha"
+            role_display = PROMPT_USER_LABEL if msg["role"] == "user" else PROMPT_BOT_LABEL
             parts.append(f"{role_display}: {msg['content']}")
 
-        parts.append("\n=== Nova Mensagem ===")
-        parts.append(f"Usuário: {user_prompt}")
+        parts.append(f"\n{PROMPT_NEW_MESSAGE_HEADER}")
+        parts.append(f"{PROMPT_USER_LABEL}: {user_prompt}")
 
         return "\n\n".join(parts)
 

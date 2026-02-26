@@ -5,6 +5,7 @@ Uses tenacity library for robust retry logic with configurable policies.
 """
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
@@ -60,7 +61,7 @@ class AsyncRetryConfig:
         )
 
 
-async def async_retry(
+async def async_retry[T](
     func: Callable[..., T],
     config: AsyncRetryConfig | None = None,
     operation_name: str | None = None,
@@ -112,7 +113,7 @@ async def async_retry(
         ) from e
 
 
-def async_retry_decorator(
+def async_retry_decorator[T](
     max_attempts: int = 3,
     wait_min: float = 1.0,
     wait_max: float = 60.0,
@@ -272,5 +273,3 @@ __all__ = [
     "async_retry_decorator",
     "CircuitBreaker",
 ]
-
-import logging  # Import at end for use in before_sleep_log

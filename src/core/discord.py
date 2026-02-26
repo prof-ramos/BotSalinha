@@ -19,6 +19,29 @@ from .agent import AgentWrapper
 
 log = structlog.get_logger()
 
+# Discord message limit
+DISCORD_MAX_MESSAGE_LENGTH = 2000
+
+# Help text template
+HELP_TEXT_TEMPLATE = """
+**BotSalinha** - Assistente de Direito e Concursos
+
+**Comandos disponíveis:**
+• `{prefix}ask <pergunta>` - Faça uma pergunta sobre direito ou concursos
+• `{prefix}ping` - Verifique a latência do bot
+• `{prefix}ajuda` - Mostra esta mensagem de ajuda
+
+**Sobre:**
+Sou um assistente especializado em direito brasileiro e concursos públicos.
+Posso ajudar com dúvidas sobre legislação, jurisprudência, e preparação para concursos.
+
+**Limitações:**
+• Mantenho contexto de até {history_runs} mensagens anteriores
+• Respeito limites de taxa para uso justo
+
+Desenvolvido com ❤️ usando Agno + Gemini
+"""
+
 
 class BotSalinhaBot(commands.Bot):
     """
@@ -192,11 +215,14 @@ class BotSalinhaBot(commands.Bot):
             )
 
             # Send response (with Discord's 2000 character limit)
-            if len(response) <= 2000:
+            if len(response) <= DISCORD_MAX_MESSAGE_LENGTH:
                 await ctx.send(response)
             else:
                 # Split long messages
-                chunks = [response[i : i + 2000] for i in range(0, len(response), 2000)]
+                chunks = [
+                    response[i : i + DISCORD_MAX_MESSAGE_LENGTH]
+                    for i in range(0, len(response), DISCORD_MAX_MESSAGE_LENGTH)
+                ]
                 for chunk in chunks:
                     await ctx.send(chunk)
 
@@ -228,25 +254,10 @@ class BotSalinhaBot(commands.Bot):
     @commands.command(name="ajuda", aliases=["help"])
     async def help_command(self, ctx: commands.Context) -> None:
         """Show help information."""
-        help_text = f"""
-**BotSalinha** - Assistente de Direito e Concursos
-
-**Comandos disponíveis:**
-• `!ask <pergunta>` - Faça uma pergunta sobre direito ou concursos
-• `!ping` - Verifique a latência do bot
-• `!ajuda` - Mostra esta mensagem de ajuda
-
-**Sobre:**
-Sou um assistente especializado em direito brasileiro e concursos públicos.
-Posso ajudar com dúvidas sobre legislação, jurisprudência, e preparação para concursos.
-
-**Limitações:**
-• Mantenho contexto de até {settings.history_runs} mensagens anteriores
-• Respeito limites de taxa para uso justo
-
-Desenvolvido com ❤️ usando Agno + Gemini
-        """
-
+        help_text = HELP_TEXT_TEMPLATE.format(
+            prefix=settings.discord.command_prefix,
+            history_runs=settings.history_runs,
+        )
         await ctx.send(help_text)
 
     @commands.command(name="limpar", aliases=["clear"])
