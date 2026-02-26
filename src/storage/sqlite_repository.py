@@ -105,6 +105,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     # Conversation Repository Methods
 
     async def create_conversation(self, conversation: ConversationCreate) -> Conversation:
+        """
+        Create a new conversation.
+
+        Args:
+            conversation: Conversation creation data
+
+        Returns:
+            Created conversation with generated ID and timestamps
+        """
         async with self.async_session_maker() as session:
             orm = ConversationORM(
                 user_id=conversation.user_id,
@@ -119,6 +128,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             return Conversation.model_validate(orm)
 
     async def get_conversation_by_id(self, conversation_id: str) -> Conversation | None:
+        """
+        Retrieve a conversation by its ID.
+
+        Args:
+            conversation_id: Unique conversation identifier
+
+        Returns:
+            Conversation if found, None otherwise
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
@@ -132,6 +150,16 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def get_by_user_and_guild(
         self, user_id: str, guild_id: str | None = None
     ) -> list[Conversation]:
+        """
+        Get all conversations for a user in a guild.
+
+        Args:
+            user_id: Discord user ID
+            guild_id: Discord guild ID (None for DMs)
+
+        Returns:
+            List of conversations, ordered by most recently updated
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.user_id == user_id)
 
@@ -150,6 +178,20 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def get_or_create_conversation(
         self, user_id: str, guild_id: str | None, channel_id: str
     ) -> Conversation:
+        """
+        Get existing conversation or create a new one.
+
+        Looks for an existing conversation in the specified channel.
+        If not found, creates a new one.
+
+        Args:
+            user_id: Discord user ID
+            guild_id: Discord guild ID (None for DMs)
+            channel_id: Discord channel ID
+
+        Returns:
+            Existing or newly created conversation
+        """
         # Try to get existing conversation
         conversations = await self.get_by_user_and_guild(user_id, guild_id)
 
@@ -169,6 +211,16 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def update_conversation(
         self, conversation_id: str, updates: ConversationUpdate
     ) -> Conversation | None:
+        """
+        Update a conversation's metadata.
+
+        Args:
+            conversation_id: Unique conversation identifier
+            updates: Update data (currently only meta_data supported)
+
+        Returns:
+            Updated conversation if found, None otherwise
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
@@ -217,6 +269,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     # Message Repository Methods
 
     async def create_message(self, message: MessageCreate) -> Message:
+        """
+        Create a new message in a conversation.
+
+        Args:
+            message: Message creation data
+
+        Returns:
+            Created message with generated ID and timestamp
+        """
         async with self.async_session_maker() as session:
             orm = MessageORM(
                 conversation_id=message.conversation_id,
@@ -273,6 +334,14 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         Get conversation history formatted for LLM context.
 
         Returns messages in pairs of (user, assistant) up to max_runs.
+        This format is compatible with Agno/Gemini context.
+
+        Args:
+            conversation_id: Unique conversation identifier
+            max_runs: Maximum number of user-assistant pairs to return
+
+        Returns:
+            List of messages in format [{"role": "user/assistant", "content": "..."}]
         """
         messages = await self.get_conversation_messages(
             conversation_id,
