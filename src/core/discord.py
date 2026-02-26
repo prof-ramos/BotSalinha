@@ -12,6 +12,7 @@ import structlog
 from discord.ext import commands
 
 from ..config.settings import settings
+from ..services.conversation_service import ConversationService
 from ..storage.sqlite_repository import get_repository
 from ..utils.errors import RateLimitError as BotRateLimitError
 from ..utils.logger import bind_request_context
@@ -69,6 +70,15 @@ class BotSalinhaBot(commands.Bot):
         self.repository = get_repository()
         self.agent = AgentWrapper(repository=self.repository)
         self.message_splitter = MessageSplitter(max_length=DISCORD_MAX_MESSAGE_LENGTH)
+
+        # Initialize service layer
+        self.conversation_service = ConversationService(
+            conversation_repo=self.repository,
+            message_repo=self.repository,
+            agent=self.agent,
+            message_splitter=self.message_splitter,
+        )
+
         self._ready_event = asyncio.Event()
 
         log.info("discord_bot_initialized", prefix=settings.discord.command_prefix)
@@ -187,47 +197,24 @@ class BotSalinhaBot(commands.Bot):
 
         try:
             # Get or create conversation
-            conversation = await self.repository.get_or_create_conversation(
+            conversation = await self.conversation_service.get_or_create_conversation(
                 user_id=str(ctx.author.id),
                 guild_id=str(ctx.guild.id) if ctx.guild else None,
                 channel_id=str(ctx.channel.id),
             )
 
-            # Save user message
-            await self.agent.save_message(
-                conversation_id=conversation.id,
-                role="user",
-                content=question,
+            # Process question through service
+            response_chunks = await self.conversation_service.process_question(
+                question=question,
+                conversation=conversation,
+                user_id=str(ctx.author.id),
+                guild_id=str(ctx.guild.id) if ctx.guild else None,
                 discord_message_id=str(ctx.message.id),
             )
 
-            # Generate response
-            response = await self.agent.generate_response(
-                prompt=question,
-                conversation_id=conversation.id,
-                user_id=str(ctx.author.id),
-                guild_id=str(ctx.guild.id) if ctx.guild else None,
-            )
-
-            # Save assistant message
-            await self.agent.save_message(
-                conversation_id=conversation.id,
-                role="assistant",
-                content=response,
-            )
-
-            # Send response (with Discord's 2000 character limit)
-            chunks = self.message_splitter.split(response)
-            for chunk in chunks:
+            # Send response chunks
+            for chunk in response_chunks:
                 await ctx.send(chunk)
-
-            log.info(
-                "ask_command_completed",
-                conversation_id=conversation.id,
-                user_id=str(ctx.author.id),
-                question_length=len(question),
-                response_length=len(response),
-            )
 
         except Exception as e:
             log.exception(
@@ -258,20 +245,16 @@ class BotSalinhaBot(commands.Bot):
     @commands.command(name="limpar", aliases=["clear"])
     async def clear_command(self, ctx: commands.Context) -> None:
         """Clear your conversation history."""
-        # Get user's conversation in this channel
-        conversations = await self.repository.get_by_user_and_guild(
+        deleted = await self.conversation_service.clear_conversation(
             user_id=str(ctx.author.id),
             guild_id=str(ctx.guild.id) if ctx.guild else None,
+            channel_id=str(ctx.channel.id),
         )
 
-        # Find conversation in this channel
-        for conv in conversations:
-            if conv.channel_id == str(ctx.channel.id):
-                await self.repository.delete_conversation(conv.id)
-                await ctx.send("✅ Histórico da conversa limpo.")
-                return
-
-        await ctx.send("ℹ️ Nenhuma conversa encontrada para limpar.")
+        if deleted:
+            await ctx.send("✅ Histórico da conversa limpo.")
+        else:
+            await ctx.send("ℹ️ Nenhuma conversa encontrada para limpar.")
 
     @commands.command(name="info")
     async def info_command(self, ctx: commands.Context) -> None:

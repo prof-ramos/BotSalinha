@@ -52,6 +52,10 @@ class DiscordBotWrapper:
             self.bot.repository = self.repository
             if self.bot.agent is not None:
                 self.bot.agent.repository = self.repository
+            # Also update the conversation service
+            if self.bot.conversation_service is not None:
+                self.bot.conversation_service.conversation_repo = self.repository
+                self.bot.conversation_service.message_repo = self.repository
 
         # Mock the latency property (used by ping_command)
         patch_latency = patch.object(
