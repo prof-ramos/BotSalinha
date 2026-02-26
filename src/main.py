@@ -7,14 +7,14 @@ Supports both Discord mode (default) and CLI chat mode (--chat).
 
 import argparse
 import asyncio
-from contextlib import suppress
 
-import structlog
 from dotenv import load_dotenv
 
 from .config.settings import settings
+from .core.agent import AgentWrapper
 from .core.discord import BotSalinhaBot
-from .core.lifecycle import managed_lifecycle, run_with_lifecycle
+from .core.lifecycle import run_with_lifecycle
+from .storage.sqlite_repository import SQLiteRepository
 from .utils.logger import setup_logging
 
 # Load environment variables
@@ -70,21 +70,25 @@ async def run_cli_chat() -> None:
         debug=settings.debug,
     )
 
-    from .core.agent import AgentWrapper
-    from .storage.sqlite_repository import SQLiteRepository
-
     # Initialize database for CLI mode
+    # Note: initialize_database() enables WAL mode and PRAGMA settings
+    # create_tables() creates the actual schema - both are required
     repo = SQLiteRepository()
+    session_started = False
     try:
         await repo.initialize_database()
         await repo.create_tables()
 
         agent = AgentWrapper(repository=repo)
+        session_started = True
         await agent.run_cli()
     finally:
         # Ensure repository is properly closed
         await repo.close()
-        log.info("cli_session_ended")
+        if session_started:
+            log.info("cli_session_ended")
+        else:
+            log.info("cli_session_init_failed")
 
 
 def cli_main() -> None:

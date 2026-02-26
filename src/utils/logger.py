@@ -13,7 +13,6 @@ from typing import Any
 import structlog
 from structlog.contextvars import (
     bind_contextvars,
-    bound_contextvars,
     clear_contextvars,
     merge_contextvars,
 )
@@ -61,7 +60,7 @@ def configure_logging(
     if log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
     else:
-        # Console renderer with colors only when attached to a terminal
+        # Console renderer with colors for development (TTY-aware)
         processors.append(
             structlog.dev.ConsoleRenderer(
                 colors=sys.stdout.isatty(), exception_formatter=structlog.dev.plain_traceback
@@ -106,6 +105,10 @@ def setup_logging(
     Returns:
         Configured logger instance
     """
+    # When debug mode is enabled, upgrade INFO to DEBUG
+    if debug and log_level == "INFO":
+        log_level = "DEBUG"
+
     configure_logging(log_level=log_level, log_format=log_format)
     log = get_logger("botsalinha")
 
@@ -158,6 +161,7 @@ def unbind_context(*keys: str) -> None:
     """
     if keys:
         from structlog.contextvars import unbind_contextvars
+
         unbind_contextvars(*keys)
 
 

@@ -5,19 +5,18 @@ Uses tenacity library for robust retry logic with configurable policies.
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import structlog
 from tenacity import (
     AsyncRetrying,
-    Retrying,
+    before_sleep_log,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
-    after_log,
 )
 
 from .errors import APIError, RetryExhaustedError
@@ -255,10 +254,14 @@ class CircuitBreaker:
             )
 
         try:
-            result = await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+            result = (
+                await func(*args, **kwargs)
+                if asyncio.iscoroutinefunction(func)
+                else func(*args, **kwargs)
+            )
             self.record_success()
             return result
-        except self.expected_exception as e:
+        except self.expected_exception:
             self.record_failure()
             raise
 

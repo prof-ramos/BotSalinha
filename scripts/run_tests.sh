@@ -2,7 +2,7 @@
 # Test execution script for BotSalinha
 # Provides convenient interface for running different test suites
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -91,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -f|--filter)
+            if [[ -z "${2:-}" ]] || [[ "${2:-}" == -* ]]; then
+                echo -e "${RED}Error: --filter requires a pattern argument${NC}"
+                exit 1
+            fi
             FILTER="$2"
             shift 2
             ;;
@@ -100,6 +104,7 @@ while [[ $# -gt 0 ]]; do
         *)
             echo -e "${RED}Unknown option: $1${NC}"
             usage
+            exit 1
             ;;
     esac
 done
@@ -109,44 +114,63 @@ if [ "$RUN_UNIT" = false ] && [ "$RUN_INTEGRATION" = false ] && [ "$RUN_E2E" = f
     RUN_ALL=true
 fi
 
-# Build pytest command
-PYTEST_CMD="uv run pytest"
+# Build pytest command as array
+PYTEST_CMD=("uv" "run" "pytest")
 
 # Add verbosity
 if [ "$VERBOSE" = true ]; then
-    PYTEST_CMD="$PYTEST_CMD -vv"
+    PYTEST_CMD+=("-vv")
 else
-    PYTEST_CMD="$PYTEST_CMD -v"
+    PYTEST_CMD+=("-v")
 fi
 
 # Add coverage (unless disabled)
 if [ "$NO_COVERAGE" = false ]; then
-    PYTEST_CMD="$PYTEST_CMD --cov=src --cov-report=term-missing --cov-report=html"
+    PYTEST_CMD+=("--cov=src" "--cov-report=term-missing" "--cov-report=html")
 fi
 
 # Add parallel execution
 if [ "$PARALLEL" = true ]; then
-    PYTEST_CMD="$PYTEST_CMD --numprocesses=auto --dist=loadfile"
+    PYTEST_CMD+=("--numprocesses=auto" "--dist=loadfile")
 fi
 
-# Add filter if specified
+# Add filter if specified (properly quoted)
 if [ -n "$FILTER" ]; then
-    PYTEST_CMD="$PYTEST_CMD -k $FILTER"
+    PYTEST_CMD+=("-k" "$FILTER")
 fi
 
 # Determine which tests to run
 TEST_PATHS=""
 if [ "$RUN_ALL" = true ]; then
     TEST_PATHS="tests"
-elif [ "$RUN_UNIT" = true ]; then
-    TEST_PATHS="tests/unit"
-    PYTEST_CMD="$PYTEST_CMD -m unit"
-elif [ "$RUN_INTEGRATION" = true ]; then
-    TEST_PATHS="tests/integration"
-    PYTEST_CMD="$PYTEST_CMD -m integration"
-elif [ "$RUN_E2E" = true ]; then
-    TEST_PATHS="tests/e2e"
-    PYTEST_CMD="$PYTEST_CMD -m e2e"
+fi
+
+# Use independent if statements to allow multiple suite selection
+if [ "$RUN_UNIT" = true ]; then
+    if [ -n "$TEST_PATHS" ]; then
+        TEST_PATHS="$TEST_PATHS tests/unit"
+    else
+        TEST_PATHS="tests/unit"
+    fi
+    PYTEST_CMD+=("-m" "unit")
+fi
+
+if [ "$RUN_INTEGRATION" = true ]; then
+    if [ -n "$TEST_PATHS" ]; then
+        TEST_PATHS="$TEST_PATHS tests/integration"
+    else
+        TEST_PATHS="tests/integration"
+    fi
+    PYTEST_CMD+=("-m" "integration")
+fi
+
+if [ "$RUN_E2E" = true ]; then
+    if [ -n "$TEST_PATHS" ]; then
+        TEST_PATHS="$TEST_PATHS tests/e2e"
+    else
+        TEST_PATHS="tests/e2e"
+    fi
+    PYTEST_CMD+=("-m" "e2e")
 fi
 
 # Set test environment variables
@@ -177,7 +201,11 @@ else
     fi
 fi
 echo -e "  Parallel: ${GREEN}${PARALLEL}${NC}"
-echo -e "  Coverage: ${GREEN}${NO_COVERAGE=false}${NC}"
+if [[ "$NO_COVERAGE" == "true" ]]; then
+    echo -e "  Coverage: ${GREEN}disabled${NC}"
+else
+    echo -e "  Coverage: ${GREEN}enabled${NC}"
+fi
 echo -e "  Verbose: ${GREEN}${VERBOSE}${NC}"
 if [ -n "$FILTER" ]; then
     echo -e "  Filter: ${GREEN}${FILTER}${NC}"
@@ -189,11 +217,11 @@ echo -e "${BLUE}----------------------------------------${NC}"
 echo ""
 
 # Run tests
-echo -e "${BLUE}Running:${NC} ${PYTEST_CMD} ${TEST_PATHS}"
+echo -e "${BLUE}Running:${NC} ${PYTEST_CMD[*]} ${TEST_PATHS}"
 echo ""
 
 # Execute and capture exit code
-if eval "$PYTEST_CMD $TEST_PATHS"; then
+if "${PYTEST_CMD[@]}" ${TEST_PATHS}; then
     EXIT_CODE=0
     STATUS="${GREEN}PASSED${NC}"
 else

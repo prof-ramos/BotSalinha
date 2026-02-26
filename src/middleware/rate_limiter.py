@@ -7,8 +7,9 @@ Implements in-memory per-user rate limiting with configurable parameters.
 import asyncio
 import time
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, TypeVar
+from typing import TypeVar
 
 import structlog
 from discord.ext.commands import Context
@@ -49,9 +50,7 @@ class TokenBucket:
         elapsed = now - self.last_update
 
         # Refill tokens based on elapsed time
-        self.tokens = min(
-            self.capacity, self.tokens + (elapsed * self.refill_rate)
-        )
+        self.tokens = min(self.capacity, self.tokens + (elapsed * self.refill_rate))
         self.last_update = now
 
         if self.tokens >= tokens:
@@ -219,9 +218,7 @@ class RateLimiter:
                 guild_id=ctx.guild.id if ctx.guild else None,
             )
 
-        def decorator(
-            func: Callable[[Context], Awaitable[T]]
-        ) -> Callable[[Context], Awaitable[T]]:
+        def decorator(func: Callable[[Context], Awaitable[T]]) -> Callable[[Context], Awaitable[T]]:
             async def wrapper(ctx: Context) -> T:
                 await _check(ctx)
                 return await func(ctx)
@@ -264,9 +261,7 @@ class RateLimiter:
             Dictionary with statistics
         """
         tracked_users = len(self._users)
-        rate_limited_users = sum(
-            1 for bucket in self._users.values() if bucket.is_rate_limited
-        )
+        rate_limited_users = sum(1 for bucket in self._users.values() if bucket.is_rate_limited)
 
         return {
             "tracked_users": tracked_users,

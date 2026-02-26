@@ -1,0 +1,8 @@
+# Explorer Agent Role
+# Fast codebase explorer for read-heavy tasks
+# Note: gpt-5.3-codex-spark requires ChatGPT Pro ($200/mo)
+# Using gpt-5.2-codex for ChatGPT Plus compatibility
+
+model = "gpt-5.2-codex"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
