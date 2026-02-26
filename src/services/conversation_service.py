@@ -39,7 +39,7 @@ class ConversationService:
             conversation_repo: Repository for conversation persistence
             message_repo: Repository for message persistence
             agent: AI agent wrapper for generating responses
-            message_splitter: Utility for splitting long messages
+            message_splitter: Optional utility for splitting long messages
         """
         self.conversation_repo = conversation_repo
         self.message_repo = message_repo
