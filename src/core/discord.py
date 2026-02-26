@@ -15,6 +15,7 @@ from ..config.settings import settings
 from ..storage.sqlite_repository import get_repository
 from ..utils.errors import RateLimitError as BotRateLimitError
 from ..utils.logger import bind_request_context
+from ..utils.message_splitter import MessageSplitter
 from .agent import AgentWrapper
 
 log = structlog.get_logger()
@@ -67,6 +68,7 @@ class BotSalinhaBot(commands.Bot):
         # Initialize components
         self.repository = get_repository()
         self.agent = AgentWrapper(repository=self.repository)
+        self.message_splitter = MessageSplitter(max_length=DISCORD_MAX_MESSAGE_LENGTH)
         self._ready_event = asyncio.Event()
 
         log.info("discord_bot_initialized", prefix=settings.discord.command_prefix)
@@ -215,16 +217,9 @@ class BotSalinhaBot(commands.Bot):
             )
 
             # Send response (with Discord's 2000 character limit)
-            if len(response) <= DISCORD_MAX_MESSAGE_LENGTH:
-                await ctx.send(response)
-            else:
-                # Split long messages
-                chunks = [
-                    response[i : i + DISCORD_MAX_MESSAGE_LENGTH]
-                    for i in range(0, len(response), DISCORD_MAX_MESSAGE_LENGTH)
-                ]
-                for chunk in chunks:
-                    await ctx.send(chunk)
+            chunks = self.message_splitter.split(response)
+            for chunk in chunks:
+                await ctx.send(chunk)
 
             log.info(
                 "ask_command_completed",

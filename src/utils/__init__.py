@@ -8,6 +8,7 @@ from .errors import (
     ValidationError,
 )
 from .logger import get_logger, setup_logging
+from .message_splitter import MessageSplitter, default_splitter
 from .retry import AsyncRetryConfig, async_retry
 
 __all__ = [
@@ -20,4 +21,6 @@ __all__ = [
     "setup_logging",
     "async_retry",
     "AsyncRetryConfig",
+    "MessageSplitter",
+    "default_splitter",
 ]
