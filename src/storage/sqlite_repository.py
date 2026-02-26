@@ -337,20 +337,58 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             return result.rowcount
 
 
-# Global repository instance
-repository: SQLiteRepository | None = None
+# Global repository instance (for backward compatibility)
+_repository: SQLiteRepository | None = None
 
 
 def get_repository() -> SQLiteRepository:
-    """Get the global repository instance."""
-    global repository
-    if repository is None:
-        repository = SQLiteRepository()
-    return repository
+    """
+    Get the global repository instance.
+
+    Creates a new instance if none exists.
+    For testing, use set_repository() to inject a mock.
+    """
+    global _repository
+    if _repository is None:
+        _repository = SQLiteRepository()
+    return _repository
+
+
+def set_repository(repo: SQLiteRepository | None) -> None:
+    """
+    Set the global repository instance.
+
+    Use this for dependency injection in tests.
+
+    Args:
+        repo: Repository instance to use, or None to reset
+    """
+    global _repository
+    _repository = repo
+
+
+def reset_repository() -> None:
+    """
+    Reset the global repository instance.
+
+    Call this in test teardown to ensure clean state.
+    """
+    global _repository
+    if _repository is not None:
+        # Close existing connection if any
+        try:
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(_repository.close())
+        except Exception:
+            pass
+    _repository = None
 
 
 __all__ = [
     "SQLiteRepository",
     "MessageORM",
     "get_repository",
+    "set_repository",
+    "reset_repository",
 ]
