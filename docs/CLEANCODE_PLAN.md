@@ -74,11 +74,13 @@ Este documento descreve o plano completo de refatoração do BotSalinha seguindo
 | P2-1 | `core/discord.py` | Extrair `CommandService` para lógica de negócio | ⏳ Pendente |
 | P2-2 | `utils/` | Extrair `MessageSplitter` utility | ✅ Concluído |
 | P2-3 | `sqlite_repository.py` | Dependency Injection (remover singleton) | ⏳ Pendente |
-| P2-4 | `tests/unit/` | Unit tests para `sqlite_repository.py` | 🔄 Em progresso |
-| P2-5 | `tests/unit/` | Unit tests para `rate_limiter.py` | ⏳ Pendente |
+| P2-4 | `tests/unit/` | Unit tests para `sqlite_repository.py` | ✅ Concluído |
+| P2-5 | `tests/unit/` | Unit tests para `rate_limiter.py` | ✅ Concluído |
 
 **Commits:**
 - `596d73d` - refactor(core,utils): Phase 2 - extract MessageSplitter utility
+- `392f4d9` - test(unit): add 22 unit tests for SQLiteRepository
+- `8445918` - test(unit): add 22 unit tests for RateLimiter
 
 ---
 
@@ -185,10 +187,10 @@ src/
 
 ```
 Phase 1: ████████████████████ 60% (3/5)
-Phase 2: ████████░░░░░░░░░░░░ 40% (2/5)
+Phase 2: ████████████████████ 80% (4/5)
 Phase 3: ░░░░░░░░░░░░░░░░░░░░ 0%  (0/2)
 
-Overall: ████████░░░░░░░░░░░░ 33%
+Overall: ████████████░░░░░░░░ 47%
 ```
 
 ### Commits
@@ -197,6 +199,15 @@ Overall: ████████░░░░░░░░░░░░ 33%
 |------|------|-----------|
 | `7873fe0` | P1 | Extract constants, fix imports |
 | `596d73d` | P2 | MessageSplitter utility + 17 tests |
+| `392f4d9` | P2 | 22 unit tests SQLiteRepository |
+| `8445918` | P2 | 22 unit tests RateLimiter |
+
+### Cobertura de Testes
+
+```
+Antes: 44% (14 E2E tests)
+Depois: ~65% (76 tests: 14 E2E + 17 MessageSplitter + 22 SQLite + 22 RateLimiter + 1 prompt)
+```
 
 ---
 
