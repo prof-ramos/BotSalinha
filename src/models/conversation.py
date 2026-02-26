@@ -110,6 +110,7 @@ class ConversationWithMessages(Conversation):
 from .message import Message
 
 ConversationWithMessages.model_rebuild()
+Message.model_rebuild()
 
 
 __all__ = [

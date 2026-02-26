@@ -147,7 +147,7 @@ class BotSalinhaBot(commands.Bot):
         per=60.0,
         type=commands.BucketType.user,
     )
-    async def ask_command(self, ctx: commands.Context, *, question: str) -> None:
+    async def ask_command(self, ctx: commands.Context, question: str) -> None:
         """
         Ask a question about law or contests.
 

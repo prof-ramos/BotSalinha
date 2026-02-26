@@ -206,7 +206,7 @@ class DiscordBotWrapper:
         ctx.message.channel = ctx.channel
 
         # Async methods
-        ctx.typing = MagicMock()  # provides __aenter__/__aexit__ by default
+        ctx.typing = AsyncMock()
         ctx.send = AsyncMock()
         ctx.reply = AsyncMock()
 
