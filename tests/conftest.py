@@ -258,51 +258,16 @@ def pytest_configure(config):
 @pytest.fixture
 def mock_gemini_api():
     """
-    Mock the Gemini API for testing using httpx.
+    Mock the AI agent response for testing.
 
-    NOTE: The google-genai SDK uses httpx internally. This fixture mocks
-    httpx.AsyncClient.send to intercept API calls.
-
-    For more reliable testing, consider using the agent_with_openrouter fixture
-    with a real OpenRouter API key instead.
+    This fixture mocks AgentWrapper.generate_response to return a predictable response
+    without making actual API calls.
     """
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    # Mock httpx response
-    async def mock_send(request, **kwargs):
-        """Mock httpx send method."""
-        mock_response = MagicMock(spec=Response)
-        mock_response.status_code = 200
-        mock_response.headers = {}
-
-        # Mock json() method
-        mock_response.json = MagicMock(
-            return_value={
-                "candidates": [
-                    {
-                        "content": {
-                            "parts": [
-                                {
-                                    "text": "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
-                                }
-                            ],
-                            "role": "model",
-                        },
-                        "finishReason": "STOP",
-                    }
-                ]
-            }
-        )
-
-        # Mock aread() method for streaming
-        async def mock_aread():
-            return b'{"candidates": [{"content": {"parts": [{"text": "Test response"}]}}]}'
-
-        mock_response.aread = mock_aread
-
-        return mock_response
-
-    with patch("httpx.AsyncClient.send", new=AsyncMock(side_effect=mock_send)):
+    from unittest.mock import AsyncMock, patch
+    
+    mock_response = "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
+    
+    with patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)):
         yield
 
 
@@ -455,11 +420,12 @@ def fake_legal_response():
 
 
 @pytest_asyncio.fixture
-async def bot_wrapper(conversation_repository):
+async def bot_wrapper(conversation_repository, mock_gemini_api):
     """
     Create bot wrapper with test repository.
 
     This is a shared fixture for E2E tests that need a Discord bot wrapper.
+    Includes mocked AI responses.
     """
     from tests.fixtures.bot_wrapper import DiscordBotWrapper
 

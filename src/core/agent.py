@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 from agno.agent import Agent
 from agno.models.google import Gemini
+from agno.models.openai import OpenAIChat
 
 from ..config.settings import settings
 from ..config.yaml_config import yaml_config
@@ -43,8 +44,9 @@ class AgentWrapper:
         # Load prompt from external file (configured in config.yaml)
         prompt_content = yaml_config.prompt_content
 
-        # Use .env/settings if set, otherwise YAML fallback
-        model_id = settings.google.model_id
+        # Get provider from config (google or openai)
+        provider = yaml_config.model.provider.lower()
+        model_id = yaml_config.model.model_id
 
         # Get temperature from YAML config
         temperature = yaml_config.model.temperature
@@ -52,10 +54,16 @@ class AgentWrapper:
         # Create retry config once in __init__
         self._retry_config = AsyncRetryConfig.from_settings(settings.retry)
 
+        # Select model based on provider
+        if provider == "openai":
+            model = OpenAIChat(id=model_id, temperature=temperature)
+        else:  # Default to Google/Gemini
+            model = Gemini(id=model_id, temperature=temperature)
+
         # Create the Agno agent
         self.agent = Agent(
             name="BotSalinha",
-            model=Gemini(id=model_id, temperature=temperature),
+            model=model,
             instructions=prompt_content,
             add_history_to_context=False,
             num_history_runs=settings.history_runs,
@@ -66,6 +74,7 @@ class AgentWrapper:
 
         log.info(
             "agent_wrapper_initialized",
+            provider=provider,
             model=model_id,
             prompt_file=yaml_config.prompt.file,
             temperature=yaml_config.model.temperature,
