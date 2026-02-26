@@ -71,7 +71,7 @@ class MessageUpdate(BaseModel):
 class Message(MessageBase):
     """Schema for message response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     # Override meta_data to remove validation_alias (conflicts with from_attributes when ORM has metadata attribute)
     meta_data: str | None = Field(None, description="Additional metadata as JSON")

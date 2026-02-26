@@ -8,6 +8,7 @@ and bot response, using mocked Discord and Gemini APIs.
 import pytest
 import pytest_asyncio
 
+from src.models.conversation import ConversationCreate
 from tests.fixtures.bot_wrapper import DiscordBotWrapper, TestScenario
 from tests.fixtures.factories import (
     DiscordFactory,
@@ -174,6 +175,9 @@ class TestAskCommand:
         messages = bot_wrapper.get_messages() if hasattr(bot_wrapper, "get_messages") else []
         _cooldown_messages = [m for m in messages if isinstance(m, str) and "cooldown" in m.lower()]
 
+        # Verify cooldown messages were produced
+        assert len(_cooldown_messages) > 0, "Cooldown messages should be present"
+
         # Verify both contexts were created (rate limiting allows the command to execute)
         assert ctx1 is not None, "First context should be created"
         assert ctx2 is not None, "Second context should be created"
@@ -280,8 +284,6 @@ class TestConversationCommands:
         test_channel_id,
     ):
         """Create an existing conversation for testing."""
-        from src.models.conversation import ConversationCreate
-
         conv = await bot_wrapper.bot.repository.create_conversation(
             ConversationCreate(
                 user_id=test_user_id,
@@ -370,8 +372,6 @@ class TestConversationCommands:
         # Arrange - create conversations in two channels
         channel1 = DiscordFactory.channel_id()
         channel2 = DiscordFactory.channel_id()
-
-        from src.models.conversation import ConversationCreate
 
         await bot_wrapper.bot.repository.create_conversation(
             ConversationCreate(

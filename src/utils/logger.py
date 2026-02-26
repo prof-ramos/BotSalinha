@@ -60,7 +60,7 @@ def configure_logging(
     if log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
     else:
-        # Console renderer with colors for development (TTY-aware)
+        # Console renderer with colors only when attached to a terminal (TTY-aware)
         processors.append(
             structlog.dev.ConsoleRenderer(
                 colors=sys.stdout.isatty(), exception_formatter=structlog.dev.plain_traceback
@@ -106,7 +106,7 @@ def setup_logging(
         Configured logger instance
     """
     # When debug mode is enabled, upgrade INFO to DEBUG
-    if debug and log_level == "INFO":
+    if debug and log_level.upper() == "INFO":
         log_level = "DEBUG"
 
     configure_logging(log_level=log_level, log_format=log_format)

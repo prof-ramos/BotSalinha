@@ -13,10 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 DEFAULT_USER_ID = "123456789"
 DEFAULT_GUILD_ID = "987654321"
 DEFAULT_CHANNEL_ID = "111222333"
-
-
-class DiscordBotWrapper:
-    """
     Wrapper around BotSalinhaBot for testing.
 
     Provides methods to simulate Discord commands and interactions

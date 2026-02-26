@@ -34,9 +34,14 @@ cd BotSalinha
 
 ```bash
 # Instalar uv se não tiver instalado
-# **Security Note:** Pipe-to-shell (`curl | sh`) should be avoided in production.
-# Download the script first, review it, then execute.
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# **Security Note:** Download the script first, review it, then execute.
+# Method 1: Two-step installation (recommended for production)
+wget https://astral.sh/uv/install.sh -O /tmp/uv-install.sh
+# Review the script: cat /tmp/uv-install.sh
+sh /tmp/uv-install.sh
+
+# Method 2: Direct pipe (development environments only)
+# curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Sincronizar dependências
 uv sync
@@ -62,11 +67,13 @@ source .venv/bin/activate  # Linux/macOS
 ```
 
 **Windows (CMD):**
+
 ```cmd
 .venv\Scripts\activate
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
@@ -582,10 +589,12 @@ curl -w "@curl-format.txt" -o /dev/null -s "https://generativelanguage.googleapi
 
 **Soluções:**
 
-- Diminuir `HISTORY_RUNS` para reduzir contexto e melhorar velocidade
-- Aumentar `HISTORY_RUNS` para incluir mais histórico nas respostas
+- **Diminuir `HISTORY_RUNS`**: Recomendado quando há necessidade de reduzir latência ou uso de memória/tokens (ex.: ambientes com limite de tokens ou alta taxa de requisições). Valores típicos: 1-2.
+- **Aumentar `HISTORY_RUNS`**: Indicado quando priorizamos qualidade contextual e continuidade de conversação (ex.: tarefas que dependem de histórico extenso). Valores típicos: 3-5.
 - Verificar latência de rede
 - Usar cache para respostas comuns
+
+> **Trade-off**: Maior `HISTORY_RUNS` = melhor contexto, mas maior custo e latência.
 
 #### Alto Uso de Memória
 

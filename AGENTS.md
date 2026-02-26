@@ -1,11 +1,13 @@
 # AGENTS.md
 
 ## Project Overview
-BotSalinha is a Discord bot specialized in Brazilian law and public contests, powered by Agno and Google Gemini 2.0 Flash.
+
+BotSalinha is a Discord bot specialized in Brazilian law and public contests, powered by Agno and Google Gemini 2.5 Flash Lite.
 
 ## Build, Lint, and Test Commands
 
 ### Core Commands
+
 ```bash
 # Install dependencies
 uv sync
@@ -39,6 +41,7 @@ scripts/run_tests.sh --all --parallel
 ```
 
 ### Test Markers
+
 - `unit`: Isolated component tests
 - `integration`: Component integration tests
 - `e2e`: End-to-end system tests
@@ -50,12 +53,14 @@ scripts/run_tests.sh --all --parallel
 ## Code Style Guidelines
 
 ### General Conventions
+
 - **Python Version**: 3.12+
 - **Line Length**: 100 characters (Ruff)
 - **Docstrings**: Use triple-quoted strings with type hints
 - **Comments**: Brief, explain why not what
 
 ### Naming Conventions
+
 - **Classes**: PascalCase (`BotSalinhaBot`, `ConversationORM`)
 - **Functions**: snake_case (`parse_args`, `run_discord_bot`)
 - **Private Members**: Underscore prefix (`_ready_event`, `_initialized`)
@@ -64,12 +69,14 @@ scripts/run_tests.sh --all --parallel
 - **Type Hints**: Always use, prefer built-in types (`str`, `int`, `list`)
 
 ### Import Organization (Ruff + isort)
+
 1. Standard library imports first
 2. Third-party imports second
 3. Local project imports last
 4. Relative imports use `.` prefix
 
 **Example:**
+
 ```python
 # Standard library
 import asyncio
@@ -86,6 +93,7 @@ from .utils.logger import setup_logging
 ```
 
 ### Code Organization
+
 - **src/core/**: Bot logic, Discord commands, agent integration
 - **src/config/**: Configuration management and settings
 - **src/models/**: SQLAlchemy ORM models and Pydantic schemas
@@ -94,12 +102,14 @@ from .utils.logger import setup_logging
 - **src/middleware/**: Request/response interceptors
 
 ### Type Checking (Mypy)
+
 - Strict mode enabled
 - Pydantic types supported via plugin
 - Use TYPE_CHECKING for runtime-only imports
 - Define mappings with `Mapped[Type]` syntax
 
 ### Error Handling
+
 1. Create custom exceptions inheriting from `BotSalinhaError`
 2. Include human-readable message and optional details dict
 3. Use context managers (`with` statements) for cleanup
@@ -107,6 +117,7 @@ from .utils.logger import setup_logging
 5. Catch specific exceptions rather than bare `except:`
 
 **Example:**
+
 ```python
 class MyError(BotSalinhaError):
     """Custom error with details."""
@@ -120,18 +131,21 @@ except SpecificError as e:
 ```
 
 ### Pydantic Models
+
 - Use `BaseModel` for schemas
 - Define relationships with `Field()`
 - Model config for validation settings
 - ORM models inherit from Base (not SQLAlchemy's declarative_base)
 
 ### Logging
+
 - Use `structlog.get_logger()` for logging
 - Bind context variables with `bind_request_context()`
 - Log at appropriate levels (info, warning, error)
 - Use structured logging with context
 
 ### Testing
+
 - Test organization matches src structure
 - Use pytest fixtures from `tests/conftest.py`
 - Mock external dependencies (Discord, Gemini APIs)
@@ -139,7 +153,9 @@ except SpecificError as e:
 - Run tests in parallel with `--numprocesses=auto`
 
 ### Pre-commit Hooks
+
 Pre-commit is configured via `.pre-commit-config.yaml`:
+
 - `ruff`: Lint and format code
 - `mypy`: Type checking
 - `pytest`: Run tests
@@ -150,7 +166,8 @@ Enable with: `uv run pre-commit install`
 ## Testing Strategy
 
 ### Test Structure
-```
+
+```text
 tests/
 ├── conftest.py          # Shared fixtures
 ├── fixtures/            # Additional fixtures
@@ -160,6 +177,7 @@ tests/
 ```
 
 ### Testing Patterns
+
 1. **Unit Tests**: Isolated function/class tests
 2. **Integration Tests**: Multiple components together
 3. **E2E Tests**: Full system workflows
@@ -174,6 +192,7 @@ tests/
 5. **Type Checking**: Run mypy before committing
 
 ## Environment Configuration
+
 - **Production**: Use `.env.production`
 - **Testing**: Uses in-memory SQLite for speed
 - **Development**: Uses local configuration

@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pydantic
 import structlog
+
+from ..utils.errors import ConfigurationError
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,7 +32,7 @@ class ModelConfig(BaseModel):
     """AI model configuration."""
 
     provider: str = Field(default="google", description="Provedor do modelo")
-    model_id: str = Field(default="gemini-2.0-flash", description="ID do modelo", alias="id")
+    model_id: str = Field(default="gemini-2.5-flash-lite", description="ID do modelo", alias="id")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperatura de geração")
     max_tokens: int = Field(
         default=4096, ge=1, le=1_000_000, description="Máximo de tokens na resposta"
@@ -113,17 +115,19 @@ class YamlConfig(BaseModel):
                 if "content" in data:
                     content = data["content"]
                     if not content or not isinstance(content, str):
-                        raise ValueError(
-                            f"Arquivo JSON '{path}': 'content' deve ser uma string não vazia."
+                        raise ConfigurationError(
+                            f"Arquivo JSON '{path}': 'content' deve ser uma string não vazia.",
+                            config_key="prompt.content"
                         )
                     return content
                 # Fallback to instructions if content not present
                 content = data.get("instructions")
                 if content and isinstance(content, str):
                     return content
-                raise ValueError(
+                raise ConfigurationError(
                     f"Arquivo JSON '{path}' deve conter uma chave "
-                    "'content' ou 'instructions' com valor string."
+                    "'content' ou 'instructions' com valor string.",
+                    config_key="prompt"
                 )
             if isinstance(data, str):
                 return data

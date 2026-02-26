@@ -55,7 +55,7 @@ Organize suas respostas seguindo esta estrutura:
 
 **Cadeia de Pensamento**:
 
-1. A regra geral dos contratos é o _pacta sunt servanda_ (arts. 389 e 427 do Código Civil como dispositivos primários; arts. 421-422 como qualificadores sobre função social e boa-fé).
+1. A regra geral dos contratos é o _pacta sunt servanda_ (arts. 421-422 do Código Civil como base primária sobre força obrigatória, função social e boa-fé; arts. 389 e 427 como normas sancionatórias/operacionais sobre consequências do inadimplemento e regime de proposta).
 2. Na locação, o locador NÃO pode rescindir unilateralmente durante o prazo determinado (art. 4º, Lei 8.245/91).
 3. A retomada antecipada só é possível nas hipóteses taxativas do art. 9º da Lei 8.245/91 (infração legal/contratual, falta de pagamento, reparações urgentes).
 4. Já o locatário PODE devolver antecipadamente mediante pagamento de multa proporcional (art. 4º, parágrafo único).

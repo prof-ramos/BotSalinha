@@ -36,6 +36,11 @@ class DiscordFactory:
         return str(fake.random_int(min=100000000000000000, max=999999999999999999))
 
     @staticmethod
+    def message_id() -> str:
+        """Generate a realistic Discord message ID."""
+        return str(fake.random_int(min=100000000000000000, max=999999999999999999))
+
+    @staticmethod
     def username() -> str:
         """Generate a realistic Discord username."""
         return fake.user_name()

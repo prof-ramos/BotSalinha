@@ -23,6 +23,7 @@ FILTER=""
 
 # Print usage
 usage() {
+    local exit_code="${1:-0}"
     cat << EOF
 Usage: $0 [OPTIONS]
 
@@ -56,7 +57,7 @@ EXAMPLES:
     $0 --all --no-coverage
 
 EOF
-    exit 0
+    exit "$exit_code"
 }
 
 # Parse command line arguments
@@ -103,8 +104,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            usage
-            exit 1
+            usage 1
             ;;
     esac
 done
@@ -141,18 +141,20 @@ fi
 
 # Determine which tests to run
 TEST_PATHS=""
+MARKER_EXPR=""
+
 if [ "$RUN_ALL" = true ]; then
     TEST_PATHS="tests"
 fi
 
-# Use independent if statements to allow multiple suite selection
+# Build combined marker expression for multiple suites
 if [ "$RUN_UNIT" = true ]; then
     if [ -n "$TEST_PATHS" ]; then
         TEST_PATHS="$TEST_PATHS tests/unit"
     else
         TEST_PATHS="tests/unit"
     fi
-    PYTEST_CMD+=("-m" "unit")
+    MARKER_EXPR="${MARKER_EXPR:+$MARKER_EXPR or }unit"
 fi
 
 if [ "$RUN_INTEGRATION" = true ]; then
@@ -161,7 +163,7 @@ if [ "$RUN_INTEGRATION" = true ]; then
     else
         TEST_PATHS="tests/integration"
     fi
-    PYTEST_CMD+=("-m" "integration")
+    MARKER_EXPR="${MARKER_EXPR:+$MARKER_EXPR or }integration"
 fi
 
 if [ "$RUN_E2E" = true ]; then
@@ -170,7 +172,12 @@ if [ "$RUN_E2E" = true ]; then
     else
         TEST_PATHS="tests/e2e"
     fi
-    PYTEST_CMD+=("-m" "e2e")
+    MARKER_EXPR="${MARKER_EXPR:+$MARKER_EXPR or }e2e"
+fi
+
+# Add combined marker expression if any suites selected
+if [ -n "$MARKER_EXPR" ]; then
+    PYTEST_CMD+=("-m" "$MARKER_EXPR")
 fi
 
 # Set test environment variables
@@ -221,7 +228,7 @@ echo -e "${BLUE}Running:${NC} ${PYTEST_CMD[*]} ${TEST_PATHS}"
 echo ""
 
 # Execute and capture exit code
-if "${PYTEST_CMD[@]}" ${TEST_PATHS}; then
+if "${PYTEST_CMD[@]}" "${TEST_PATHS}"; then
     EXIT_CODE=0
     STATUS="${GREEN}PASSED${NC}"
 else

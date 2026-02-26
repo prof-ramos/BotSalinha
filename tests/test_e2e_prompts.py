@@ -218,6 +218,14 @@ async def test_e2e_prompts():
 
     This test runs the same logic as the standalone main() function
     but in a pytest-compatible format.
+
+    Exit codes:
+    - 0: All tests passed
+    - 2: Rate limit/quota exceeded (skip test)
+    - Other: Failure
     """
+    import pytest as pytest_module
     result = await main()
+    if result == 2:
+        pytest_module.skip("Rate limit/quota exceeded")
     assert result == 0, f"E2E prompts failed with code {result}"

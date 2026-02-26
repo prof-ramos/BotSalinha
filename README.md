@@ -37,6 +37,21 @@ BotSalinha é um assistente inteligente para Discord que responde perguntas sobr
 
 ---
 
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+<!-- markdownlint-enable MD033 -->
+
+**Desenvolvido com ❤️ usando [Agno](https://github.com/agno-agi/agno) + [Gemini 2.0 Flash](https://ai.google.dev/)**
+
+[⬆️ Voltar ao topo](#-botsalinha)
+
+<!-- markdownlint-disable MD033 -->
+</div>
+<!-- markdownlint-enable MD033 -->
+>>>>>>> origin/main
+
+---
+
 ## 🚀 Início Rápido
 
 ### Pré-requisitos

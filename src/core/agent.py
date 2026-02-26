@@ -44,7 +44,7 @@ class AgentWrapper:
         prompt_content = yaml_config.prompt_content
 
         # Use .env/settings if set, otherwise YAML fallback
-        model_id = settings.google.model_id or yaml_config.model.model_id
+        model_id = settings.google.model_id
 
         # Get temperature from YAML config
         temperature = yaml_config.model.temperature
@@ -57,6 +57,7 @@ class AgentWrapper:
             name="BotSalinha",
             model=Gemini(id=model_id, temperature=temperature),
             instructions=prompt_content,
+            add_history_to_context=False,
             num_history_runs=settings.history_runs,
             add_datetime_to_context=yaml_config.agent.add_datetime,
             markdown=yaml_config.agent.markdown,

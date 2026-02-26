@@ -86,3 +86,7 @@ coderabbit-*.md
 .implementationplan/
 .omc/
 repomix-output.xml
+
+# Coverage reports
+coverage.xml
+coverage.xml

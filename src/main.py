@@ -67,7 +67,7 @@ async def run_cli_chat() -> None:
         log_format="text",
         app_version=settings.app_version,
         app_env=settings.app_env,
-        debug=False,
+        debug=settings.debug,
     )
 
     # Initialize database for CLI mode
@@ -88,7 +88,7 @@ async def run_cli_chat() -> None:
         if session_started:
             log.info("cli_session_ended")
         else:
-            log.info("cli_session_init_failed")
+            log.warning("cli_session_init_failed")
 
 
 def cli_main() -> None:
