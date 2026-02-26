@@ -5,16 +5,20 @@ This module uses environment variables with validation, following best practices
 - Nested models for structured configuration
 - Environment variable prefixing
 - Type validation with defaults
-- Extra fields are ignored (unknown BOTSALINHA_ env vars are silently skipped)
+- Extra fields are ignored (unknown BOTSALINHA_ env vars are logged as warning)
 """
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
+import structlog
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.errors import ValidationError
+
+log = structlog.get_logger()
 
 
 class DiscordConfig(BaseModel):
@@ -176,7 +180,60 @@ def get_settings() -> Settings:
     Returns:
         Settings: The application settings
     """
+    # Check for unknown BOTSALINHA_ environment variables and log warnings
+    _warn_unknown_env_vars()
+    
     return Settings()
+
+
+def _warn_unknown_env_vars() -> None:
+    """
+    Check for unknown environment variables with BOTSALINHA_ prefix.
+    
+    Logs a warning if typos are detected (e.g., BOTSALINHA_DEBGU instead of BOTSALINHA_DEBUG).
+    This helps catch configuration errors that would otherwise be silently ignored.
+    """
+    # Get known field names from Settings model
+    known_fields = set()
+    
+    def collect_fields(model: type[BaseModel], prefix: str = "") -> set[str]:
+        """Recursively collect all field names from a Pydantic model."""
+        fields = set()
+        for field_name, field_info in model.model_fields.items():
+            full_name = f"{prefix}{field_name}" if prefix else field_name
+            fields.add(full_name.upper())
+            # Check if field is a nested model
+            field_type = field_info.annotation
+            if hasattr(field_type, "__origin__"):
+                # Handle Optional[X] and similar
+                import typing
+                args = typing.get_args(field_type)
+                for arg in args:
+                    if isinstance(arg, type) and issubclass(arg, BaseModel):
+                        fields.update(collect_fields(arg, f"{full_name}__"))
+            elif isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                fields.update(collect_fields(field_type, f"{full_name}__"))
+        return fields
+    
+    known_fields = collect_fields(Settings)
+    
+    # Check environment variables
+    unknown_vars = []
+    for key in os.environ:
+        if key.startswith("BOTSALINHA_"):
+            # Remove prefix and normalize
+            var_name = key[len("BOTSALINHA_"):].upper()
+            # Handle nested delimiter
+            normalized = var_name.replace("__", "__")
+            if normalized not in known_fields:
+                unknown_vars.append(key)
+    
+    if unknown_vars:
+        log.warning(
+            "unknown_env_vars_detected",
+            vars=unknown_vars,
+            hint="These environment variables will be ignored. Check for typos.",
+        )
 
 
 # Export the singleton instance

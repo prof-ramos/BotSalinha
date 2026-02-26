@@ -4,6 +4,7 @@ Agno AI agent wrapper for BotSalinha.
 Wraps the Agno Agent class with proper abstractions and error handling.
 """
 
+import os
 from typing import Any
 
 import structlog
@@ -43,8 +44,14 @@ class AgentWrapper:
         # Load prompt from external file (configured in config.yaml)
         prompt_content = yaml_config.prompt_content
 
-        # Use model ID from .env (falls back to YAML config)
-        model_id = settings.google.model_id or yaml_config.model.id
+        # Use model ID from env (GOOGLE_MODEL_ID), fallback to YAML config, then default
+        # Note: We check os.environ directly because settings.google.model_id always
+        # returns a non-empty string due to the validator
+        model_id = (
+            os.environ.get("GOOGLE_MODEL_ID")
+            or yaml_config.model.id
+            or settings.google.model_id
+        )
 
         # Get temperature from YAML config
         temperature = yaml_config.model.temperature
@@ -54,7 +61,7 @@ class AgentWrapper:
             name="BotSalinha",
             model=Gemini(id=model_id, temperature=temperature),
             instructions=prompt_content,
-            add_history_to_context=False,
+            add_history_to_context=True,
             num_history_runs=settings.history_runs,
             add_datetime_to_context=yaml_config.agent.add_datetime,
             markdown=yaml_config.agent.markdown,

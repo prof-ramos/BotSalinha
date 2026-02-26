@@ -244,7 +244,7 @@ docker compose up -d
 ### Produção
 
 ```bash
-docker compose -f docker compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 > 📖 Veja [docs/deployment.md](docs/deployment.md) para instruções detalhadas.
