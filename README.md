@@ -93,6 +93,24 @@ uv run bot.py
 
 ## 💻 Comandos
 
+### 🎮 Fluxo de Interação
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle: Bot Iniciado
+    Idle --> Processando: Comando recebido
+    Processando --> RateCheck: Verificar limite
+    RateCheck --> Respondendo: ✅ Permitido
+    RateCheck --> Blocked: ❌ Excedido
+    Blocked --> Idle: Aguardar
+    Respondendo --> Idle: Resposta enviada
+
+    note right of RateCheck
+        10 req / 60 seg
+        Token Bucket Algorithm
+    end note
+```
+
 | Comando           | Descrição                                    | Exemplo                       |
 | ----------------- | -------------------------------------------- | ----------------------------- |
 | `!ask <pergunta>` | Faça uma pergunta sobre direito ou concursos | `!ask O que é habeas corpus?` |
@@ -127,21 +145,106 @@ Toda a configuração é feita através de variáveis de ambiente.
 
 BotSalinha segue uma arquitetura modular com separação clara de responsabilidades:
 
-```text
-┌─────────────┐     ┌─────────────────┐     ┌────────────────┐
-│   Discord   │────▶│  BotSalinhaBot  │────▶│   RateLimiter  │
-└─────────────┘     └─────────────────┘     └───────┬────────┘
-                                                    │
-                    ┌───────────────────────────────┘
-                    ▼
-            ┌───────────────┐     ┌──────────────────────┐
-            │ AgentWrapper  │────▶│   Gemini 2.0 Flash   │
-            └───────┬───────┘     └──────────────────────┘
-                    │
-                    ▼
-            ┌───────────────┐
-            │ SQLiteRepo    │
-            └───────────────┘
+```mermaid
+flowchart LR
+    subgraph DISCORD["💬 Discord"]
+        USER([Usuário])
+    end
+
+    subgraph BOT["🤖 BotSalinha"]
+        COMMANDS[Comandos<br/>!ask !ping !ajuda]
+        RATE[RateLimiter<br/>Token Bucket]
+        AGENT[AgentWrapper<br/>Agno + Gemini]
+        STORAGE[(SQLite<br/>Histórico)]
+    end
+
+    subgraph EXTERNAL["🌐 External"]
+        GEMINI[[Gemini 2.0 Flash]]
+    end
+
+    USER -->|Mensagem| COMMANDS
+    COMMANDS --> RATE
+    RATE -->|Permitido| AGENT
+    AGENT <-->|Contexto| STORAGE
+    AGENT -->|API Call| GEMINI
+    GEMINO -->|Resposta| AGENT
+    AGENT -->|Reply| USER
+
+    style DISCORD fill:#5865F2,color:#fff
+    style BOT fill:#1a1a2e,color:#eee
+    style EXTERNAL fill:#4285f4,color:#fff
+```
+
+### 🔄 Fluxo de Requisição
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant B as BotSalinha
+    participant R as RateLimiter
+    participant A as AgentWrapper
+    participant S as SQLite
+    participant G as Gemini API
+
+    U->>B: !ask O que é habeas corpus?
+    B->>R: Verificar limite
+    alt Rate OK
+        R-->>B: ✅ Permitido
+        B->>A: Processar pergunta
+        A->>S: Buscar histórico
+        S-->>A: Contexto anterior
+        A->>G: Enviar prompt + contexto
+        G-->>A: Resposta gerada
+        A->>S: Salvar conversa
+        A-->>B: Resposta final
+        B-->>U: 💬 Resposta
+    else Rate Excedido
+        R-->>B: ❌ Bloqueado
+        B-->>U: ⚠️ Aguarde X segundos
+    end
+```
+
+### 📦 Componentes
+
+```mermaid
+graph TB
+    subgraph CORE["🎯 Core"]
+        BOT[BotSalinhaBot<br/>discord.py]
+        AGENT[AgentWrapper<br/>Agno Framework]
+    end
+
+    subgraph INFRA["⚙️ Infrastructure"]
+        RATE[RateLimiter<br/>Token Bucket]
+        CONFIG[Settings<br/>Pydantic]
+        LOGS[Logger<br/>structlog JSON]
+    end
+
+    subgraph DATA["🗃️ Data Layer"]
+        REPO[SQLiteRepository]
+        DB[(SQLite DB)]
+        MIGRATIONS[Alembic]
+    end
+
+    subgraph UTILS["🔧 Utilities"]
+        RETRY[Retry Logic<br/>Tenacity]
+        ERRORS[Error Handling]
+    end
+
+    BOT --> RATE
+    BOT --> AGENT
+    AGENT --> REPO
+    REPO --> DB
+    MIGRATIONS --> DB
+    CONFIG --> BOT
+    CONFIG --> AGENT
+    LOGS --> BOT
+    LOGS --> AGENT
+    RETRY --> AGENT
+
+    style CORE fill:#e3f2fd
+    style INFRA fill:#fff3e0
+    style DATA fill:#e8f5e9
+    style UTILS fill:#fce4ec
 ```
 
 ### Componentes
@@ -235,6 +338,38 @@ uv run python scripts/backup.py restore --restore-from backups/arquivo.db
 ---
 
 ## 🐳 Implantação Docker
+
+### 🚀 Pipeline de Deploy
+
+```mermaid
+flowchart TD
+    subgraph DEV["💻 Desenvolvimento"]
+        CODE[Código Fonte]
+        TEST[Testes pytest]
+        LINT[Ruff + Mypy]
+    end
+
+    subgraph BUILD["🔨 Build"]
+        DOCKER[Docker Build]
+        IMAGE[Imagem Multi-stage]
+    end
+
+    subgraph DEPLOY["🌐 Deploy"]
+        COMPOSE[docker compose up]
+        RUNNING[Bot Online]
+    end
+
+    CODE --> TEST
+    TEST --> LINT
+    LINT -->|Passou| DOCKER
+    DOCKER --> IMAGE
+    IMAGE --> COMPOSE
+    COMPOSE --> RUNNING
+
+    style DEV fill:#e8f5e9
+    style BUILD fill:#fff3e0
+    style DEPLOY fill:#e3f2fd
+```
 
 ### Desenvolvimento
 
