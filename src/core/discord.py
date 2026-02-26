@@ -6,14 +6,12 @@ and integration with the AI agent.
 """
 
 import asyncio
-from typing import Any
 
-import structlog
 import discord
+import structlog
 from discord.ext import commands
 
 from ..config.settings import settings
-from ..middleware.rate_limiter import rate_limiter
 from ..storage.sqlite_repository import get_repository
 from ..utils.errors import RateLimitError as BotRateLimitError
 from ..utils.logger import bind_request_context
@@ -95,9 +93,7 @@ class BotSalinhaBot(commands.Bot):
         # Only process commands with the prefix
         await self.process_commands(message)
 
-    async def on_command_error(
-        self, ctx: commands.Context, error: Exception
-    ) -> None:
+    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
         """
         Global error handler for commands.
 
@@ -136,9 +132,7 @@ class BotSalinhaBot(commands.Bot):
             await ctx.send(f"❌ Argumento inválido: {error}")
 
         elif isinstance(error, BotRateLimitError):
-            await ctx.send(
-                f"⏱️ {error.message}"
-            )
+            await ctx.send(f"⏱️ {error.message}")
 
         else:
             # Generic error message
@@ -153,7 +147,7 @@ class BotSalinhaBot(commands.Bot):
         per=60.0,
         type=commands.BucketType.user,
     )
-    async def ask_command(self, ctx: commands.Context, *, question: str) -> None:
+    async def ask_command(self, ctx: commands.Context, question: str) -> None:
         """
         Ask a question about law or contests.
 
@@ -202,7 +196,7 @@ class BotSalinhaBot(commands.Bot):
                 await ctx.send(response)
             else:
                 # Split long messages
-                chunks = [response[i:i + 2000] for i in range(0, len(response), 2000)]
+                chunks = [response[i : i + 2000] for i in range(0, len(response), 2000)]
                 for chunk in chunks:
                     await ctx.send(chunk)
 
@@ -234,7 +228,7 @@ class BotSalinhaBot(commands.Bot):
     @commands.command(name="ajuda", aliases=["help"])
     async def help_command(self, ctx: commands.Context) -> None:
         """Show help information."""
-        help_text = """
+        help_text = f"""
 **BotSalinha** - Assistente de Direito e Concursos
 
 **Comandos disponíveis:**
@@ -247,11 +241,11 @@ Sou um assistente especializado em direito brasileiro e concursos públicos.
 Posso ajudar com dúvidas sobre legislação, jurisprudência, e preparação para concursos.
 
 **Limitações:**
-• Mantenho contexto de até {history_runs} mensagens anteriores
+• Mantenho contexto de até {settings.history_runs} mensagens anteriores
 • Respeito limites de taxa para uso justo
 
 Desenvolvido com ❤️ usando Agno + Gemini
-        """.format(history_runs=settings.history_runs)
+        """
 
         await ctx.send(help_text)
 
@@ -292,9 +286,7 @@ Desenvolvido com ❤️ usando Agno + Gemini
         await ctx.send(embed=embed)
 
     @ask_command.error
-    async def ask_command_error(
-        self, ctx: commands.Context, error: Exception
-    ) -> None:
+    async def ask_command_error(self, ctx: commands.Context, error: Exception) -> None:
         """Local error handler for ask command."""
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(

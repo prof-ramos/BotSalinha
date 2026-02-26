@@ -5,24 +5,21 @@ Implements conversation and message repositories using SQLAlchemy with SQLite.
 Uses async patterns and proper connection management.
 """
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import structlog
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-import structlog
 
 from ..config.settings import settings
 from ..models.conversation import (
     Base,
     Conversation,
     ConversationCreate,
-    ConversationUpdate,
     ConversationORM,
-    ConversationWithMessages,
+    ConversationUpdate,
 )
 from ..models.message import (
     Message,
@@ -31,7 +28,6 @@ from ..models.message import (
     MessageUpdate,
     create_message_orm,
 )
-from ..utils.errors import DatabaseError
 from .repository import ConversationRepository, MessageRepository
 
 log = structlog.get_logger()
@@ -59,9 +55,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
         # Convert sqlite:// to sqlite+aiosqlite:// for async support
         if self.database_url.startswith("sqlite:///"):
-            self.database_url = self.database_url.replace(
-                "sqlite:///", "sqlite+aiosqlite:///"
-            )
+            self.database_url = self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
 
         # Create async engine with optimized settings for SQLite
         self.engine = create_async_engine(
@@ -126,9 +120,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     async def get_conversation_by_id(self, conversation_id: str) -> Conversation | None:
         async with self.async_session_maker() as session:
-            stmt = select(ConversationORM).where(
-                ConversationORM.id == conversation_id
-            )
+            stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -178,9 +170,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         self, conversation_id: str, updates: ConversationUpdate
     ) -> Conversation | None:
         async with self.async_session_maker() as session:
-            stmt = select(ConversationORM).where(
-                ConversationORM.id == conversation_id
-            )
+            stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -197,9 +187,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     async def delete_conversation(self, conversation_id: str) -> bool:
         async with self.async_session_maker() as session:
-            stmt = select(ConversationORM).where(
-                ConversationORM.id == conversation_id
-            )
+            stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -214,13 +202,9 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def cleanup_old_conversations(self, days: int = 30) -> int:
         """Delete conversations older than specified days."""
         async with self.async_session_maker() as session:
-            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - __import__(
-                "datetime"
-            ).timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
 
-            stmt = delete(ConversationORM).where(
-                ConversationORM.updated_at < cutoff
-            )
+            stmt = delete(ConversationORM).where(ConversationORM.updated_at < cutoff)
             result = await session.execute(stmt)
             await session.commit()
 
@@ -265,9 +249,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         role: MessageRole | None = None,
     ) -> list[Message]:
         async with self.async_session_maker() as session:
-            stmt = select(MessageORM).where(
-                MessageORM.conversation_id == conversation_id
-            )
+            stmt = select(MessageORM).where(MessageORM.conversation_id == conversation_id)
 
             if role is not None:
                 stmt = stmt.where(MessageORM.role == role.value)
@@ -293,7 +275,8 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         Returns messages in pairs of (user, assistant) up to max_runs.
         """
         messages = await self.get_conversation_messages(
-            conversation_id, limit=max_runs * 2 + 10  # Get extra, then filter
+            conversation_id,
+            limit=max_runs * 2 + 10,  # Get extra, then filter
         )
 
         # Convert to LLM format
@@ -312,9 +295,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
         return system_messages + user_assistant
 
-    async def update_message(
-        self, message_id: str, updates: MessageUpdate
-    ) -> Message | None:
+    async def update_message(self, message_id: str, updates: MessageUpdate) -> Message | None:
         async with self.async_session_maker() as session:
             stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)
@@ -347,13 +328,9 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
             return True
 
-    async def delete_conversation_messages(
-        self, conversation_id: str
-    ) -> int:
+    async def delete_conversation_messages(self, conversation_id: str) -> int:
         async with self.async_session_maker() as session:
-            stmt = delete(MessageORM).where(
-                MessageORM.conversation_id == conversation_id
-            )
+            stmt = delete(MessageORM).where(MessageORM.conversation_id == conversation_id)
             result = await session.execute(stmt)
             await session.commit()
 

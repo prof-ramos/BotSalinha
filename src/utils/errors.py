@@ -11,9 +11,7 @@ from typing import Any
 class BotSalinhaError(Exception):
     """Base exception for all BotSalinha errors."""
 
-    def __init__(
-        self, message: str, *, details: dict[str, Any] | None = None
-    ) -> None:
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
         """
         Initialize a BotSalinha error.
 

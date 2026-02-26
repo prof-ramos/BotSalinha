@@ -43,11 +43,14 @@ class AgentWrapper:
         # Load prompt from external file (configured in config.yaml)
         prompt_content = yaml_config.prompt_content
 
-        # Use model ID from .env (falls back to YAML config)
-        model_id = settings.google.model_id or yaml_config.model.id
+        # Use .env/settings if set, otherwise YAML fallback
+        model_id = settings.google.model_id
 
         # Get temperature from YAML config
         temperature = yaml_config.model.temperature
+
+        # Create retry config once in __init__
+        self._retry_config = AsyncRetryConfig.from_settings(settings.retry)
 
         # Create the Agno agent
         self.agent = Agent(
@@ -155,9 +158,8 @@ class AgentWrapper:
 
             return response.content
 
-        # Use retry logic with explicit config to avoid circular imports
-        config = AsyncRetryConfig.from_settings(settings.retry)
-        return await async_retry(_do_generate, config, operation_name="ai_generate")
+        # Use retry config created in __init__
+        return await async_retry(_do_generate, self._retry_config, operation_name="ai_generate")
 
     def _build_prompt(self, user_prompt: str, history: list[dict[str, Any]]) -> str:
         """
@@ -230,7 +232,7 @@ class AgentWrapper:
             user="Você",
             emoji="👤",
             stream=True,
-            markdown=True,
+            markdown=self.agent.markdown,
             session_id=session_id,
             user_id="cli_user",
             exit_on=["exit", "sair", "quit"],

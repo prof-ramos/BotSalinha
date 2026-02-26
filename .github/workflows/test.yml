@@ -39,7 +39,7 @@ jobs:
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
-            --markers=unit
+            -m "unit"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -81,7 +81,7 @@ jobs:
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
-            --markers=integration
+            -m "integration"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -128,7 +128,7 @@ jobs:
             --cov=src \
             --cov-report=xml \
             --cov-report=term-missing \
-            --markers=e2e
+            -m "e2e"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

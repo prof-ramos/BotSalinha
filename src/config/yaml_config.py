@@ -7,14 +7,18 @@ model selection, prompt file, and generation parameters.
 Uses yaml.safe_load() for secure parsing (Context7/PyYAML recommendation).
 """
 
+import functools
 import json
 from pathlib import Path
 
+import pydantic
 import structlog
+
+from ..utils.errors import ConfigurationError
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from ..utils.errors import ValidationError
+from ..utils.errors import ConfigurationError, ValidationError
 
 log = structlog.get_logger()
 
@@ -28,7 +32,7 @@ class ModelConfig(BaseModel):
     """AI model configuration."""
 
     provider: str = Field(default="google", description="Provedor do modelo")
-    id: str = Field(default="gemini-2.0-flash", description="ID do modelo")
+    model_id: str = Field(default="gemini-2.5-flash-lite", description="ID do modelo", alias="id")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperatura de geração")
     max_tokens: int = Field(
         default=4096, ge=1, le=1_000_000, description="Máximo de tokens na resposta"
@@ -68,12 +72,14 @@ class YamlConfig(BaseModel):
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     agent: AgentBehaviorConfig = Field(default_factory=AgentBehaviorConfig)
 
+    model_config = {"populate_by_name": True}
+
     @property
     def prompt_file_path(self) -> Path:
         """Get the absolute path to the active prompt file."""
         return PROMPT_DIR / self.prompt.file
 
-    @property
+    @functools.cached_property
     def prompt_content(self) -> str:
         """Load and return the content of the active prompt file.
 
@@ -105,12 +111,23 @@ class YamlConfig(BaseModel):
 
             # Support {"content": "..."} or {"instructions": "..."} or plain string
             if isinstance(data, dict):
-                content = data.get("content") or data.get("instructions")
+                # Check for content key explicitly before accessing
+                if "content" in data:
+                    content = data["content"]
+                    if not content or not isinstance(content, str):
+                        raise ConfigurationError(
+                            f"Arquivo JSON '{path}': 'content' deve ser uma string não vazia.",
+                            config_key="prompt.content"
+                        )
+                    return content
+                # Fallback to instructions if content not present
+                content = data.get("instructions")
                 if content and isinstance(content, str):
                     return content
-                raise ValidationError(
+                raise ConfigurationError(
                     f"Arquivo JSON '{path}' deve conter uma chave "
-                    "'content' ou 'instructions' com valor string."
+                    "'content' ou 'instructions' com valor string.",
+                    config_key="prompt"
                 )
             if isinstance(data, str):
                 return data
@@ -160,11 +177,16 @@ def load_yaml_config(config_path: Path | None = None) -> YamlConfig:
             f"config.yaml deve conter um mapeamento YAML, mas recebeu: {type(raw_data).__name__}"
         )
 
-    config = YamlConfig(**raw_data)
+    # Wrap instantiation to catch Pydantic validation errors
+    try:
+        config = YamlConfig(**raw_data)
+    except pydantic.ValidationError as e:
+        log.error("yaml_config_validation_failed", error=str(e))
+        raise ConfigurationError(f"Configuração YAML inválida: {e}") from e
 
     log.info(
         "yaml_config_loaded",
-        model_id=config.model.id,
+        model_id=config.model.model_id,
         model_temperature=config.model.temperature,
         prompt_file=config.prompt.file,
         agent_markdown=config.agent.markdown,

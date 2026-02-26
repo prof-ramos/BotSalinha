@@ -34,7 +34,14 @@ cd BotSalinha
 
 ```bash
 # Instalar uv se não tiver instalado
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# **Security Note:** Download the script first, review it, then execute.
+# Method 1: Two-step installation (recommended for production)
+wget https://astral.sh/uv/install.sh -O /tmp/uv-install.sh
+# Review the script: cat /tmp/uv-install.sh
+sh /tmp/uv-install.sh
+
+# Method 2: Direct pipe (development environments only)
+# curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Sincronizar dependências
 uv sync
@@ -57,8 +64,18 @@ cp .env.example .env
 ```bash
 # O uv cria o ambiente automaticamente
 source .venv/bin/activate  # Linux/macOS
-# ou
-.venv\Scripts\activate     # Windows
+```
+
+**Windows (CMD):**
+
+```cmd
+.venv\Scripts\activate
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
 #### 5. Instale Hooks de Pre-commit
@@ -92,7 +109,7 @@ uv run mypy src/
 ### Diretórios Principais
 
 ```text
-botsalinha/
+BotSalinha/
 ├── bot.py                      # Ponto de entrada principal
 ├── pyproject.toml              # Dependências e configuração do projeto
 ├── .env.example                # Template de variáveis de ambiente
@@ -212,9 +229,9 @@ Discord Bot → Rate Limiter → Agent Wrapper
 ```text
 main           ← Branch de produção
 ├── develop    ← Branch de desenvolvimento
-    ├── feature/feature-name    ← Novas funcionalidades
-    ├── bugfix/bug-name         ← Correções de bugs
-    └── hotfix/issue-name       ← Correções urgentes
+│   ├── feature/feature-name    ← Novas funcionalidades
+│   └── bugfix/bug-name         ← Correções de bugs
+└── hotfix/issue-name           ← Correções urgentes (branch a partir de main)
 ```
 
 ### Processo de Desenvolvimento
@@ -426,6 +443,7 @@ class TestRateLimiter:
 
 ```python
 import pytest
+import pytest_asyncio
 from src.storage.sqlite_repository import SQLiteRepository
 
 @pytest_asyncio.fixture
@@ -512,7 +530,7 @@ cp .env.example .env
 # Editar .env com valores corretos
 ```
 
-#### 3. Erro: "discord.py.errors.LoginFailure"
+#### 3. Erro: "discord.errors.LoginFailure"
 
 **Causa:** Token do Discord inválido.
 
@@ -571,9 +589,12 @@ curl -w "@curl-format.txt" -o /dev/null -s "https://generativelanguage.googleapi
 
 **Soluções:**
 
-- Aumentar `HISTORY_RUNS` para reduzir contexto
+- **Diminuir `HISTORY_RUNS`**: Recomendado quando há necessidade de reduzir latência ou uso de memória/tokens (ex.: ambientes com limite de tokens ou alta taxa de requisições). Valores típicos: 1-2.
+- **Aumentar `HISTORY_RUNS`**: Indicado quando priorizamos qualidade contextual e continuidade de conversação (ex.: tarefas que dependem de histórico extenso). Valores típicos: 3-5.
 - Verificar latência de rede
 - Usar cache para respostas comuns
+
+> **Trade-off**: Maior `HISTORY_RUNS` = melhor contexto, mas maior custo e latência.
 
 #### Alto Uso de Memória
 

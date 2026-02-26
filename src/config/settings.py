@@ -5,7 +5,7 @@ This module uses environment variables with validation, following best practices
 - Nested models for structured configuration
 - Environment variable prefixing
 - Type validation with defaults
-- Extra fields are ignored (unknown BOTSALINHA_ env vars are silently skipped)
+- Extra fields ignored to allow for deployment-specific overrides
 """
 
 from functools import lru_cache
@@ -29,14 +29,14 @@ class GoogleConfig(BaseModel):
     """Google AI/Gemini configuration."""
 
     api_key: str | None = Field(None, description="Google API key for Gemini")
-    model_id: str = Field(default="gemini-2.0-flash", description="Gemini model to use")
+    model_id: str = Field(default="gemini-2.5-flash-lite", description="Gemini model to use")
 
     @field_validator("model_id")
     @classmethod
     def validate_model_id(cls, v: str) -> str:
         """Ensure model_id is not an empty string."""
-        if v.strip() == "":
-            return "gemini-2.0-flash"
+        if v is None or v.strip() == "":
+            return "gemini-2.5-flash-lite"
         return v.strip()
 
 
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
         env_ignore_empty=True,
         validate_default=True,
-        extra="ignore",  # Ignore unknown fields with BOTSALINHA_ prefix (typos)
+        extra="ignore",  # Allow deployment-specific env vars (consider forbid for production to catch typos)
         case_sensitive=False,
         env_file=".env",
         env_file_encoding="utf-8",
