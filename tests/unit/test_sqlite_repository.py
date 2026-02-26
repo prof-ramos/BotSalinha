@@ -163,13 +163,14 @@ class TestConversationRepository:
             ConversationCreate(user_id="user1", guild_id="guild1", channel_id="ch1")
         )
 
+        # meta_data expects a JSON string
         updated = await repository.update_conversation(
             created.id,
-            ConversationUpdate(meta_data={"topic": "legal_questions"}),
+            ConversationUpdate(meta_data='{"topic": "legal_questions"}'),
         )
 
         assert updated is not None
-        assert updated.meta_data == {"topic": "legal_questions"}
+        assert updated.meta_data == '{"topic": "legal_questions"}'
 
     @pytest.mark.asyncio
     async def test_update_conversation_not_found(
@@ -178,7 +179,7 @@ class TestConversationRepository:
         """Should return None when updating non-existent conversation."""
         result = await repository.update_conversation(
             "nonexistent",
-            ConversationUpdate(meta_data={"topic": "test"}),
+            ConversationUpdate(meta_data='{"topic": "test"}'),
         )
         assert result is None
 
