@@ -13,7 +13,7 @@ from discord.ext import commands
 
 from ..config.settings import settings
 from ..services.conversation_service import ConversationService
-from ..storage.sqlite_repository import get_repository
+from ..storage.repository_factory import get_configured_repository
 from ..utils.errors import RateLimitError as BotRateLimitError
 from ..utils.logger import bind_request_context
 from ..utils.message_splitter import MessageSplitter
@@ -66,8 +66,8 @@ class BotSalinhaBot(commands.Bot):
             help_command=None,
         )
 
-        # Initialize components
-        self.repository = get_repository()
+        # Initialize components - use configured repository (Convex or SQLite)
+        self.repository = get_configured_repository()
         self.agent = AgentWrapper(repository=self.repository)
         self.message_splitter = MessageSplitter(max_length=DISCORD_MAX_MESSAGE_LENGTH)
 
@@ -85,14 +85,20 @@ class BotSalinhaBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         """Called when the bot is setting up."""
-        # Initialize database
-        await self.repository.initialize_database()
-        await self.repository.create_tables()
-
-        log.info("database_initialized")
+        # Only initialize database for SQLite (Convex doesn't need this)
+        if hasattr(self.repository, 'initialize_database'):
+            await self.repository.initialize_database()
+            await self.repository.create_tables()
+            log.info("sqlite_database_initialized")
+        else:
+            log.info("using_cloud_backend_no_init_needed")
 
     async def on_ready(self) -> None:
         """Called when the bot is ready."""
+        self._ready_event.set()
+
+        guild_count = len(self.guilds)
+        user_count = sum(g.member_count or 0 for g in self.guilds)
         self._ready_event.set()
 
         guild_count = len(self.guilds)
