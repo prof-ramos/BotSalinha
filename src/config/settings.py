@@ -194,7 +194,7 @@ class RAGConfig(BaseSettings):
     enabled: bool = Field(default=True, description="Enable RAG functionality")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of documents to retrieve")
     min_similarity: float = Field(
-        default=0.6, ge=0.0, le=1.0, description="Minimum similarity threshold"
+        default=0.4, ge=0.0, le=1.0, description="Minimum similarity threshold (ajustado para 0.4 baseado em dados empíricos)"
     )
     max_context_tokens: int = Field(
         default=2000, ge=100, le=8000, description="Maximum context tokens"

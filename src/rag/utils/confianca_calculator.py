@@ -19,9 +19,10 @@ class ConfiancaCalculator:
     """
 
     # Thresholds for confidence levels
-    ALTA_THRESHOLD = 0.85
-    MEDIA_THRESHOLD = 0.70
-    BAIXA_THRESHOLD = 0.60
+    # Ajustado baseado em dados empíricos (queries relevantes: 0.47-0.57)
+    ALTA_THRESHOLD = 0.70  # Matches muito bons (ex: texto do mesmo documento)
+    MEDIA_THRESHOLD = 0.55  # Matches relevantes
+    BAIXA_THRESHOLD = 0.40  # Matches marginalmente relevantes
 
     def __init__(
         self,

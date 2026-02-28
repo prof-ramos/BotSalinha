@@ -92,3 +92,4 @@ repomix-output.xml
 coverage.xml
 coverage.xml
 .vercel
+.env*.local
