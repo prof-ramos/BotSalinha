@@ -1,0 +1,78 @@
+
+# Production docker-compose configuration
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  botsalinha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: botsalinha-prod
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      # Persist database AND logs in single volume
+      - ./data:/app/data
+      # Backup directory (separate from data)
+      - ./backups:/app/backups
+    environment:
+      # Production settings
+      - DATABASE_URL=sqlite:///data/botsalinha.db
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - APP_ENV=production
+      - LOG_DIR=/app/data/logs
+      - LOG_FILE_ENABLED=true
+      - LOG_MAX_BYTES=10485760
+      - LOG_BACKUP_COUNT=30
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Backup service (optional)
+  backup:
+    image: python:3.12-slim
+    container_name: botsalinha-backup
+    volumes:
+      - ./data:/data:ro
+      - ./backups:/backups
+    environment:
+      - SCHEDULE=@daily  # Backup daily
+    command: >
+      sh -c "
+        pip install -q schedule &&
+        python -c \"
+        import schedule, time, subprocess, datetime
+        from pathlib import Path
+
+        def backup():
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f'[{timestamp}] Starting backup...')
+            result = subprocess.run([
+                'python', '-c',
+                'import shutil; shutil.copy2(\"/data/botsalinha.db\", f\"/backups/botsalinha_{datetime.datetime.now().strftime(\\\"%Y%m%d_%H%M%S\\\")}.db\")'
+            ])
+            if result.returncode == 0:
+                print(f'[{timestamp}] Backup completed successfully')
+            else:
+                print(f'[{timestamp}] Backup failed')
+        schedule.every().day.at('02:00').do(backup)
+        print('Backup scheduler started (runs daily at 02:00 UTC)')
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+        \"
+      "
+    restart: always
+    depends_on:
+      - botsalinha
+

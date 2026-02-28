@@ -1,0 +1,13 @@
+# Project-specific Codex configuration
+# Multi-agent workflows are enabled globally in ~/.codex/config.toml
+
+[agents.default]
+description = "General-purpose helper."
+
+[agents.reviewer]
+description = "Find security, correctness, and test risks in code."
+config_file = "agents/reviewer.toml"
+
+[agents.explorer]
+description = "Fast codebase explorer for read-heavy tasks."
+config_file = "agents/explorer.toml"

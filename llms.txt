@@ -1,0 +1,54 @@
+# BotSalinha
+> Bot de Discord para direito brasileiro e concursos públicos,
+> com suporte multi-model (OpenAI e Google AI) via framework Agno.
+
+## Arquivos Centrais
+- [bot.py]: Ponto de entrada principal (CLI `uv run botsalinha run`)
+- [src/core/discord.py]: Comandos Discord, eventos (handler `on_message`), processamento de chat e tratamento de erros
+- [src/core/agent.py]: AgentWrapper Agno, seleção de provider e geração de respostas
+- [src/core/cli.py]: Interface CLI baseada em typer/rich para desenvolvedores
+- [src/config/settings.py]: Pydantic Settings (variáveis de ambiente, dotenv)
+- [src/config/yaml_config.py]: Loader de `config.yaml` (provider/modelo/prompt do agente)
+- [src/middleware/rate_limiter.py]: Limitador de requisições por usuário/guild (token bucket)
+- [src/storage/factory.py]: Factory pattern `create_repository()` (DI)
+- [src/storage/sqlite_repository.py]: Implementação SQLite do repositório
+- [src/storage/repository.py]: Interfaces abstratas do repositório
+- [src/tools/mcp_manager.py]: Gerenciamento e integração de ferramentas via Model Context Protocol (MCP)
+- [src/utils/]: Utilitários core, incluindo sistema de observabilidade (logs, sanitização, correlation ID)
+
+## Documentação-Chave
+- [docs/architecture.md]: Visão geral da arquitetura (DI pattern, estado híbrido, logging)
+- [README.md]: Visão geral, quick start e configuração
+- [docs/api.md]: Referência dos comandos Discord e fluxos de API
+- [docs/cli.md]: Interface CLI para operações de dev/admin
+- [docs/operations.md]: Manual operacional e scripts auxiliares
+- [docs/deployment.md]: Guia de deploy via Docker
+- [docs/DEVELOPER_GUIDE.md]: Fluxo de desenvolvimento e contribuição
+- [docs/adr/ADR-001-multi-model-provider.md]: Decisão arquitetural do Roteador de Provider Multi-Model
+- [docs/plans/RAGV1.md]: Plano de feature do RAG iterativo para bases jurídicas e documentais
+- [CLAUDE.md] e [AGENTS.md]: Convenções do projeto para agentes IA e desenvolvimento
+
+## Conceitos-Chave
+- **Provider**: Definido dinamicamente em `config.yaml` (`model.provider: openai|google`)
+- **Credenciais**: API keys gerenciadas em `.env` (`OPENAI_API_KEY`, `GOOGLE_API_KEY`)
+- **Injeção de Dependência**: Usar a factory `create_repository()`, não instanciar singleton globalmente
+- **Estado Híbrido (v2.0)**: Transição arquitetural ativa de singleton para DI
+- **Persistência**: Histórico de interações em SQLite via SQLAlchemy async ORM
+- **Observabilidade e Logs**: Uso do `structlog` com decodificação em JSON, rotacionamento em `data/logs/`, tracking distribuído por `correlation_id` (ex: `20250227_143022_botsalinha_a1b2`) e logs sanitizados de PII/Chaves automáticos. Eventos padronizados em `PT-BR`.
+- **Modos de Interação**: Canal exclusivo de IA (config. via `CANAL_IA_ID`) e DMs automáticas via Discord.
+- **MCP (Model Context Protocol)**: Integração com ferramentas locais (arquivos, scripts) expandindo capacidades de contexto do LLM.
+
+## Padrões de Código
+- Banco de dados (Novo): SEMPRE usar `async with create_repository() as repo:`
+- Legado: Acesso via `get_repository()` está depreciado (previsto remoção v2.1)
+- Testes: Usar fixture In-memory SQLite (`sqlite+aiosqlite:///:memory:`)
+- Type hints: Totalmente obrigatórios (ex: `str | None` e não `Optional[str]`)
+- Convenções de Nomenclatura: `snake_case` para funções/módulos, `PascalCase` para classes
+- Eventos de Log: SEMPRE usar constantes em vez de strings literais via `LogEvents` (ex: `LogEvents.AGENTE_GERANDO_RESPOSTA`)
+- Tracing de Log: Fazer bind de correlação utilizando `bind_discord_context` na entrada de cada requisição do Discord (message, user, guild, channel id).
+
+## Padrões de Uso de Modos de Interação
+- Modo chat (Canal IA/DM): Usar avaliação `isinstance(message.channel, discord.DMChannel)` para detectar DMs corretamente.
+- Feedback Visual: Sempre encapsular processamentos longos com `async with message.channel.typing():`.
+- Limitador: Aplicar bloqueios proativamente pela chamada `rate_limiter.check_rate_limit(user_id, guild_id)` antes do processamento dispendioso ao LLM.
+- Canal IA: Validar id usando `message.channel.id == int(settings.discord.canal_ia_id)` para detectar instâncias em canais suportados.

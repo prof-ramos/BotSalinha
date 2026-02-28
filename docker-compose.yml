@@ -1,0 +1,26 @@
+
+services:
+  botsalinha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: botsalinha
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist database AND logs in single volume
+      - ./data:/app/data
+    environment:
+      # Override database path for container
+      - DATABASE_URL=sqlite:///data/botsalinha.db
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - LOG_DIR=/app/data/logs
+      - LOG_FILE_ENABLED=true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

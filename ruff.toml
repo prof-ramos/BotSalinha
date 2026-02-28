@@ -1,0 +1,16 @@
+# Ruff configuration (alternative to pyproject.toml)
+# Most configuration is in pyproject.toml, this is for IDE support
+
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "SIM108"]
+
+[lint.isort]
+known-first-party = ["src"]
+
+[lint.per-file-ignores]
+"tests/__init__.py" = ["F401"]
+"src/__init__.py" = ["F401"]

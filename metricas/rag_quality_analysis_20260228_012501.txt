@@ -1,0 +1,43 @@
+================================================================================
+RELATÓRIO DE QUALIDADE RAG JURÍDICO
+Gerado em: 2026-02-28T01:25:01.971134
+================================================================================
+
+ESTATÍSTICAS GERAIS:
+Documentos: 693
+Chunks: 17488
+
+JURISPRUDÊNCIA:
+STF: 221 chunks (1.3%)
+STJ: 54 chunks (0.3%)
+
+CONCURSOS:
+Referências a concurso: 8073 chunks (46.2%)
+
+BANCAS TOP 20:
+  MPF: 291
+  TJMG: 239
+  MPPR: 213
+  MPSC: 194
+  MPT: 177
+  DPESP: 168
+  TRF2: 161
+  MPMG: 158
+  TJSP: 151
+  TRF1: 150
+  MPSP: 146
+  TRF4: 139
+  TJSC: 138
+  TRF5: 137
+  MPGO: 107
+  TJPR: 98
+  PCSP: 93
+  TJGO: 86
+  TJMS: 84
+  MPRO: 83
+
+SCORE DE QUALIDADE: 52.17%
+  Jurisprudência: 7.86% (peso 30%)
+  Concursos: 69.24% (peso 40%)
+  Variedade Bancas: 100.00% (peso 20%)
+  Anos Recentes: 21.14% (peso 10%)

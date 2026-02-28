@@ -1,0 +1,53 @@
+# ================================================
+# BotSalinha - Configuração do Agente
+# ================================================
+# Este arquivo controla o comportamento do agente de IA.
+# Secrets (tokens, API keys) devem ficar no .env
+
+# Modelo de IA a ser utilizado
+model:
+  provider: openai # Provedor do modelo (google ou openai)
+  id: gpt-4o-mini # ID do modelo
+  temperature: 0.7 # Criatividade (0.0 = determinístico, 1.0 = criativo)
+  max_tokens: 4096 # Máximo de tokens na resposta
+
+# Arquivo de prompt a ser utilizado (relativo ao diretório prompt/)
+# Suporta arquivos .md e .json
+#
+# Prompts disponíveis:
+#   prompt_v1.md   — Sistema + Papel (simples, direto)
+#   prompt_v2.json — Few-shot com 2 exemplos + formato estruturado
+#   prompt_v3.md   — Avançado: CoT + Step-back + formato com emojis
+prompt:
+  file: prompt_v1.md # Arquivo de prompt ativo
+
+# Comportamento do agente
+agent:
+  markdown: true # Respostas em Markdown
+  add_datetime: true # Incluir data/hora no contexto
+  debug_mode: false # Modo debug do agente
+
+# MCP (Model Context Protocol) - Ferramentas externas
+# documentação: https://docs.agno.ai/mcp
+#
+# Exemplo de configuração stdio (servidor local):
+# mcp:
+#   enabled: false
+#   servers:
+#     - name: filesystem
+#       enabled: false
+#       type: stdio
+#       command: npx -y @modelcontextprotocol/server-filesystem /caminho/para/diretorio
+#       tool_name_prefix: fs_
+#
+# Exemplo de configuração streamable-http (servidor remoto):
+# mcp:
+#   enabled: false
+#   servers:
+#     - name: remote-api
+#       enabled: false
+#       type: streamable-http
+#       url: https://api.exemplo.com/mcp
+mcp:
+  enabled: false # Habilitar MCP (requer servidor configurado abaixo)
+  servers: [] # Lista de servidores MCP
