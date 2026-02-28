@@ -6,10 +6,9 @@ in Brazilian Portuguese for Discord interaction.
 """
 
 from src.utils.errors import (
+    APIError,
     BotSalinhaError,
     DatabaseError,
-    ProviderError,
-    RAGError,
     RateLimitError,
     ValidationError,
 )
@@ -35,10 +34,11 @@ def get_user_friendly_message(error: Exception) -> str:
     if isinstance(error, RateLimitError):
         return "⏳ Você atingiu o limite de mensagens temporário. Por favor, aguarde um pouco antes de perguntar novamente."
 
-    if isinstance(error, ProviderError):
+    if isinstance(error, APIError):
         return "🧱 Estou com dificuldades técnicas para me conectar aos meus modelos de IA. Por favor, tente novamente em alguns instantes."
 
-    if isinstance(error, RAGError):
+    # Check for error messages containing "RAG" for database/search errors
+    if isinstance(error, DatabaseError) or "rag" in str(error).lower():
         return "📚 Tive um problema ao consultar minha base jurídica. Vou tentar responder com base no meu conhecimento geral."
 
     if isinstance(error, DatabaseError):
