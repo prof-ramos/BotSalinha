@@ -58,7 +58,8 @@ class TestLogIntegration:
             ("Email: test@example.com", "Email: ***EMAIL***"),
             ("CPF: 123.456.789-01", "CPF: ***CPF***"),
             (
-                "FAKE_DISCORD_TOKEN_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+                # Discord token format: Base64UserId.Timestamp.HmacSignature
+                "MtestTokenAAAAAAA.GxyzTT.AbcdefghijklmnopqrstuvwxyzABCD",
                 "***DISCORD_TOKEN***",
             ),
         ],

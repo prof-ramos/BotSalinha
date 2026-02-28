@@ -8,7 +8,8 @@ Este guia fornece informações completas para desenvolvedores que trabalham no 
 2. [Visão Geral da Estrutura do Projeto](#2-visão-geral-da-estrutura-do-projeto)
 3. [Fluxo de Trabalho de Desenvolvimento](#3-fluxo-de-trabalho-de-desenvolvimento)
 4. [Abordagem de Teste](#4-abordagem-de-teste)
-5. [Solução de Problemas](#5-solução-de-problemas)
+5. [Banco de Dados e Proteções](#5-banco-de-dados-e-proteções)
+6. [Solução de Problemas](#6-solução-de-problemas)
 
 ---
 
@@ -119,55 +120,81 @@ uv run mypy src/
 BotSalinha/
 ├── pyproject.toml              # Dependências e configuração do projeto
 ├── .env.example                # Template de variáveis de ambiente
+├── config.yaml                 # Provider, modelo, temperatura, prompt ativo
 │
 ├── src/                        # Código fonte principal
-│   ├── __init__.py
-│   ├── main.py                 # Função principal da aplicação
+│   ├── main.py                 # Delegação para CLI (Typer)
 │   │
 │   ├── config/                 # Configuração
-│   │   └── settings.py         # Pydantic Settings com validação
+│   │   ├── settings.py         # Pydantic Settings (SQLite-only validator)
+│   │   ├── yaml_config.py      # Configuração YAML do agente
+│   │   └── mcp_config.py       # Configuração de servidores MCP
 │   │
 │   ├── core/                   # Componentes centrais
-│   │   ├── agent.py            # Wrapper do Agno AI Agent
-│   │   ├── discord.py          # Bot Discord com comandos e handlers de mensagem
-│   │   └── lifecycle.py        # Gerenciamento de ciclo de vida
+│   │   ├── agent.py            # AgentWrapper — Agno + OpenAI/Google
+│   │   ├── discord.py          # BotSalinhaBot — comandos e event handlers
+│   │   ├── cli.py              # CLI Typer (run/chat/db/backup…)
+│   │   └── lifecycle.py        # Graceful shutdown + signal handlers
 │   │
 │   ├── models/                 # Modelos de dados
-│   │   ├── conversation.py     # Modelo Conversação (SQLAlchemy + Pydantic)
-│   │   └── message.py          # Modelo Mensagem (SQLAlchemy + Pydantic)
+│   │   ├── conversation.py     # ConversationORM + Pydantic schemas
+│   │   ├── message.py          # MessageORM + Pydantic schemas
+│   │   └── rag_models.py       # DocumentORM + ChunkORM (RAG)
 │   │
 │   ├── storage/                # Camada de persistência
-│   │   ├── repository.py       # Interfaces abstratas de repositório
-│   │   └── sqlite_repository.py# Implementação SQLite
+│   │   ├── repository.py       # Interfaces abstratas (ConversationRepository…)
+│   │   ├── sqlite_repository.py# Implementação SQLite async + session()
+│   │   ├── factory.py          # create_repository() — único ponto de criação
+│   │   └── db_guard.py         # DatabaseGuard — backup + integridade
+│   │
+│   ├── rag/                    # Pipeline RAG
+│   │   ├── models.py           # Document, Chunk, RAGContext (Pydantic)
+│   │   ├── config.py           # Configuração do RAG
+│   │   ├── parser/             # Extração DOCX → texto
+│   │   ├── services/           # IngestionService, QueryService, EmbeddingService
+│   │   ├── storage/            # VectorStore (SQLite embeddings)
+│   │   └── utils/              # ConfiancaCalculator, MetadataExtractor…
+│   │
+│   ├── tools/                  # Ferramentas externas
+│   │   └── mcp_manager.py      # Gerenciador de servidores MCP
 │   │
 │   ├── utils/                  # Utilitários
-│   │   ├── logger.py           # Configuração structlog
-│   │   ├── errors.py           # Exceções customizadas
-│   │   └── retry.py            # Lógica de retry com tenacity
+│   │   ├── logger.py           # Configuração structlog (JSON/text)
+│   │   ├── errors.py           # Hierarquia de exceções BotSalinhaError
+│   │   ├── log_events.py       # Constantes de event names estruturados
+│   │   └── retry.py            # async_retry + circuit breaker
 │   │
 │   └── middleware/             # Middleware
-│       └── rate_limiter.py     # Limitação de taxa (token bucket)
+│       └── rate_limiter.py     # Token bucket (por user/guild)
 │
 ├── tests/                      # Suíte de testes
-│   ├── conftest.py             # Configuração pytest e fixtures
-│   ├── test_rate_limiter.py    # Testes de rate limiter
-│   └── ...                     # Mais testes
+│   ├── conftest.py             # Fixtures compartilhadas (engine, repo, settings)
+│   ├── unit/                   # Testes isolados (sem I/O)
+│   ├── integration/            # Testes multi-componente
+│   ├── e2e/                    # Fluxos completos do sistema
+│   └── fixtures/               # Helpers e factories de teste
 │
 ├── migrations/                 # Migrações Alembic
-│   ├── alembic.ini             # Configuração Alembic
-│   ├── env.py                  # Ambiente de migração
+│   ├── alembic.ini
+│   ├── env.py
 │   └── versions/               # Arquivos de migração
 │
 ├── scripts/                    # Scripts utilitários
-│   └── backup.py               # Script de backup do SQLite
+│   └── backup.py               # Backup e restore do SQLite
+│
+├── prompt/                     # Prompts do sistema
+│   ├── prompt_v1.md            # Simples e direto (ativo por padrão)
+│   ├── prompt_v2.json          # Few-shot com exemplos
+│   └── prompt_v3.md            # Chain-of-thought avançado
 │
 ├── docs/                       # Documentação
-│   ├── deployment.md           # Guia de implantação
-│   └── operations.md           # Manual de operações
+│   ├── deployment.md
+│   ├── operations.md
+│   └── DEVELOPER_GUIDE.md      # Este arquivo
 │
 ├── data/                       # Banco de dados SQLite (gitignore)
-├── logs/                       # Logs da aplicação (gitignore)
-└── backups/                    # Backups do banco (gitignore)
+│   └── backups/                # Backups automáticos (últimos 5)
+└── logs/                       # Logs da aplicação (gitignore)
 ```
 
 ### Arquitetura em Camadas
@@ -175,29 +202,50 @@ BotSalinha/
 ```text
 ┌─────────────────────────────────────────────────┐
 │           Camada de Apresentação                │
-│  (Discord Bot, Comandos, Event Handlers)        │
+│  (BotSalinhaBot, Comandos, on_message)          │
 └───────────────────┬─────────────────────────────┘
                     │
 ┌───────────────────▼─────────────────────────────┐
 │           Camada de Middleware                  │
-│     (Rate Limiting, Error Handling)             │
+│     (RateLimiter — token bucket por user/guild) │
 └───────────────────┬─────────────────────────────┘
                     │
 ┌───────────────────▼─────────────────────────────┐
 │            Camada de Serviço                    │
-│     (Agent Wrapper, Business Logic)             │
+│     (AgentWrapper — Agno + OpenAI/Google)       │
+│     (RAG: IngestionService, QueryService)       │
 └───────────────────┬─────────────────────────────┘
                     │
 ┌───────────────────▼─────────────────────────────┐
 │         Camada de Acesso a Dados                │
-│  (Repository Pattern, SQLAlchemy ORM)           │
+│  (SQLiteRepository — injeção de dependência)    │
+│  (DatabaseGuard — backup + PRAGMA integrity)    │
 └───────────────────┬─────────────────────────────┘
                     │
 ┌───────────────────▼─────────────────────────────┐
 │              Camada de Dados                    │
-│           (SQLite Database)                     │
+│        (SQLite — exclusivo, WAL mode)           │
 └─────────────────────────────────────────────────┘
 ```
+
+### Padrão de Injeção de Dependência
+
+`BotSalinhaBot` recebe o repositório como parâmetro **obrigatório**. O único
+ponto de criação do repositório é `create_repository()` em `src/storage/factory.py`:
+
+```python
+# cli.py — modo de produção
+async with create_repository() as repo:
+    bot = BotSalinhaBot(repository=repo)
+    await run_with_lifecycle(start_coro=bot.start, shutdown_coro=bot.close)
+
+# tests — modo in-memory
+repo = SQLiteRepository(engine=test_engine)
+bot = BotSalinhaBot(repository=repo)
+```
+
+> Não existe mais um singleton global `get_repository()`. O ciclo de vida
+> do repositório é controlado inteiramente pelo chamador.
 
 ### Fluxo de Dados
 
@@ -450,21 +498,36 @@ class TestRateLimiter:
 
 **Localização:** `tests/conftest.py`
 
+As fixtures compartilham um único `AsyncEngine` in-memory para garantir que
+escritas em um contexto sejam visíveis nos demais (problema comum com SQLite
+`:memory:` e engines separadas):
+
 ```python
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import StaticPool
 from src.storage.sqlite_repository import SQLiteRepository
 
+@pytest_asyncio.fixture(scope="function")
+async def test_engine():
+    """Engine in-memory compartilhada entre fixtures."""
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    yield engine
+    await engine.dispose()
+
 @pytest_asyncio.fixture
-async def conversation_repository():
-    """Repositório para testes."""
-    repo = SQLiteRepository("sqlite+aiosqlite:///:memory:")
+async def conversation_repository(test_engine):
+    """Repositório para testes — reutiliza o engine compartilhado."""
+    repo = SQLiteRepository(engine=test_engine)
     await repo.initialize_database()
     await repo.create_tables()
-
     yield repo
-
-    await repo.close()
+    # engine é fechado pelo fixture test_engine
 
 @pytest.fixture
 def mock_discord_context():
@@ -583,7 +646,80 @@ async def _handle_chat_message(self, message: discord.Message, is_dm: bool) -> N
 
 ---
 
-## 5. Solução de Problemas
+## 5. Banco de Dados e Proteções
+
+### Backend exclusivo: SQLite
+
+O projeto aceita **apenas SQLite**. A validação ocorre no startup via
+`field_validator` em `DatabaseConfig` (`src/config/settings.py`):
+
+```python
+# Válido:
+DATABASE__URL=sqlite:///data/botsalinha.db
+
+# Inválido — encerra com ConfigurationError:
+DATABASE__URL=postgresql+asyncpg://user:pass@localhost/db
+```
+
+### DatabaseGuard — Backup automático
+
+A cada chamada a `repository.initialize_database()`, o `DatabaseGuard`
+(`src/storage/db_guard.py`) executa:
+
+1. **Cria o diretório `data/`** caso não exista.
+2. **Backup automático** via SQLite native backup API — arquivo nomeado
+   `data/backups/botsalinha_auto_YYYYMMDD_HHMMSS.db`.
+3. **Mantém os 5 backups mais recentes** (configura­ável via `max_backups`).
+4. **Verificação de integridade** — executa `PRAGMA integrity_check` e loga
+   erro se o banco estiver corrompido.
+
+> O guard é ignorado para bancos `:memory:` (testes).
+
+### Restaurando um backup
+
+```bash
+# Listar backups disponíveis
+uv run python scripts/backup.py list
+
+# Restaurar
+uv run python scripts/backup.py restore --restore-from data/backups/botsalinha_auto_20260228_090000.db
+```
+
+### Deduplicação de documentos RAG por hash SHA-256
+
+Ao ingestar um documento via `IngestionService.ingest_document()`, o pipeline:
+
+1. Calcula o **SHA-256** do arquivo (streaming em blocos de 64 KiB).
+2. Verifica se já existe um `DocumentORM` com o mesmo `file_hash` no banco.
+3. Se sim, lança `DuplicateDocumentError` com os dados do documento existente.
+4. Se não, prossegue com parse → embed → store e salva o hash.
+
+```python
+from src.rag.services import IngestionService, DuplicateDocumentError
+
+try:
+    doc = await ingestion_service.ingest_document("path/to/cf88.docx")
+except DuplicateDocumentError as e:
+    print(f"Já indexado: {e.existing_nome} (id={e.existing_id})")
+```
+
+### Adicionando um novo modelo ORM
+
+1. Crie o modelo em `src/models/` herdando de `Base`.
+2. Adicione interfaces abstratas em `src/storage/repository.py`.
+3. Implemente em `src/storage/sqlite_repository.py`.
+4. Gere a migração:
+
+```bash
+# Nota: autogenerate requer driver síncrono; use --autogenerate
+# apenas em ambiente configurado, ou escreva a migração manualmente.
+uv run alembic -c migrations/alembic.ini revision --autogenerate -m "add_my_model"
+uv run alembic -c migrations/alembic.ini upgrade head
+```
+
+---
+
+## 6. Solução de Problemas
 
 ### Problemas Comuns de Desenvolvimento
 
@@ -768,6 +904,17 @@ uv run python
 ...             print(f"  - {conv.id}: {conv.created_at}")
 ...
 >>> asyncio.run(check_db())
+```
+
+#### Banco corrompido
+
+```bash
+# Verificar integridade manualmente
+sqlite3 data/botsalinha.db "PRAGMA integrity_check;"
+
+# Restaurar backup automático
+uv run python scripts/backup.py list
+uv run python scripts/backup.py restore --restore-from data/backups/<arquivo>.db
 ```
 
 ### Obter Ajuda

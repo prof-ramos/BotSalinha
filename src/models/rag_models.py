@@ -7,7 +7,7 @@ including documents and chunks storage.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .conversation import Base
@@ -22,11 +22,25 @@ class DocumentORM(Base):
 
     __tablename__ = "rag_documents"
 
+    __table_args__ = (
+        # Prevent the same file from being ingested twice.
+        # NULL values are intentionally excluded from this constraint so that
+        # legacy rows (without a hash) do not trigger a violation.
+        UniqueConstraint("file_hash", name="uq_rag_documents_file_hash"),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nome: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     arquivo_origem: Mapped[str] = mapped_column(String(500), nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # SHA-256 hex digest of the source file contents.  NULL for legacy rows.
+    file_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        default=None,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

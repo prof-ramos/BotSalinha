@@ -1,7 +1,7 @@
 # Melhorias Sugeridas - RAG Jurídico BotSalinha
 
-**Data:** 2025-02-28
-**Fonte:** Análise de `/Users/gabrielramos/Downloads/RAG_JURIDICO_DISCORD.md`
+**Data:** 2026-02-28
+**Fonte:** Análise de implementação de referência
 
 ## Visão Geral
 
@@ -192,28 +192,27 @@ def get_confidence_category(similarity: float) -> str:
 
 ---
 
-## Próximos Passos
+## Status das Melhorias
 
-### Milestone 2: Busca Vetorial (Próximo)
+| Melhoria | Status |
+|----------|--------|
+| Normalização de encoding (`normalize_encoding`) | ✅ Implementado em `src/rag/utils/normalizer.py` |
+| Prefixos visuais por tipo de chunk | ✅ Implementado em `QueryService.get_augmentation_text()` |
+| Filtragem por tipo de metadado | ✅ Implementado em `QueryService.query_by_tipo()` |
+| Indicadores visuais de confiança | ✅ Implementado em `ConfiancaCalculator.get_confidence_message()` |
+| Comando `!reindexar` | ✅ Implementado |
+| Comando `!fontes` | ✅ Implementado |
+| Comando `!buscar <tipo>` | ✅ Implementado |
 
-Implementar antes de integrar com Agno:
-1. ✅ `VectorStore` - busca por similaridade cosine
-2. ✅ `QueryService` - consulta com re-ranking
-3. ✅ Testes E2E de busca
+## Próximas Melhorias (Post-MVP)
 
-### Melhorias Opcionais (Post-MVP)
-
-- [ ] Implementar normalizador de encoding
-- [ ] Adicionar prefixos visuais
-- [ ] Implementar filtros por tipo de metadado
-- [ ] Adicionar indicadores visuais de confiança
-- [ ] Comando `!reindexar`
-- [ ] Comando `!fontes`
+- [ ] Suporte a PDF nativo
+- [ ] Re-ranking por relevância jurídica
+- [ ] Hybrid search (semântico + BM25)
 
 ---
 
 ## Referências
 
-- **Documento Analisado:** `/Users/gabrielramos/Downloads/RAG_JURIDICO_DISCORD.md`
 - **Implementação Atual:** `src/rag/`
-- **Plano Principal:** `.omc/plans/rag-feature-implementation.md`
+- **Schema Técnico:** [`docs/rag_schema.md`](../../rag_schema.md)

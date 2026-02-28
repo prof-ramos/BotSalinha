@@ -37,9 +37,9 @@ Registro de decisões técnicas e trade-offs analisados. Inclui:
 |-----------|--------|-----------|
 | **M0: Fundação** | ✅ Completo | Infraestrutura, modelos, configs, 134 testes |
 | **M1: Ingestão** | ✅ Completo | Parsing, chunking, embeddings, 2 docs indexados |
-| **M2: Busca** | 🔄 Em andamento | VectorStore, QueryService, ranking |
-| **M3: Integração** | ⏳ Pendente | Agno, confiança, augment de prompts |
-| **M4: Comandos** | ⏳ Pendente | `!reindexar`, `!fontes`, docs |
+| **M2: Busca** | ✅ Completo | VectorStore (cosseno), QueryService, ConfiancaCalculator |
+| **M3: Integração** | ✅ Completo | AgentWrapper com RAG, augment de prompts, RAGContext |
+| **M4: Comandos** | ✅ Completo | `!buscar`, `!reindexar`, `!fontes`; deduplicação SHA-256 |
 
 ## Stack Tecnológico
 
@@ -71,9 +71,9 @@ sqlite3 data/botsalinha.db "SELECT COUNT(*) FROM rag_chunks;"
 uv run bot.py query "o que é estágio probatório?"
 ```
 
-## Próximos Passos
+## Próximos Passos (Pós-MVP)
 
-1. ✅ Documentação atualizada
-2. 🔄 Milestone 2: Implementar busca vetorial
-3. ⏳ Milestone 3: Integrar com Agno
-4. ⏳ Milestone 4: Comandos Discord e polish
+- [ ] Suporte a PDF nativo (PyMuPDF)
+- [ ] Re-ranking por relevância jurídica
+- [ ] Hybrid search (cosseno + BM25)
+- [ ] Schema técnico: [`docs/rag_schema.md`](../../rag_schema.md)

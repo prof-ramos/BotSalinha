@@ -13,7 +13,6 @@ class LogEvents:
     # Aplicação
     APP_INICIADA = "aplicacao_iniciada"
     APP_PARADA = "aplicacao_parada"
-    APP_INICIANDO = "aplicacao_iniciando"
 
     # Bot Discord
     BOT_DISCORD_INICIALIZADO = "bot_discord_inicializado"
@@ -44,8 +43,6 @@ class LogEvents:
     # Repositório
     REPOSITORIO_SQLITE_INICIALIZADO = "repositorio_sqlite_inicializado"
     REPOSITORIO_SQLITE_FECHADO = "repositorio_sqlite_fechado"
-    REPOSITORIO_FECHADO = "repositorio_fechado"
-    LIMPEZA_REPOSITORIO_FALHOU = "limpeza_repositorio_falhou"
 
     # Rate Limiter
     LIMITE_TAXA_ACIONADO = "limite_taxa_acionado"
@@ -88,28 +85,11 @@ class LogEvents:
     # Circuit Breaker
     DISJUNTOR_ABERTO = "disjuntor_aberto"
 
-    # Sistema de Logs (novos)
-    LOG_ARQUIVO_ROTACIONADO = "log_arquivo_rotacionado"
-    LOG_ROTACAO_FALHOU = "log_rotacao_falhou"
-    LOG_DADO_SENSIVEL_SANITIZADO = "log_dado_sensivel_sanitizado"
-    LOG_FILE_CONFIGURADO = "log_file_configurado"
-
-    # Correlation
-    CORRELATION_ID_GERADO = "correlation_id_gerado"
-    CORRELATION_ID_HERDADO = "correlation_id_herdado"
-
     # RAG (Retrieval-Augmented Generation)
-    RAG_INGESTAO_INICIADA = "rag_ingestao_iniciada"
-    RAG_INGESTAO_CONCLUIDA = "rag_ingestao_concluida"
-    RAG_DOCUMENTO_INDEXADO = "rag_documento_indexado"
     RAG_CHUNKS_CRIADOS = "rag_chunks_criados"
-    RAG_EMBEDDING_CRIADO = "rag_embedding_criado"
     RAG_BUSCA_INICIADA = "rag_busca_iniciada"
     RAG_BUSCA_CONCLUIDA = "rag_busca_concluida"
-    RAG_CHUNKS_RETORNADOS = "rag_chunks_retornados"
     RAG_CONFIDENCE_CALCULADA = "rag_confidence_calculada"
-    RAG_REINDEXACAO_INICIADA = "rag_reindexacao_iniciada"
-    RAG_REINDEXACAO_CONCLUIDA = "rag_reindexacao_concluida"
 
 
 __all__ = ["LogEvents"]

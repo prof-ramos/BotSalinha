@@ -5,6 +5,8 @@ Implements conversation and message repositories using SQLAlchemy with SQLite.
 Uses async patterns and proper connection management.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
@@ -12,7 +14,12 @@ import structlog
 from cachetools import TTLCache
 from sqlalchemy import delete, select, text
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.sql.selectable import TypedReturnsRows
 
@@ -51,30 +58,39 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     Uses WAL mode for better concurrency.
     """
 
-    def __init__(self, database_url: str | None = None) -> None:
+    def __init__(
+        self,
+        database_url: str | None = None,
+        engine: AsyncEngine | None = None,
+    ) -> None:
         """
         Initialize the SQLite repository.
 
         Args:
-            database_url: Database URL (defaults to settings)
+            database_url: Database URL (defaults to settings). Ignored when engine is provided.
+            engine: Existing AsyncEngine to reuse (e.g. for tests sharing an in-memory DB).
         """
-        self.database_url = database_url or settings.database.url
+        if engine is not None:
+            self.engine = engine
+            self.database_url = str(engine.url)
+        else:
+            self.database_url = database_url or settings.database.url
 
-        # Convert sqlite:// to sqlite+aiosqlite:// for async support
-        if self.database_url.startswith("sqlite:///"):
-            self.database_url = self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+            # Convert sqlite:// to sqlite+aiosqlite:// for async support
+            if self.database_url.startswith("sqlite:///"):
+                self.database_url = self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
 
-        # Create async engine with optimized settings for SQLite
-        # StaticPool reuses a single connection — ideal for SQLite
-        # which serializes writes regardless of pool strategy.
-        self.engine = create_async_engine(
-            self.database_url,
-            echo=settings.database.echo,
-            connect_args={
-                "check_same_thread": False,  # Needed for SQLite
-            },
-            poolclass=StaticPool,
-        )
+            # Create async engine with optimized settings for SQLite
+            # StaticPool reuses a single connection — ideal for SQLite
+            # which serializes writes regardless of pool strategy.
+            self.engine = create_async_engine(
+                self.database_url,
+                echo=settings.database.echo,
+                connect_args={
+                    "check_same_thread": False,  # Needed for SQLite
+                },
+                poolclass=StaticPool,
+            )
 
         # TTL cache for conversation lookups (avoids repeated DB hits)
         self._conversation_cache: TTLCache[str, Any] = TTLCache(maxsize=256, ttl=300)
@@ -94,7 +110,19 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         Initialize the database schema and enable WAL mode.
 
         Should be called on application startup.
+        Skips the guard for in-memory databases (tests).
         """
+        # Run the file-level guard before touching the engine
+        if ":memory:" not in self.database_url:
+            from pathlib import Path
+
+            from .db_guard import DatabaseGuard
+
+            db_path = Path(
+                self.database_url.replace("sqlite+aiosqlite:///", "").replace("sqlite:///", "")
+            )
+            DatabaseGuard(db_path=db_path).run()
+
         async with self.engine.begin() as conn:
             # Enable WAL mode for better concurrency
             await conn.execute(text("PRAGMA journal_mode=WAL"))
@@ -114,6 +142,21 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         """Close the database connection."""
         await self.engine.dispose()
         log.info(LogEvents.REPOSITORIO_SQLITE_FECHADO)
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        """Open a short-lived database session for direct SQL access.
+
+        Use this when external code (e.g. RAG services, CLI commands) needs
+        a raw SQLAlchemy session backed by the same engine as this repository.
+
+        Example::
+
+            async with repo.session() as s:
+                result = await s.execute(select(DocumentORM))
+        """
+        async with self.async_session_maker() as s:
+            yield s
 
     # Conversation Repository Methods
 
@@ -419,20 +462,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             return counts
 
 
-# Global repository instance
-repository: SQLiteRepository | None = None
-
-
-def get_repository() -> SQLiteRepository:
-    """Get the global repository instance."""
-    global repository
-    if repository is None:
-        repository = SQLiteRepository()
-    return repository
-
-
 __all__ = [
     "SQLiteRepository",
     "MessageORM",
-    "get_repository",
 ]

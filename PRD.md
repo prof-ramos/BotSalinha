@@ -1,336 +1,230 @@
-# PRD - BotSalinha v1.0
+# PRD — BotSalinha v2.1
 
-## 1. Visão Geral
-
-BotSalinha é um assistente virtual para Discord especializado em direito e concursos, utilizando o framework Agno com o modelo OpenAI gpt-4o-mini. A v1.0 foca em execução local com resposta contextual, histórico de conversação e formatação em markdown.
-
-### 1.1 Objetivo Principal
-
-Fornecer respostas contextualizadas a perguntas sobre direito e concursos através do comando `!ask`, mantendo histórico de conversação e entregando respostas formatadas em português brasileiro.
-
-### 1.2 Escopo v1.0
-
-- Execução local (sem Docker/VPS)
-- Comando único `!ask`
-- Histórico de 3 interações
-- Logs em modo debug
-- Sem persistência de dados (memória volátil)
-
-## 2. Funcionalidades
-
-### 2.1 Comando !ask
-
-| Descrição      | Detalhes                            |
-| -------------- | ----------------------------------- |
-| **Trigger**    | `!ask <pergunta>`                   |
-| **Resposta**   | OpenAI gpt-4o-mini com contexto     |
-| **Histórico**  | 3 runs anteriores (memória volátil) |
-| **Formatação** | Markdown + data/hora                |
-| **Idioma**     | Português-BR                        |
-| **Domínio**    | Direito e concursos públicos        |
-
-### 2.2 Configuração Discord
-
-- Token via variável de ambiente
-- MESSAGE_CONTENT Intent habilitado
-- Permissões: Send Messages, Read Message History
-
-### 2.3 Debug Mode
-
-Logs detalhados habilitados para desenvolvimento e troubleshooting.
-
-## 3. Instalação e Execução Local
-
-### 3.1 Pré-requisitos
-
-- macOS M3 (ou compatível)
-- Python 3.12+
-- uv (package manager)
-- Conta Discord com Developer Portal acessível
-- OpenAI API Key
-
-### 3.2 Passo a Passo
-
-#### 1. Criar o projeto
-
-```bash
-mkdir botsalinha && cd botsalinha
-uv init
-```
-
-#### 2. Instalar dependências
-
-```bash
-uv add agno openai discord.py python-dotenv
-```
-
-#### 3. Criar arquivo `.env`
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-DISCORD_BOT_TOKEN=your_discord_bot_token_here
-```
-
-#### 4. Criar `bot.py`
-
-```python
-import os
-from dotenv import load_dotenv
-from agno.agent import Agent
-from agno.integrations.discord import DiscordClient
-from agno.models.openai import OpenAIChat
-
-load_dotenv()
-
-agent = Agent(
-    name="BotSalinha",
-    model=OpenAIChat(id="gpt-4o-mini"),
-    instructions="Você é BotSalinha, assistente em PT-BR para direito/concursos. Responda só a !ask, use histórico.",
-    add_history_to_context=True,
-    num_history_runs=3,
-    add_datetime_to_context=True,
-    markdown=True,
-    debug_mode=True,
-)
-
-client = DiscordClient(agent)
-
-if __name__ == "__main__":
-    client.serve()
-```
-
-#### 5. Executar
-
-```bash
-uv run bot.py
-```
-
-#### 6. Testar
-
-- Convide o bot ao servidor Discord
-- Use `!ask Olá` para verificar resposta
-
-## 4. Configuração Discord
-
-### 4.1 Criar Aplicação Discord
-
-1. Acesse [Discord Developer Portal](https://discord.com/developers/applications)
-2. Clique em "New Application"
-3. Dê um nome ao bot (ex: "BotSalinha")
-4. Clique em "Create"
-
-### 4.2 Configurar Bot
-
-1. Navegue para **Bot** > **Token**
-2. Clique em "Reset Token" para gerar novo token
-3. **Copie o token imediatamente** (não será exibido novamente)
-4. Adicione ao `.env` como `DISCORD_BOT_TOKEN`
-
-### 4.3 Configurar Intents
-
-Em **Bot** > **Privileged Gateway Intents**:
-
-- ✅ **MESSAGE_CONTENT** (obrigatório para ler mensagens)
-
-### 4.4 Gerar URL de Convite
-
-1. Navegue para **OAuth2** > **URL Generator**
-2. Selecione scope:
-   - ✅ **bot**
-3. Selecione permissões:
-   - ✅ Send Messages
-   - ✅ Read Message History
-4. Copie a URL gerada e acesse no navegador
-5. Selecione o servidor e autorize
-
-## 5. Requisitos Não-Funcionais
-
-### 5.1 Plataforma e Ambiente
-
-| Aspecto         | Especificação            |
-| --------------- | ------------------------ |
-| Plataforma      | macOS M3 (ou compatível) |
-| Runtime         | Python 3.12+             |
-| Package Manager | uv                       |
-| Execução        | Local (`uv run`)         |
-
-### 5.2 Persistência
-
-- **v1.0**: Memória volátil (histório perdido ao reiniciar)
-- **Futuro**: SQLite para persistência de histórico
-
-### 5.3 Segurança
-
-- .env adicionado ao `.gitignore`
-- Tokens nunca commitados ao repositório
-- OPENAI_API_KEY mantida privada
-- DISCORD_BOT_TOKEN mantido privado
-
-### 5.4 Performance e Disponibilidade
-
-- Latência: dependente de resposta OpenAI (~1-3s)
-- Disponibilidade: apenas quando executado localmente
-- Escalabilidade: v1.0 não escalável (single instance)
-
-### 5.5 Idioma e Localização
-
-- Idioma primário: Português-BR
-- Formatação de datas: PT-BR
-- Domínio de conhecimento: Direito brasileiro e concursos públicos
-
-## 6. Arquitetura Técnica
-
-### 6.1 Componentes
-
-```mermaid
-┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│   Discord   │────▶│ Agno Agent  │────▶│ OpenAI Chat  │
-│   Client    │     │  (Discord)  │     │   2.0 API    │
-└─────────────┘     └─────────────┘     └──────────────┘
-                            ▲
-                            │
-                     ┌──────┴──────┐
-                     │  Context    │
-                     │  (3 runs)   │
-                     └─────────────┘
-```
-
-### 6.2 Fluxo de Dados
-
-1. Usuário envia `!ask <pergunta>` no Discord
-2. DiscordClient (Agno) recebe mensagem
-3. Agent recupera contexto (3 runs anteriores)
-4. Request enviada ao OpenAI gpt-4o-mini
-5. Resposta processada com formatação markdown
-6. Resposta enviada ao Discord
-
-### 6.3 Limitações Técnicas v1.0
-
-- Sem persistência de dados
-- Sem tratamento de erros robusto
-- Sem rate limiting explícito
-- Sem métricas ou monitoramento
-- Histório limitado a 3 runs
-
-## 7. Estrutura de Arquivos
-
-```text
-botsalinha/
-├── bot.py              # Código principal do bot
-├── .env                # Variáveis de ambiente (gitignore)
-├── .gitignore          # Arquivos ignorados pelo git
-├── pyproject.toml      # Dependências uv
-    └── README.md           # Documentação do projeto
-```
-
-## 8. Roadmap
-
-### v1.0 (Atual) - MVP Local
-
-- ✅ Comando `!ask` funcional
-- ✅ Histórico de 3 interações
-- ✅ Respostas em markdown
-- ✅ Execução local
-
-### v1.1 - Dockerização
-
-- Dockerfile multi-plataforma
-- docker-compose para orquestração
-- Portainer para gerenciamento
-- Traefik para reverse proxy
-
-### v1.2 - Melhorias de Funcionalidade
-
-- Persistência SQLite para histórico
-- Comando adicional `!limpar` (reset contexto)
-- Comando `!ajuda` (help)
-- Tratamento de erros robusto
-- Rate limiting
-
-### v2.0 - Deploy em VPS
-
-- Deploy em VPS com autoscaling
-- Métricas e monitoramento
-- Logging estruturado
-- Testes automatizados
-
-## 9. Considerações Futuras
-
-### 9.1 Melhorias Possíveis
-
-- Adicionar mais modelos LLM (opção do usuário)
-- Sistema de citações de fontes jurídicas
-- Index de legislação e jurisprudência
-- Multi-servidor com contexto isolado
-- Webhooks para notificações
-
-### 9.2 Decisões Arquiteturais Pendentes
-
-- Estratégia de persistência (SQLite vs PostgreSQL)
-- Cache de respostas frequentes
-- Rate limiting por usuário/servidor
-- Estratégia de backup de dados
-
-## 10. Apêndice
-
-### 10.1 Comandos Úteis
-
-```bash
-# Instalar dependências
-uv sync
-
-# Executar bot
-uv run bot.py
-
-# Atualizar dependências
-uv add <package>
-
-# Ver logs (se implementado)
-tail -f botsalinha.log
-```
-
-### 10.2 Troubleshooting
-
-#### Bot não responde
-
-1. Verifique se `DISCORD_BOT_TOKEN` está correto no `.env`
-2. Confirme que MESSAGE_CONTENT Intent está habilitado
-3. Verifique se o bot foi convidado com permissões corretas
-4. Confirme que o bot está online (no Discord Developer Portal)
-
-#### Problemas com a API OpenAI
-
-1. Verifique `OPENAI_API_KEY` no `.env`
-2. Confirme que a API key tem quota disponível
-3. Verifique conectividade com a internet
-
-#### Histório não funciona
-
-1. Comportamento esperado na v1.0 (volátil)
-2. Reiniciar o bot limpa todo o histórico
-3. Aguarde v1.2 para persistência
-
-### 10.3 Links Úteis
-
-- [Discord Developer Portal](https://discord.com/developers/applications)
-- [Discord.py Documentation](https://discordpy.readthedocs.io/)
-- [Agno Framework](https://github.com/agno-ai/agno)
-- [OpenAI API](https://platform.openai.com/docs/api-reference)
-- [uv Documentation](https://github.com/astral-sh/uv)
-
-### 10.4 Glossário
-
-| Termo           | Descrição                                 |
-| --------------- | ----------------------------------------- |
-| Agno            | Framework Python para agentes AI          |
-| gpt-4o-mini     | Modelo LLM rápido da OpenAI               |
-| Intent          | Permissão para receber eventos do Discord |
-| Message Content | Permissão para ler conteúdo de mensagens  |
-| uv              | Package manager Python moderno e rápido   |
-| .env            | Arquivo com variáveis de ambiente         |
+**Última Atualização:** 2026-02-28
+**Status:** Produção
 
 ---
 
-**Documento Versão**: 1.0
-**Última Atualização**: 2026-02-26
-**Status**: Pronto para implementação
+## 1. Visão Geral
+
+BotSalinha é um assistente Discord especializado em **direito brasileiro** e **concursos públicos**, alimentado por OpenAI GPT-4o-mini via framework Agno. Oferece conversas contextuais com histórico persistente, RAG jurídico com citação de fontes, rate limiting por usuário e logs estruturados.
+
+### 1.1 Objetivo Principal
+
+Fornecer respostas jurídicas fundamentadas, precisas e com citação de fontes a perguntas sobre direito e concursos públicos, via Discord, em português brasileiro.
+
+### 1.2 Escopo v2.1
+
+- Multi-provider: OpenAI (padrão) e Google AI
+- RAG jurídico com busca semântica (CF/88, Lei 8.112/90)
+- Histórico persistente em SQLite
+- Rate limiting por usuário/guild (Token Bucket)
+- Três modos de interação: comandos prefixados, Canal IA, DM
+- Deploy via Docker (dev e prod)
+
+---
+
+## 2. Funcionalidades
+
+### 2.1 Comandos Discord
+
+| Comando               | Descrição                                            | Exemplo                              |
+| --------------------- | ---------------------------------------------------- | ------------------------------------ |
+| `!ask <pergunta>`     | Pergunta com RAG e histórico                         | `!ask O que é habeas corpus?`        |
+| `!buscar <query>`     | Busca semântica nos documentos indexados             | `!buscar estágio probatório`         |
+| `!buscar <q> <tipo>`  | Busca filtrada por tipo jurídico                     | `!buscar greve artigo`               |
+| `!fontes`             | Lista documentos indexados                           | `!fontes`                            |
+| `!reindexar`          | Reconstrói o índice RAG (admin)                      | `!reindexar`                         |
+| `!limpar`             | Apaga histórico de conversa do usuário               | `!limpar`                            |
+| `!ping`               | Health check                                         | `!ping`                              |
+| `!ajuda`              | Ajuda do bot                                         | `!ajuda`                             |
+| `!info`               | Informações do bot                                   | `!info`                              |
+
+### 2.2 Modos de Interação
+
+| Modo               | Trigger                           | Configuração                     |
+| ------------------ | --------------------------------- | -------------------------------- |
+| Comandos prefixados | `!ask`, `!buscar`, etc.          | Nenhuma                          |
+| Canal IA           | Qualquer mensagem no canal        | `DISCORD__CANAL_IA_ID` no `.env` |
+| DM automático      | Mensagem direta para o bot        | Nenhuma (sempre ativo)           |
+
+### 2.3 RAG Jurídico
+
+- **Documentos indexados**: CF/88 (687 chunks, ~303K tokens), Lei 8.112/90 (88 chunks, ~41K tokens)
+- **Embedding**: OpenAI `text-embedding-3-small` (1536 dims)
+- **Armazenamento**: SQLite BLOB (float32, 6.144 bytes/chunk)
+- **Busca**: similaridade cosseno em Python, top-K = 5 (configurável)
+- **Deduplicação**: SHA-256 do arquivo — rejeita re-ingestão acidental
+
+#### Níveis de Confiança
+
+| Nível   | avg similarity | Comportamento               |
+| ------- | -------------- | --------------------------- |
+| ALTA    | ≥ 0.85         | Resposta com fontes         |
+| MÉDIA   | ≥ 0.70         | Resposta parcial            |
+| BAIXA   | ≥ 0.60         | Aviso de baixa certeza      |
+| SEM_RAG | < 0.60         | Conhecimento geral da IA    |
+
+### 2.4 Configuração Discord
+
+- TOKEN via variável de ambiente `DISCORD_BOT_TOKEN`
+- MESSAGE_CONTENT Intent habilitado (obrigatório)
+- Permissões: Send Messages, Read Message History
+
+---
+
+## 3. Instalação
+
+### 3.1 Pré-requisitos
+
+| Requisito         | Versão  |
+| ----------------- | ------- |
+| Python            | 3.12+   |
+| uv                | latest  |
+| Discord Bot Token | —       |
+| OpenAI API Key    | —       |
+
+### 3.2 Passo a Passo
+
+```bash
+# 1. Clone e instale
+git clone https://github.com/prof-ramos/BotSalinha.git
+cd BotSalinha
+uv sync
+
+# 2. Configure credenciais
+cp .env.example .env
+# Edite .env com DISCORD_BOT_TOKEN e OPENAI_API_KEY
+
+# 3. Aplique migrações
+uv run alembic upgrade head
+
+# 4. Inicie o bot
+uv run botsalinha run
+```
+
+### 3.3 Docker (Produção)
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## 4. Configuração
+
+### 4.1 Variáveis de Ambiente (`.env`)
+
+| Variável                     | Obrigatório | Padrão                         | Descrição                          |
+| ---------------------------- | ----------- | ------------------------------ | ---------------------------------- |
+| `DISCORD_BOT_TOKEN`          | Sim         | —                              | Token do bot Discord               |
+| `OPENAI_API_KEY`             | Sim¹        | —                              | Chave OpenAI                       |
+| `GOOGLE_API_KEY`             | Sim²        | —                              | Chave Google AI                    |
+| `DISCORD__CANAL_IA_ID`       | Não         | None                           | Canal IA dedicado (opcional)       |
+| `HISTORY_RUNS`               | Não         | `3`                            | Pares de mensagens no histórico    |
+| `RATE_LIMIT__REQUESTS`       | Não         | `10`                           | Max requisições por janela         |
+| `RATE_LIMIT__WINDOW_SECONDS` | Não         | `60`                           | Janela de rate limit (seg)         |
+| `DATABASE__URL`              | Não         | `sqlite:///data/botsalinha.db` | URL do banco (apenas SQLite)       |
+| `LOG_LEVEL`                  | Não         | `INFO`                         | Nível de log                       |
+| `RAG__ENABLED`               | Não         | `true`                         | Habilitar RAG                      |
+| `RAG__TOP_K`                 | Não         | `5`                            | Chunks recuperados por busca       |
+| `RAG__MIN_SIMILARITY`        | Não         | `0.6`                          | Similaridade mínima                |
+
+¹ Obrigatório quando `model.provider = openai` (padrão).
+² Obrigatório quando `model.provider = google`.
+
+### 4.2 `config.yaml`
+
+```yaml
+model:
+  provider: openai          # openai | google
+  id: gpt-4o-mini
+
+rag:
+  enabled: true
+  top_k: 5
+  min_similarity: 0.6
+  confidence_threshold: 0.70
+```
+
+---
+
+## 5. Arquitetura
+
+```
+Discord (discord.py)
+    ↓
+Middleware (RateLimiter — Token Bucket por usuário/guild)
+    ↓
+QueryService (RAG — embed → busca → RAGContext)
+    ↓
+AgentWrapper (Agno + OpenAI/Google — prompt aumentado)
+    ↓
+Repository (SQLite — histórico de conversas + índice RAG)
+```
+
+### Componentes Principais
+
+| Componente          | Arquivo                             | Responsabilidade                          |
+| ------------------- | ----------------------------------- | ----------------------------------------- |
+| `BotSalinhaBot`     | `src/core/discord.py`               | Comandos Discord, on_message              |
+| `AgentWrapper`      | `src/core/agent.py`                 | Geração de resposta + integração RAG      |
+| `QueryService`      | `src/rag/services/query_service.py` | Busca semântica e RAGContext              |
+| `IngestionService`  | `src/rag/services/ingestion_service.py` | Pipeline de ingestão de documentos    |
+| `VectorStore`       | `src/rag/storage/vector_store.py`   | Busca vetorial por cosseno em SQLite      |
+| `SQLiteRepository`  | `src/storage/sqlite_repository.py`  | CRUD de conversas e mensagens             |
+| `DatabaseGuard`     | `src/storage/db_guard.py`           | Backup e integridade do banco             |
+| `RateLimiter`       | `src/middleware/rate_limiter.py`    | Token Bucket por usuário/guild            |
+
+---
+
+## 6. Requisitos Não-Funcionais
+
+| Aspecto          | Especificação                                        |
+| ---------------- | ---------------------------------------------------- |
+| Latência         | ~1-3s (embedding + LLM); < 100ms para busca vetorial |
+| Banco de dados   | SQLite exclusivo (validado no startup)               |
+| Cobertura testes | ≥ 70% (enforced em CI)                               |
+| Segurança        | TLS para APIs externas; tokens em `.env`             |
+| Escalabilidade   | Single instance; migrar para Postgres para multi-replica |
+| Plataforma       | Linux/macOS, Python 3.12+, Docker                    |
+
+---
+
+## 7. Troubleshooting
+
+### Bot não responde
+
+1. Verifique `MESSAGE_CONTENT Intent` no [Discord Developer Portal](https://discord.com/developers/applications)
+2. Confirme permissões `Send Messages` e `Read Message History`
+3. Verifique `DISCORD_BOT_TOKEN` no `.env`
+
+### RAG sem resultados
+
+1. `!fontes` — verifique se há documentos indexados
+2. `!reindexar` — reconstrói o índice
+3. Verifique `OPENAI_API_KEY` para geração de embeddings
+
+### Banco corrompido
+
+```bash
+sqlite3 data/botsalinha.db "PRAGMA integrity_check;"
+uv run python scripts/backup.py list
+uv run python scripts/backup.py restore --restore-from data/backups/<arquivo>.db
+```
+
+---
+
+## 8. Roadmap
+
+Veja [ROADMAP.md](ROADMAP.md).
+
+---
+
+## 9. Links
+
+- [Discord Developer Portal](https://discord.com/developers/applications)
+- [OpenAI Platform](https://platform.openai.com/)
+- [Agno Framework](https://github.com/agno-agi/agno)
+- [Documentação Técnica](docs/architecture.md)
+- [Schema RAG](docs/rag_schema.md)

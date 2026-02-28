@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.rag_models import ChunkORM, DocumentORM
@@ -26,6 +28,30 @@ class IngestionError(BotSalinhaError):
     """Error during document ingestion."""
 
     pass
+
+
+class DuplicateDocumentError(IngestionError):
+    """Raised when a file with the same SHA-256 hash already exists in the DB.
+
+    Attributes:
+        existing_id:   ID of the already-indexed document.
+        existing_nome: Name of the already-indexed document.
+        file_hash:     SHA-256 hex digest of the duplicate file.
+    """
+
+    def __init__(self, existing_id: int, existing_nome: str, file_hash: str) -> None:
+        super().__init__(
+            f"Arquivo já indexado como '{existing_nome}' (id={existing_id}). "
+            "Use !reindexar para recriar o índice ou envie um arquivo diferente.",
+            details={
+                "existing_id": existing_id,
+                "existing_nome": existing_nome,
+                "file_hash": file_hash,
+            },
+        )
+        self.existing_id = existing_id
+        self.existing_nome = existing_nome
+        self.file_hash = file_hash
 
 
 class IngestionService:
@@ -59,6 +85,7 @@ class IngestionService:
         Ingest a document through the complete RAG pipeline.
 
         Pipeline steps:
+        0. Compute SHA-256 hash and check for duplicates
         1. Parse DOCX file with DOCXParser
         2. Extract metadata with MetadataExtractor
         3. Extract chunks with ChunkExtractor
@@ -73,7 +100,8 @@ class IngestionService:
             Document Pydantic model with statistics
 
         Raises:
-            IngestionError: If any step in the pipeline fails
+            DuplicateDocumentError: If the file was already indexed (same SHA-256).
+            IngestionError: If any other step in the pipeline fails.
         """
         log.info(
             LogEvents.AGENTE_INICIALIZADO,
@@ -84,6 +112,23 @@ class IngestionService:
         )
 
         try:
+            # Step 0: Deduplicate by file hash
+            file_hash = self._compute_file_hash(file_path)
+            existing = await self._find_by_hash(file_hash)
+            if existing is not None:
+                log.warning(
+                    "rag_ingestion_duplicate",
+                    file_hash=file_hash,
+                    existing_id=existing.id,
+                    existing_nome=existing.nome,
+                    event_name="rag_ingestion_duplicate",
+                )
+                raise DuplicateDocumentError(
+                    existing_id=existing.id,
+                    existing_nome=existing.nome,
+                    file_hash=file_hash,
+                )
+
             # Step 1: Parse the document
             parser = DOCXParser(file_path)
             parsed_doc = parser.parse()
@@ -107,7 +152,7 @@ class IngestionService:
             )
 
             # Step 2: Create DocumentORM (first to get documento_id)
-            document_orm = self._create_document_orm(document_name, file_path)
+            document_orm = self._create_document_orm(document_name, file_path, file_hash)
             self._session.add(document_orm)
 
             # Flush to get the ID before creating chunks
@@ -187,6 +232,7 @@ class IngestionService:
                 arquivo_origem=document_orm.arquivo_origem,
                 chunk_count=document_orm.chunk_count,
                 token_count=document_orm.token_count,
+                file_hash=document_orm.file_hash,
             )
 
         except IngestionError:
@@ -209,13 +255,16 @@ class IngestionService:
                 msg, details={"file_path": file_path, "document_name": document_name}
             ) from e
 
-    def _create_document_orm(self, document_name: str, file_path: str) -> DocumentORM:
+    def _create_document_orm(
+        self, document_name: str, file_path: str, file_hash: str | None = None
+    ) -> DocumentORM:
         """
         Create a DocumentORM instance.
 
         Args:
             document_name: Document identifier
             file_path: Path to source file
+            file_hash: SHA-256 hex digest (optional)
 
         Returns:
             DocumentORM instance
@@ -225,8 +274,34 @@ class IngestionService:
             arquivo_origem=file_path,
             chunk_count=0,
             token_count=0,
+            file_hash=file_hash,
             created_at=datetime.now(UTC),
         )
+
+    @staticmethod
+    def _compute_file_hash(file_path: str) -> str:
+        """Return the SHA-256 hex digest of the file at *file_path*.
+
+        Reads the file in 64 KiB chunks so large files don't exhaust memory.
+        """
+        h = hashlib.sha256()
+        try:
+            with open(file_path, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    h.update(chunk)
+        except FileNotFoundError as exc:
+            raise IngestionError(
+                f"Arquivo não encontrado: {file_path}",
+                details={"file_path": file_path},
+            ) from exc
+        return h.hexdigest()
+
+    async def _find_by_hash(self, file_hash: str) -> DocumentORM | None:
+        """Return the existing DocumentORM with *file_hash*, or None."""
+        result = await self._session.execute(
+            select(DocumentORM).where(DocumentORM.file_hash == file_hash).limit(1)
+        )
+        return result.scalar_one_or_none()
 
     def _create_chunk_orm(self, chunk: Chunk, embedding: list[float]) -> ChunkORM:
         """
@@ -315,16 +390,13 @@ class IngestionService:
         Raises:
             IngestionError: If reindexing fails
         """
-        import time
-
         start_time = time.time()
 
-        # Default to docs/plans/RAG/ if not specified
+        # Default to data/documents/ (project root / data / documents)
         if documents_dir is None:
-            # Get project root (3 levels up from this file)
             current_file = Path(__file__)
             project_root = current_file.parent.parent.parent.parent
-            documents_dir = str(project_root / "docs" / "plans" / "RAG")
+            documents_dir = str(project_root / "data" / "documents")
 
         documents_path = Path(documents_dir)
         if not documents_path.exists():

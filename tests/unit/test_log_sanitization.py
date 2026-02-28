@@ -43,11 +43,13 @@ class TestSanitizeString:
 
     def test_discord_token(self):
         """Testa sanitização de Discord tokens."""
-        input_str = "Token: FAKE_DISCORD_TOKEN_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        # Discord token format: Base64UserId.Timestamp.HmacSignature
+        fake_token = "MtestTokenAAAAAAA.GxyzTT.AbcdefghijklmnopqrstuvwxyzABCD"
+        input_str = f"Token: {fake_token}"
         result = sanitize_string(input_str)
         assert "***DISCORD_TOKEN***" in result
         # Token original não deve aparecer
-        assert "FAKE_DISCORD_TOKEN" not in result
+        assert fake_token not in result
 
     def test_bearer_token(self):
         """Testa sanitização de Bearer tokens."""

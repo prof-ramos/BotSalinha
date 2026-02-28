@@ -139,14 +139,14 @@ class TestRateLimitingIntegration:
     """Integration tests for rate limiting in chat flow."""
 
     async def test_rate_limiting_is_applied(
-        self, conversation_repository, test_settings, rate_limiter
+        self, conversation_repository, test_settings
     ):
         """Rate limiter should be applied to chat messages."""
         from src.core.discord import BotSalinhaBot
+        from src.middleware.rate_limiter import RateLimiter
 
-        # Arrange - Set strict rate limit for testing
-        rate_limiter.requests = 2
-        rate_limiter.window_seconds = 60
+        # Create a strict rate limiter for this test (2 requests per 60s)
+        strict_limiter = RateLimiter(requests=2, window_seconds=60)
 
         bot = BotSalinhaBot(repository=conversation_repository)
 
@@ -164,10 +164,10 @@ class TestRateLimitingIntegration:
         # Act - Send multiple messages rapidly
         with (
             patch(
-                "src.core.discord.AgentWrapper.generate_response",
-                new=AsyncMock(return_value="Resposta teste"),
+                "src.core.discord.AgentWrapper.generate_response_with_rag",
+                new=AsyncMock(return_value=("Resposta teste", None)),
             ),
-            patch("src.core.discord.rate_limiter", rate_limiter),
+            patch("src.core.discord.rate_limiter", strict_limiter),
         ):
             # First two should succeed
             message.id = 1

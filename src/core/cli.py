@@ -439,7 +439,7 @@ async def _get_db_counts(repo: SQLiteRepository) -> tuple[str, str]:
         Other exceptions propagate to caller for proper error handling.
     """
     try:
-        async with repo.async_session_maker() as session:
+        async with repo.session() as session:
             msg_count = (await session.execute(text("SELECT count(*) FROM messages"))).scalar()
             conv_count = (
                 await session.execute(text("SELECT count(*) FROM conversations"))
@@ -611,7 +611,7 @@ async def run_ingest(file_path: str, document_name: str) -> None:
 
     try:
         # Create repository and database session
-        async with create_repository() as repo, repo.async_session_maker() as session:
+        async with create_repository() as repo, repo.session() as session:
             # Initialize embedding service
             with console.status("[bold yellow]Inicializando serviços..."):
                 embedding_service = EmbeddingService(api_key=api_key)

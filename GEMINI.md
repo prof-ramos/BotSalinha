@@ -20,7 +20,7 @@ O projeto utiliza um CLI centralizado: `uv run botsalinha [comando]`.
 ### Execução Principal
 - **Iniciar Bot:** `uv run botsalinha run` (ou `start`)
 - **Modo Chat CLI:** `uv run botsalinha chat` (interação direta no terminal sem Discord)
-- **Ingestão RAG:** `uv run botsalinha ingest <caminho.docx>` (indexa documentos para o bot)
+- **Ingestão RAG:** `uv run botsalinha ingest <caminho.docx> --name "Nome"` (indexa documentos DOCX; deduplicação SHA-256 automática)
 
 ### Gerenciamento
 - **Banco de Dados:**
