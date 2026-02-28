@@ -13,7 +13,7 @@ Este diretório concentra os documentos operacionais e técnicos do BotSalinha.
 
 ## Suporte à documentação
 
-- [docs/plans/alinhamento-multi-model.md](plans/alinhamento-multi-model.md): plano consolidado
+- [docs/plans/mcp-integration.md](plans/mcp-integration.md): plano ativo de integração MCP
 - `docs/reports/`: relatórios e artefatos de análise
 
 ## Templates de documentação

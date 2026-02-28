@@ -26,7 +26,7 @@
 - [docs/deployment.md]: Guia de deploy via Docker
 - [docs/DEVELOPER_GUIDE.md]: Fluxo de desenvolvimento e contribuição
 - [docs/adr/ADR-001-multi-model-provider.md]: Decisão arquitetural do Roteador de Provider Multi-Model
-- [docs/plans/RAGV1.md]: Plano de feature do RAG iterativo para bases jurídicas e documentais
+- [docs/plans/mcp-integration.md]: Plano ativo de integração MCP (Model Context Protocol)
 - [CLAUDE.md] e [AGENTS.md]: Convenções do projeto para agentes IA e desenvolvimento
 
 ## Conceitos-Chave

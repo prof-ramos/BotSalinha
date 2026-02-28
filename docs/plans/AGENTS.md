@@ -20,7 +20,7 @@ This documentation extends the main AGENTS.md file located at `../../AGENTS.md`,
 
 ## Implementation Plans
 
-### 1. Multi-Model Alignment ([alinhamento-multi-model.md](./alinhamento-multi-model.md))
+### 1. Multi-Model Alignment (arquivado em 2026-02-28)
 
 **Problem Statement:** Standardize runtime, tests, and documentation for official support of both `openai` and `google` providers, with `openai` as default and `config.yaml` as single source of truth.
 
