@@ -52,7 +52,7 @@ async def run_discord_bot() -> None:
         await bot.close()
 
     await run_with_lifecycle(
-        start_coro=bot.start(settings.discord.token),
+        start_coro=lambda: bot.start(settings.discord.token),
         shutdown_coro=shutdown_bot,
     )
 

@@ -8,10 +8,10 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 
 # Install dependencies using uv
-RUN uv sync --frozen --no-dev
+RUN uv sync --no-dev
 
 # Runtime stage
 FROM python:3.12-slim
@@ -31,6 +31,7 @@ COPY pyproject.toml ./
 # Copy source code
 COPY src/ ./src/
 COPY bot.py ./
+COPY prompt/ ./prompt/
 
 # Create data directory for SQLite database
 RUN mkdir -p /app/data && \
