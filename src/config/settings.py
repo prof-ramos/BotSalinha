@@ -8,6 +8,7 @@ This module uses environment variables with validation, following best practices
 - Extra fields ignored to allow for deployment-specific overrides
 """
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,6 +41,12 @@ class GoogleConfig(BaseModel):
         return v.strip()
 
 
+class OpenAIConfig(BaseModel):
+    """OpenAI configuration."""
+
+    api_key: str | None = Field(None, description="OpenAI API key")
+
+
 class RateLimitConfig(BaseModel):
     """Rate limiting configuration."""
 
@@ -66,6 +73,37 @@ class RetryConfig(BaseModel):
     exponential_base: float = Field(
         default=2.0, ge=1.0, le=10.0, description="Exponential backoff base"
     )
+
+
+class RAGConfig(BaseModel):
+    """RAG (Retrieval-Augmented Generation) configuration."""
+
+    enabled: bool = Field(default=True, description="Enable RAG functionality")
+    top_k: int = Field(default=5, ge=1, le=20, description="Number of documents to retrieve")
+    min_similarity: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity threshold (ajustado para 0.4 baseado em dados empíricos)",
+    )
+    max_context_tokens: int = Field(
+        default=2000, ge=100, le=8000, description="Maximum context tokens"
+    )
+    documents_path: str = Field(default="data/documents", description="Path to documents directory")
+    embedding_model: str = Field(
+        default="text-embedding-3-small", description="OpenAI embedding model"
+    )
+    confidence_threshold: float = Field(
+        default=0.70, ge=0.0, le=1.0, description="Confidence threshold"
+    )
+    retrieval_mode: str = Field(default="hybrid_lite", description="Retrieval strategy")
+    rerank_enabled: bool = Field(default=True, description="Enable reranking")
+    rerank_alpha: float = Field(default=0.70, description="Rerank alpha weight")
+    rerank_beta: float = Field(default=0.20, description="Rerank beta weight")
+    rerank_gamma: float = Field(default=0.10, description="Rerank gamma weight")
+    retrieval_candidate_multiplier: int = Field(default=12, description="Candidate multiplier")
+    retrieval_candidate_min: int = Field(default=60, description="Minimum candidates")
+    retrieval_candidate_cap: int = Field(default=240, description="Maximum candidates")
 
 
 class Settings(BaseSettings):
@@ -107,9 +145,11 @@ class Settings(BaseSettings):
     # Nested configurations
     discord: DiscordConfig = Field(default_factory=DiscordConfig)
     google: GoogleConfig = Field(default_factory=GoogleConfig)
+    openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
+    rag: RAGConfig = Field(default_factory=RAGConfig)
 
     @field_validator("log_level")
     @classmethod
@@ -163,6 +203,10 @@ class Settings(BaseSettings):
     def get_google_api_key(self) -> str:
         """Get the Google API key."""
         return self.google.api_key
+
+    def get_openai_api_key(self) -> str | None:
+        """Get the OpenAI API key with legacy env fallback."""
+        return self.openai.api_key or os.getenv("OPENAI_API_KEY")
 
 
 @lru_cache
