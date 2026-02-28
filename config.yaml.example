@@ -52,3 +52,13 @@ agent:
 mcp:
   enabled: false                # Habilitar MCP (requer servidor configurado abaixo)
   servers: []                   # Lista de servidores MCP
+
+
+# Configuração RAG
+rag:
+  enabled: true
+  top_k: 5
+  min_similarity: 0.6
+  confidence_threshold: 0.70
+  hybrid_search_enabled: true
+  rerank_alpha: 0.8

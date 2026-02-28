@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
@@ -114,6 +115,9 @@ class QueryService:
                 filters=filters,
             )
 
+            if self._settings.rag.hybrid_search_enabled and chunks_with_scores:
+                chunks_with_scores = self._rerank_hybrid(query_text, chunks_with_scores, top_k)
+
             # Step 3: Calculate confidence
             confidence = self._confianca_calculator.calculate(chunks_with_scores)
 
@@ -151,6 +155,40 @@ class QueryService:
                 query_length=len(query_text),
             )
             raise APIError(f"Query failed: {e}") from e
+
+    def _rerank_hybrid(
+        self, query_text: str, chunks_with_scores: list[tuple[Any, float]], top_k: int
+    ) -> list[tuple[Any, float]]:
+        """Apply hybrid reranking combining semantic and lexical overlap."""
+        alpha = self._settings.rag.rerank_alpha
+        query_terms = self._tokenize(query_text)
+
+        reranked: list[tuple[Any, float]] = []
+        for chunk, semantic_score in chunks_with_scores:
+            lexical_score = self._lexical_overlap_score(query_terms, chunk.texto)
+            final_score = (alpha * semantic_score) + ((1 - alpha) * lexical_score)
+            reranked.append((chunk, final_score))
+
+        reranked.sort(key=lambda item: item[1], reverse=True)
+        return reranked[:top_k]
+
+    @staticmethod
+    def _tokenize(text: str) -> set[str]:
+        """Tokenize text into lowercase terms."""
+        return set(re.findall(r"\b\w+\b", text.lower()))
+
+    def _lexical_overlap_score(self, query_terms: set[str], chunk_text: str) -> float:
+        """Compute lexical overlap score (Jaccard) between query and chunk."""
+        if not query_terms:
+            return 0.0
+
+        chunk_terms = self._tokenize(chunk_text)
+        if not chunk_terms:
+            return 0.0
+
+        intersection = len(query_terms & chunk_terms)
+        union = len(query_terms | chunk_terms)
+        return intersection / union if union else 0.0
 
     async def query_by_tipo(
         self,

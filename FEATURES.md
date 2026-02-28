@@ -15,6 +15,8 @@ Este documento cataloga as funcionalidades do BotSalinha, detalhando seu estado 
 | **Citação de Fontes**      | ✅ Estável   | IA/RAG    | Referência automática a artigos, incisos e parágrafos              |
 | **Nível de Confiança RAG** | ✅ Estável   | IA/RAG    | Indicadores ALTA/MÉDIA/BAIXA/SEM_RAG por similaridade cosseno      |
 | **Deduplicação SHA-256**   | ✅ Estável   | IA/RAG    | Rejeição de documentos duplicados via hash de arquivo              |
+| **Suporte PDF nativo**      | ✅ Estável   | IA/RAG    | Ingestão de documentos `.pdf` além de `.docx`                      |
+| **Hybrid Search + Reranking** | ✅ Estável | IA/RAG    | Combina score semântico + sobreposição lexical para ordenar chunks |
 | **DatabaseGuard**          | ✅ Estável   | Dados     | Backup automático + integridade SQLite a cada inicialização        |
 | **CLI Developer**          | ✅ Estável   | Tooling   | Interface rica para DB, sessões, RAG e prompts                     |
 | **MCP Integration**        | ✅ Estável   | Tooling   | Suporte a servidores MCP (stdio/sse/streamable-http)               |

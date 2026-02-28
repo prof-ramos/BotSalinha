@@ -26,9 +26,9 @@ Para uma visão detalhada das capacidades já implementadas e em desenvolvimento
 
 ## Próximas entregas (Curto prazo)
 
-- [ ] Suporte a PDF nativo (PyMuPDF ou pdfplumber) além de DOCX
-- [ ] Re-ranking por relevância jurídica (artigo > nota)
-- [ ] Hybrid search: similaridade semântica + BM25 para melhor recall
+- [x] Suporte a PDF nativo (via parser `.pdf`) além de DOCX
+- [x] Re-ranking por relevância híbrida (semântico + lexical)
+- [x] Hybrid search: similaridade semântica + sobreposição lexical para melhor recall
 
 ## Médio prazo
 

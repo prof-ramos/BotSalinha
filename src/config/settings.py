@@ -177,6 +177,12 @@ class RAGConfig(BaseSettings):
     confidence_threshold: float = Field(
         default=0.70, ge=0.0, le=1.0, description="Confidence threshold"
     )
+    hybrid_search_enabled: bool = Field(
+        default=True, description="Enable lexical + semantic hybrid search reranking"
+    )
+    rerank_alpha: float = Field(
+        default=0.8, ge=0.0, le=1.0, description="Weight for semantic score in reranking"
+    )
 
 
 class Settings(BaseSettings):
