@@ -61,12 +61,14 @@ BotSalinha é um assistente inteligente para Discord que responde perguntas sobr
 - 🧠 **IA Multi-Model**: Suporte a OpenAI e Google AI via framework Agno (OpenAI padrão)
 <!-- markdownlint-enable MD013 -->
 - 💬 **Conversas Contextuais**: Memória de até 3 pares de mensagens por conversa
-- 🗃️ **Persistência**: Banco de dados SQLite para histórico de conversas
+- 🗃️ **Persistência SQLite exclusiva**: Banco SQLite validado no startup — sem suporte a outros backends
 - 🛡️ **Rate Limiting**: Proteção contra abuso com algoritmo token bucket
 - 🔄 **Resiliência**: Retentativa automática com backoff exponencial
 - 📊 **Observabilidade**: Logs estruturados JSON com rastreamento de requisições
 - 🐳 **DevOps Ready**: Dockerfile multi-stage e docker compose
 - 🚀 **Três Modos de Interação**: Comandos prefixados, Canal IA dedicado e DMs automáticos
+- 🔒 **Proteção do Banco**: Backup automático + verificação de integridade a cada inicialização
+- 🔐 **RAG com Deduplicação**: Documentos indexados por SHA-256 — sem duplicatas acidentais
 
 ---
 
@@ -317,11 +319,12 @@ graph TB
         RATE[RateLimiter<br/>Token Bucket]
         CONFIG[Settings<br/>Pydantic]
         LOGS[Logger<br/>structlog JSON]
-        FACTORY[Factory<br/>create_repository]
+        FACTORY[create_repository<br/>DI Factory]
     end
 
     subgraph DATA["🗃️ Data Layer"]
         REPO[SQLiteRepository]
+        GUARD[DatabaseGuard<br/>Backup + Integridade]
         DB[(SQLite DB)]
         MIGRATIONS[Alembic]
     end
@@ -333,8 +336,11 @@ graph TB
 
     BOT --> RATE
     BOT --> AGENT
-    AGENT --> REPO
+    FACTORY -->|injeta| BOT
     FACTORY --> REPO
+    AGENT --> REPO
+    REPO --> GUARD
+    GUARD --> DB
     REPO --> DB
     MIGRATIONS --> DB
     CONFIG --> BOT
@@ -349,8 +355,8 @@ graph TB
     style UTILS fill:#fce4ec
 ```
 
-> 📋 **Padrão DI:** O projeto usa injeção de dependência via
-> `create_repository()` (factory pattern).
+> 📋 **Padrão DI:** `BotSalinhaBot` requer o repositório como parâmetro obrigatório.
+> A factory `create_repository()` (em `src/storage/factory.py`) é o único ponto de criação.
 > Veja [docs/architecture.md](docs/architecture.md) para detalhes.
 
 ### Componentes
@@ -374,16 +380,19 @@ botsalinha/
 ├── bot.py                 # Ponto de entrada
 ├── src/
 │   ├── config/            # Configurações Pydantic (Settings + YAML)
-│   ├── core/              # Wrappers do bot e agente
-│   ├── models/            # Modelos de dados
-│   ├── storage/           # Camada de repositório + Factory DI
+│   ├── core/              # Wrappers do bot, agente e lifecycle
+│   ├── models/            # Modelos de dados (ORM + Pydantic)
+│   ├── storage/           # Repositório SQLite + Factory DI + DatabaseGuard
+│   ├── rag/               # Pipeline RAG (parser, embedding, query, deduplicação)
+│   ├── tools/             # Gerenciador MCP
 │   ├── utils/             # Logs, erros, retry
 │   └── middleware/        # Rate limiting
-├── tests/                 # Testes pytest
+├── tests/                 # Testes pytest (unit / integration / e2e)
 ├── migrations/            # Migrações Alembic
 ├── scripts/               # Utilitários de backup
 ├── docs/                  # Documentação
-└── data/                  # Banco SQLite (gitignore)
+├── prompt/                # Prompts do sistema (v1/v2/v3)
+└── data/                  # Banco SQLite + backups automáticos (gitignore)
 ```
 
 ---
@@ -525,6 +534,29 @@ Ajuste as configurações no `.env`:
 ```env
 RATE_LIMIT_REQUESTS=20
 RATE_LIMIT_WINDOW_SECONDS=60
+```
+
+### Banco de dados corrompido ou travado
+
+```bash
+# Verificar integridade manualmente
+sqlite3 data/botsalinha.db "PRAGMA integrity_check;"
+
+# Restaurar a partir de backup automático
+uv run python scripts/backup.py list
+uv run python scripts/backup.py restore --restore-from data/backups/botsalinha_auto_<data>.db
+```
+
+> O `DatabaseGuard` cria um backup automático a cada inicialização do bot em `data/backups/`,
+> mantendo os 5 mais recentes.
+
+### Tentando usar URL de banco PostgreSQL ou outro
+
+O BotSalinha aceita **apenas SQLite**. Se você configurar um `DATABASE_URL` com outro driver,
+a aplicação encerrará com `ConfigurationError` no startup. Use o formato:
+
+```env
+DATABASE__URL=sqlite:///data/botsalinha.db
 ```
 
 ---
