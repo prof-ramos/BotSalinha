@@ -12,20 +12,18 @@ services:
     env_file:
       - .env
     volumes:
-      # Persist database AND logs in single volume
+      # Persist database
       - ./data:/app/data
-      # Backup directory (separate from data)
+      # Persist logs
+      - ./logs:/app/logs
+      # Backup directory
       - ./backups:/app/backups
     environment:
       # Production settings
-      - DATABASE_URL=sqlite:///data/botsalinha.db
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
-      - APP_ENV=production
-      - LOG_DIR=/app/data/logs
-      - LOG_FILE_ENABLED=true
-      - LOG_MAX_BYTES=10485760
-      - LOG_BACKUP_COUNT=30
+      - BOTSALINHA_DATABASE__URL=sqlite:///data/botsalinha.db
+      - BOTSALINHA_LOG__LEVEL=INFO
+      - BOTSALINHA_LOG__FORMAT=json
+      - BOTSALINHA_APP__ENV=production
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
@@ -75,4 +73,3 @@ services:
     restart: always
     depends_on:
       - botsalinha
-

@@ -5,16 +5,11 @@
 # Secrets (tokens, API keys) devem ficar no .env
 
 # Modelo de IA a ser utilizado
-# O provider define qual API será usada. Valores aceitos: openai, google
-# A API key correspondente deve estar configurada no .env
 model:
-  provider: openai                # Provedor do modelo (openai ou google)
-  id: gpt-4o-mini                 # ID do modelo (ex: gpt-4o-mini, gemini-2.0-flash)
-  temperature: 0.7                # Criatividade (0.0 = determinístico, 1.0 = criativo)
-  max_tokens: 4096                # Máximo de tokens na resposta
-  # Para usar Google AI:
-  #   provider: google
-  #   id: gemini-2.0-flash
+  provider: google              # Provedor do modelo (google)
+  id: gemini-2.0-flash          # ID do modelo
+  temperature: 0.7              # Criatividade (0.0 = determinístico, 1.0 = criativo)
+  max_tokens: 4096              # Máximo de tokens na resposta
 
 # Arquivo de prompt a ser utilizado (relativo ao diretório prompt/)
 # Suporta arquivos .md e .json
@@ -27,28 +22,3 @@ agent:
   markdown: true                # Respostas em Markdown
   add_datetime: true            # Incluir data/hora no contexto
   debug_mode: false             # Modo debug do agente
-
-# MCP (Model Context Protocol) - Ferramentas externas
-# Documentação: https://docs.agno.ai/mcp
-#
-# Exemplo de configuração stdio (servidor local):
-# mcp:
-#   enabled: true
-#   servers:
-#     - name: filesystem
-#       enabled: true
-#       type: stdio
-#       command: npx -y @modelcontextprotocol/server-filesystem /caminho/para/diretorio
-#       tool_name_prefix: fs_
-#
-# Exemplo de configuração streamable-http (servidor remoto):
-# mcp:
-#   enabled: true
-#   servers:
-#     - name: remote-api
-#       enabled: true
-#       type: streamable-http
-#       url: https://api.exemplo.com/mcp
-mcp:
-  enabled: false                # Habilitar MCP (requer servidor configurado abaixo)
-  servers: []                   # Lista de servidores MCP

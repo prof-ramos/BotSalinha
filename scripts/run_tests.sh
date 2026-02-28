@@ -181,10 +181,10 @@ if [ -n "$MARKER_EXPR" ]; then
 fi
 
 # Set test environment variables
-export APP_ENV="testing"
-export DATABASE_URL="sqlite+aiosqlite:///:memory:"
-export DISCORD_BOT_TOKEN="test_token_for_ci"
-export GOOGLE_API_KEY="test_api_key_for_ci"
+export BOTSALINHA_APP__ENV="testing"
+export BOTSALINHA_DATABASE__URL="sqlite+aiosqlite:///:memory:"
+export BOTSALINHA_DISCORD__TOKEN="test_token_for_ci"
+export BOTSALINHA_GOOGLE__API_KEY="test_api_key_for_ci"
 
 # Print banner
 echo -e "${BLUE}========================================${NC}"

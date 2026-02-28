@@ -52,18 +52,10 @@ class DiscordBotWrapper:
             self.bot.repository = self.repository
             if self.bot.agent is not None:
                 self.bot.agent.repository = self.repository
-
-        # Mock bot.user (needed for get_context in process_commands)
-        mock_user = MagicMock()
-        mock_user.id = 123456789  # Bot user ID
-        patch_user = patch.object(
-            type(self.bot),
-            "user",
-            new_callable=PropertyMock,
-            return_value=mock_user,
-        )
-        patch_user.start()
-        self._patches.append(patch_user)
+            # Also update the conversation service
+            if self.bot.conversation_service is not None:
+                self.bot.conversation_service.conversation_repo = self.repository
+                self.bot.conversation_service.message_repo = self.repository
 
         # Mock the latency property (used by ping_command)
         patch_latency = patch.object(
@@ -142,56 +134,6 @@ class DiscordBotWrapper:
                 sent_messages.append(str(call[1]))  # Other kwargs
 
         return sent_messages
-
-    async def invoke_error_handler(
-        self,
-        command_name: str,
-        error: Exception,
-        user_id: str = DEFAULT_USER_ID,
-        guild_id: str = DEFAULT_GUILD_ID,
-        channel_id: str = DEFAULT_CHANNEL_ID,
-    ) -> tuple[Any, list[str]]:
-        """
-        Invoke the bot's error handler for a given command.
-
-        This directly calls on_command_error or local error handlers
-        to test error handling paths.
-
-        Args:
-            command_name: Name of the command that "errored"
-            error: The exception to pass to the handler
-            user_id: Discord user ID
-            guild_id: Discord guild ID
-            channel_id: Discord channel ID
-
-        Returns:
-            Tuple of (context, sent_messages)
-        """
-        if self.bot is None:
-            self._setup_mock_discord()
-
-        ctx = self._create_mock_context(user_id, guild_id, channel_id)
-        ctx.command.name = command_name
-
-        # Check for local error handlers first (e.g. ask_command_error)
-        from discord.ext.commands import CommandOnCooldown
-
-        if command_name == "ask" and isinstance(error, CommandOnCooldown):
-            await self.bot.ask_command_error(ctx, error)
-        else:
-            await self.bot.on_command_error(ctx, error)
-
-        # Retrieve sent messages
-        sent_messages = []
-        for call in ctx.send.call_args_list:
-            if call[0]:
-                sent_messages.append(call[0][0])
-            elif "embed" in call[1]:
-                sent_messages.append(f"<Embed: {call[1]['embed']}>")
-            else:
-                sent_messages.append(str(call[1]))
-
-        return ctx, sent_messages
 
     async def send_command(
         self,
@@ -277,84 +219,6 @@ class DiscordBotWrapper:
         ctx.command.name = "test_command"
 
         return ctx
-
-    async def send_message(
-        self,
-        content: str,
-        user_id: str = DEFAULT_USER_ID,
-        guild_id: str | None = DEFAULT_GUILD_ID,
-        channel_id: str = DEFAULT_CHANNEL_ID,
-    ) -> tuple[Any, list[str]]:
-        """
-        Simulate sending a message (for testing on_message flow).
-
-        This creates a mock Discord message and calls the bot's on_message handler.
-        Used for testing Canal IA and DM automatic responses.
-
-        Args:
-            content: Message content
-            user_id: Discord user ID
-            guild_id: Discord guild ID (None for DM)
-            channel_id: Discord channel ID
-
-        Returns:
-            Tuple of (message, sent_messages)
-        """
-        if self.bot is None:
-            self._setup_mock_discord()
-
-        # Create mock message (similar to _create_mock_context but as a Message)
-        from unittest.mock import MagicMock
-
-        message = MagicMock()
-        message.id = 999888777
-        message.content = content
-        message.channel.id = int(channel_id) if str(channel_id).isdigit() else channel_id
-        message.channel.name = f"test-channel-{channel_id[:6]}"
-
-        # Create async context manager mock for typing()
-        from contextlib import asynccontextmanager
-
-        @asynccontextmanager
-        async def mock_typing():
-            yield
-
-        message.channel.typing = mock_typing
-        message.channel.send = AsyncMock()
-
-        # Author setup
-        message.author.id = int(user_id) if user_id.isdigit() else user_id
-        message.author.name = f"User_{user_id[:8]}"
-        message.author.bot = False
-        message.author.mention = f"<@{user_id}>"
-        message.author.discriminator = "1234"
-
-        # Guild setup
-        if guild_id:
-            message.guild.id = int(guild_id) if str(guild_id).isdigit() else guild_id
-            message.guild.name = f"TestGuild_{str(guild_id)[:8]}"
-        else:
-            message.guild = None
-
-        # For DM, channel should be a DMChannel
-        if guild_id is None:
-            from discord import DMChannel
-            message.channel.__class__ = DMChannel
-
-        # Call on_message handler
-        await self.bot.on_message(message)
-
-        # Collect sent messages
-        sent_messages = []
-        for call in message.channel.send.call_args_list:
-            if call[0]:  # Positional args
-                sent_messages.append(call[0][0])
-            elif "embed" in call[1]:  # Keyword args with embed
-                sent_messages.append(f"<Embed: {call[1]['embed']}>")
-            else:
-                sent_messages.append(str(call[1]))  # Other kwargs
-
-        return message, sent_messages
 
     async def cleanup(self):
         """Clean up resources after testing."""
@@ -446,27 +310,6 @@ class TestScenario:
         """
         return await bot_wrapper.send_command(
             "limpar", user_id=user_id, guild_id=guild_id, channel_id=channel_id
-        )
-
-    @staticmethod
-    async def ask_question_in_dm(
-        bot_wrapper: DiscordBotWrapper,
-        question: str,
-        user_id: str = DEFAULT_USER_ID,
-    ) -> tuple[Any, list[str]]:
-        """
-        Scenario: User asks a legal question via DM (no guild).
-
-        Args:
-            bot_wrapper: Bot wrapper instance
-            question: Legal question to ask
-            user_id: Discord user ID
-
-        Returns:
-            Tuple of (context, sent_messages)
-        """
-        return await bot_wrapper.send_command(
-            "ask", question, user_id=user_id, guild_id=None, channel_id=DEFAULT_CHANNEL_ID
         )
 
 

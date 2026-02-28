@@ -14,6 +14,7 @@ import pytest
 import pytest_asyncio
 from faker import Faker
 from freezegun import freeze_time
+from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -58,12 +59,11 @@ def test_settings(monkeypatch) -> Settings:
 
     Environment variables are reset per test using monkeypatch.
     """
-    monkeypatch.setenv("DISCORD__TOKEN", "test_token_12345")
-    monkeypatch.setenv("OPENAI__API_KEY", "test_openai_key")
-    monkeypatch.setenv("GOOGLE__API_KEY", "test_google_key")
-    monkeypatch.setenv("DATABASE__URL", TEST_DATABASE_URL)
-    monkeypatch.setenv("APP_ENV", "testing")
-    monkeypatch.setenv("RATE_LIMIT__REQUESTS", "100")
+    monkeypatch.setenv("BOTSALINHA_DISCORD__TOKEN", "test_token_12345")
+    monkeypatch.setenv("BOTSALINHA_GOOGLE__API_KEY", "test_api_key")
+    monkeypatch.setenv("BOTSALINHA_DATABASE__URL", TEST_DATABASE_URL)
+    monkeypatch.setenv("BOTSALINHA_APP__ENV", "testing")
+    monkeypatch.setenv("BOTSALINHA_RATE__LIMIT__REQUESTS", "100")
 
     from src.config.settings import get_settings
 
@@ -173,9 +173,9 @@ def rate_limiter():
 
 
 @pytest.fixture
-def agent_wrapper(test_settings: Settings, conversation_repository):
+def agent_wrapper(test_settings: Settings):
     """Create an agent wrapper for testing."""
-    return AgentWrapper(repository=conversation_repository)
+    return AgentWrapper()
 
 
 # Autouse fixture to clear contextvars between tests
@@ -243,7 +243,7 @@ def pytest_configure(config):
     - pytest.mark.unit: Unit tests
     - pytest.mark.slow: Slow-running tests
     - pytest.mark.discord: Tests requiring Discord mocks
-    - pytest.mark.ai_provider: Tests requiring AI provider mocks (OpenAI/Google)
+    - pytest.mark.gemini: Tests requiring Gemini API mocks
     - pytest.mark.database: Tests requiring database
     """
     config.addinivalue_line("markers", "e2e: End-to-end tests")
@@ -251,91 +251,24 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: Unit tests")
     config.addinivalue_line("markers", "slow: Slow-running tests")
     config.addinivalue_line("markers", "discord: Tests requiring Discord mocks")
-    config.addinivalue_line(
-        "markers", "ai_provider: Tests requiring AI provider mocks (OpenAI/Google)"
-    )
+    config.addinivalue_line("markers", "gemini: Tests requiring Gemini API mocks")
     config.addinivalue_line("markers", "database: Tests requiring database")
 
 
 @pytest.fixture
-def mock_ai_response():
+def mock_gemini_api():
     """
     Mock the AI agent response for testing.
 
-    This fixture mocks AgentWrapper response methods to return a predictable response
-    without making actual API calls to the active AI provider.
+    This fixture mocks AgentWrapper.generate_response to return a predictable response
+    without making actual API calls.
     """
     from unittest.mock import AsyncMock, patch
-
+    
     mock_response = "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
-
-    with (
-        patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)),
-        patch(
-            "src.core.agent.AgentWrapper.generate_response_with_rag",
-            new=AsyncMock(return_value=(mock_response, None)),
-        ),
-    ):
+    
+    with patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)):
         yield
-
-
-@pytest.fixture
-def mock_ai_response_error():
-    """
-    Mock the AI agent to raise APIError.
-
-    Simulates a failure in the AI provider for error handling tests.
-    """
-    from unittest.mock import AsyncMock, patch
-
-    from src.utils.errors import APIError
-
-    with (
-        patch(
-            "src.core.agent.AgentWrapper.generate_response",
-            new=AsyncMock(side_effect=APIError("AI provider unavailable", status_code=503)),
-        ),
-        patch(
-            "src.core.agent.AgentWrapper.generate_response_with_rag",
-            new=AsyncMock(side_effect=APIError("AI provider unavailable", status_code=503)),
-        ),
-    ):
-        yield
-
-
-@pytest.fixture
-def mock_ai_response_long():
-    """
-    Mock the AI agent to return a very long response (>4000 chars).
-
-    Used to test Discord's 2000 character message splitting.
-    """
-    from unittest.mock import AsyncMock, patch
-
-    # Generate a response with 4500+ chars (will need 3 chunks)
-    long_response = (
-        "O princípio da legalidade no Direito Administrativo brasileiro é um dos pilares "
-        "fundamentais que regem a atuação da Administração Pública. "
-    ) * 30  # ~3000+ chars base, repeat to ensure >4000
-    long_response += (
-        "\n\nConforme o artigo 37 da Constituição Federal de 1988, a Administração Pública "
-        "direta e indireta de qualquer dos Poderes da União, dos Estados, do Distrito Federal "
-        "e dos Municípios obedecerá aos princípios de legalidade, impessoalidade, moralidade, "
-        "publicidade e eficiência. Este dispositivo constitucional é a base normativa que "
-        "fundamenta toda a atuação estatal no Brasil."
-    )
-
-    with (
-        patch(
-            "src.core.agent.AgentWrapper.generate_response",
-            new=AsyncMock(return_value=long_response),
-        ),
-        patch(
-            "src.core.agent.AgentWrapper.generate_response_with_rag",
-            new=AsyncMock(return_value=(long_response, None)),
-        ),
-    ):
-        yield long_response
 
 
 @pytest.fixture
@@ -362,7 +295,7 @@ def openrouter_test_model(monkeypatch):
 
     # Set environment variables for OpenRouter
     monkeypatch.setenv("OPENROUTER_API_KEY", api_key)
-    monkeypatch.setenv("GOOGLE_MODEL_ID", "openrouter:google/gemma-2-9b-it:free")
+    monkeypatch.setenv("BOTSALINHA_GOOGLE__MODEL_ID", "openrouter:google/gemma-2-9b-it:free")
 
     # Import here to avoid import errors if google-genai not installed
     try:
@@ -487,7 +420,7 @@ def fake_legal_response():
 
 
 @pytest_asyncio.fixture
-async def bot_wrapper(conversation_repository, mock_ai_response):
+async def bot_wrapper(conversation_repository, mock_gemini_api):
     """
     Create bot wrapper with test repository.
 
@@ -499,65 +432,3 @@ async def bot_wrapper(conversation_repository, mock_ai_response):
     wrapper = DiscordBotWrapper(repository=conversation_repository)
     yield wrapper
     await wrapper.cleanup()
-
-
-# ===== RAG Test Fixtures =====
-
-
-@pytest.fixture
-def rag_api_key(monkeypatch):
-    """
-    Configure real OpenAI API key for RAG tests.
-
-    Requires OPENAI_API_KEY environment variable to be set.
-    Skips test if API key is not available.
-
-    Usage in tests:
-        def test_rag_search(rag_api_key, db_session):
-            query_service = QueryService(session=db_session)
-            # ... test with real API calls
-    """
-    import os
-
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI__API_KEY")
-    if not api_key:
-        pytest.skip("OPENAI_API_KEY not set - skipping RAG integration test")
-
-    # Set both variants for compatibility
-    monkeypatch.setenv("OPENAI_API_KEY", api_key)
-    monkeypatch.setenv("OPENAI__API_KEY", api_key)
-
-    # Clear settings cache to pick up new API key
-    from src.config.settings import get_settings
-
-    get_settings.cache_clear()
-
-    return api_key
-
-
-@pytest.fixture
-def rag_embedding_service(rag_api_key):
-    """
-    Create EmbeddingService with real API key.
-
-    Skips test if OPENAI_API_KEY is not available.
-    """
-    from src.rag import EmbeddingService
-
-    return EmbeddingService(api_key=rag_api_key)
-
-
-@pytest.fixture
-def rag_query_service(rag_api_key, db_session):
-    """
-    Create QueryService with real API key and test database.
-
-    Skips test if OPENAI_API_KEY is not available.
-    """
-    from src.rag import QueryService, EmbeddingService
-
-    embedding_service = EmbeddingService(api_key=rag_api_key)
-    return QueryService(
-        session=db_session,
-        embedding_service=embedding_service,
-    )

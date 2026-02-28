@@ -68,7 +68,6 @@ dmypy.json
 
 # Data and backups
 data/*.db
-data/*.db-*
 backups/
 logs/
 
@@ -91,5 +90,3 @@ repomix-output.xml
 # Coverage reports
 coverage.xml
 coverage.xml
-.vercel
-.env*.local

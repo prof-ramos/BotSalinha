@@ -107,7 +107,7 @@ class ConversationWithMessages(Conversation):
 
 
 # Forward reference resolution
-from .message import Message  # noqa: E402
+from .message import Message
 
 ConversationWithMessages.model_rebuild()
 Message.model_rebuild()

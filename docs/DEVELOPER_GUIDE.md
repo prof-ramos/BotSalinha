@@ -54,17 +54,10 @@ uv sync
 cp .env.example .env
 
 # Editar .env com suas credenciais
+# Variáveis obrigatórias:
+# - DISCORD_BOT_TOKEN
+# - GOOGLE_API_KEY
 ```
-
-Variáveis essenciais:
-
-| Variável            | Obrigatória             | Observação               |
-| ------------------- | ----------------------- | ------------------------ |
-| `DISCORD_BOT_TOKEN` | Sim                     | Token do bot no Discord  |
-| `OPENAI_API_KEY`    | Sim (provider `openai`) | Provider padrão          |
-| `GOOGLE_API_KEY`    | Sim (provider `google`) | Só quando usar Google AI |
-
-> O provider ativo é definido no `config.yaml` (`model.provider`), não em variável de ambiente.
 
 #### 4. Ative o Ambiente Virtual
 
@@ -117,6 +110,7 @@ uv run mypy src/
 
 ```text
 BotSalinha/
+├── bot.py                      # Ponto de entrada principal
 ├── pyproject.toml              # Dependências e configuração do projeto
 ├── .env.example                # Template de variáveis de ambiente
 │
@@ -129,7 +123,7 @@ BotSalinha/
 │   │
 │   ├── core/                   # Componentes centrais
 │   │   ├── agent.py            # Wrapper do Agno AI Agent
-│   │   ├── discord.py          # Bot Discord com comandos e handlers de mensagem
+│   │   ├── discord.py          # Bot Discord com comandos
 │   │   └── lifecycle.py        # Gerenciamento de ciclo de vida
 │   │
 │   ├── models/                 # Modelos de dados
@@ -214,7 +208,7 @@ Discord Bot → Rate Limiter → Agent Wrapper
                             Conversation History
                                    │
                                    ▼
-                            OpenAI gpt-4o-mini
+                            Gemini 2.0 Flash
                                    │
                                    ▼
                             Resposta Formatada
@@ -295,10 +289,7 @@ Crie um Pull Request no GitHub com descrição das mudanças.
 #### Executar o Bot Localmente
 
 ```bash
-uv run botsalinha run
-
-# Iniciar o chat interativo no terminal (ideal para testar LLM sem Discord)
-uv run botsalinha chat
+uv run bot.py
 ```
 
 #### Executar Testes Específicos
@@ -397,7 +388,7 @@ Crie `.vscode/launch.json`:
 LOG_LEVEL=DEBUG
 
 # Executar com logs debug
-uv run botsalinha run -d
+uv run bot.py
 ```
 
 ---
@@ -497,82 +488,6 @@ uv run pytest -x
 uv run pytest -s
 ```
 
-### Implementação de Handlers de Mensagem
-
-#### Handler `on_message`
-
-O handler `on_message` é responsável por processar todas as mensagens recebidas pelo bot:
-
-```python
-async def on_message(self, message: discord.Message) -> None:
-    # 1. Ignorar mensagens de bots
-    if message.author.bot:
-        return
-
-    # 2. Detectar canal IA ou DM
-    is_canal_ia = False
-    if self.settings.discord.canal_ia_id is not None:
-        try:
-            canal_ia_id = int(self.settings.discord.canal_ia_id)
-            is_canal_ia = message.channel.id == canal_ia_id
-        except (ValueError, TypeError) as e:
-            log.warning("canal_ia_id_malformed", canal_ia_id=self.settings.discord.canal_ia_id, error=str(e))
-
-    is_dm = isinstance(message.channel, discord.DMChannel)
-
-    # 3. Processar como chat automático
-    if is_canal_ia or is_dm:
-        await self._handle_chat_message(message, is_dm)
-        return
-
-    # 4. Processar comandos normalmente
-    await self.process_commands(message)
-```
-
-#### Método `_handle_chat_message`
-
-Para implementações de chat automático:
-
-```python
-async def _handle_chat_message(self, message: discord.Message, is_dm: bool) -> None:
-    """Processa mensagens do canal IA ou DM com resposta automata."""
-    user_id = message.author.id
-    guild_id = message.guild.id if message.guild else None
-
-    # 1. Validação de mensagem
-    if len(message.content) > 10_000:
-        await message.channel.send("Mensagem muito longa. Use no máximo 10.000 caracteres.")
-        return
-
-    if not message.content.strip():
-        return
-
-    # 2. Rate limiting
-    try:
-        await rate_limiter.check_rate_limit(user_id=user_id, guild_id=guild_id)
-    except RateLimitError as e:
-        await message.channel.send(f"Você excedeu o limite. Tente novamente em {e.retry_after:.0f} segundos.")
-        return
-
-    # 3. Processamento com feedback visual
-    async with message.channel.typing():
-        # 4. Histórico e geração de resposta
-        conversation = await self.repository.get_or_create_conversation(user_id=user_id, guild_id=guild_id)
-        await self.repository.add_message(conversation_id=conversation.id, role="user", content=message.content)
-
-        response = await self.agent.generate_response(user_id=user_id, guild_id=guild_id, message=message.content)
-        await self.repository.add_message(conversation_id=conversation.id, role="assistant", content=response)
-
-        # 5. Envio em chunks
-        chunks = [response[i:i+2000] for i in range(0, len(response), 2000)]
-        for chunk in chunks:
-            try:
-                await message.channel.send(chunk)
-            except discord.Forbidden:
-                log.warning("user_blocked_bot", user_id=user_id, guild_id=guild_id)
-                return
-```
-
 ### Boas Práticas de Teste
 
 1. **Testes Independentes**: Cada teste deve funcionar isoladamente
@@ -595,11 +510,11 @@ async def _handle_chat_message(self, message: discord.Message, is_dm: bool) -> N
 
 ```bash
 # Garantir que está executando com uv
-uv run botsalinha run
+uv run python bot.py
 
 # Ou ativar o venv
 source .venv/bin/activate
-botsalinha run
+python bot.py
 ```
 
 #### 2. Erro: "DATABASE_URL not set"
@@ -634,10 +549,10 @@ cp .env.example .env
 ```bash
 # Parar todas as instâncias
 docker-compose down
-uv run botsalinha stop
+pkill -f bot.py
 
 # Verificar processos
-ps aux | grep botsalinha
+ps aux | grep bot.py
 
 # Deletar arquivo de lock se existir
 rm data/botsalinha.db-wal
@@ -669,10 +584,7 @@ uv sync
 tail -f logs/botsalinha.log | grep "duration"
 
 # Verificar latência da API
-curl -w "@curl-format.txt" -o /dev/null -s -X POST "https://api.openai.com/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "olá"}]}'
+curl -w "@curl-format.txt" -o /dev/null -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_KEY"
 ```
 
 **Soluções:**
@@ -693,7 +605,7 @@ curl -w "@curl-format.txt" -o /dev/null -s -X POST "https://api.openai.com/v1/ch
 docker stats botsalinha
 
 # Ou localmente
-python -m memory_profiler src/main.py
+python -m memory_profiler bot.py
 ```
 
 **Soluções:**
@@ -757,15 +669,15 @@ log.error("falha_na_api", error_type="ConnectionError", retry=1)
 # Python shell interativo
 uv run python
 
->>> from src.storage.factory import create_repository
+>>> from src.storage.sqlite_repository import get_repository
 >>> import asyncio
 >>>
 >>> async def check_db():
-...     async with create_repository() as repo:
-...         convs = await repo.get_by_user_and_guild("123", "456")
-...         print(f"Conversas: {len(convs)}")
-...         for conv in convs:
-...             print(f"  - {conv.id}: {conv.created_at}")
+...     repo = get_repository()
+...     convs = await repo.get_by_user_and_guild("123", "456")
+...     print(f"Conversas: {len(convs)}")
+...     for conv in convs:
+...         print(f"  - {conv.id}: {conv.created_at}")
 ...
 >>> asyncio.run(check_db())
 ```

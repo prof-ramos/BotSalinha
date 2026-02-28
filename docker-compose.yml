@@ -9,15 +9,15 @@ services:
     env_file:
       - .env
     volumes:
-      # Persist database AND logs in single volume
+      # Persist database
       - ./data:/app/data
+      # Persist logs
+      - ./logs:/app/logs
     environment:
       # Override database path for container
-      - DATABASE_URL=sqlite:///data/botsalinha.db
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
-      - LOG_DIR=/app/data/logs
-      - LOG_FILE_ENABLED=true
+      - BOTSALINHA_DATABASE__URL=sqlite:///data/botsalinha.db
+      - BOTSALINHA_LOG__LEVEL=INFO
+      - BOTSALINHA_LOG__FORMAT=json
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s

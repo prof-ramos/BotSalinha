@@ -7,24 +7,20 @@ model selection, prompt file, and generation parameters.
 Uses yaml.safe_load() for secure parsing (Context7/PyYAML recommendation).
 """
 
-from __future__ import annotations
-
 import functools
 import json
 from pathlib import Path
-from typing import Literal
 
 import pydantic
 import structlog
+
+from ..utils.errors import ConfigurationError
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from ..utils.errors import ConfigurationError, ValidationError
-from ..utils.log_events import LogEvents
-from .mcp_config import MCPConfig
 
 log = structlog.get_logger()
-
 
 # Project root: two levels up from this file (src/config/ -> project root)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -35,33 +31,12 @@ PROMPT_DIR = PROJECT_ROOT / "prompt"
 class ModelConfig(BaseModel):
     """AI model configuration."""
 
-    provider: Literal["openai", "google"] = Field(
-        default="openai", description="Provedor do modelo (openai ou google)"
-    )
-    model_id: str = Field(default="gpt-4o-mini", description="ID do modelo", alias="id")
+    provider: str = Field(default="google", description="Provedor do modelo")
+    model_id: str = Field(default="gemini-2.5-flash-lite", description="ID do modelo", alias="id")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperatura de geração")
     max_tokens: int = Field(
         default=4096, ge=1, le=1_000_000, description="Máximo de tokens na resposta"
     )
-
-    @field_validator("provider", mode="before")
-    @classmethod
-    def validate_provider(cls, v: str | None) -> str:
-        """Validate and normalize the AI provider.
-
-        - Empty/None → fallback to 'openai'.
-        - Invalid value → raise ValueError with actionable message.
-        """
-        if v is None or (isinstance(v, str) and v.strip() == ""):
-            return "openai"
-        v_lower = v.strip().lower() if isinstance(v, str) else str(v).lower()
-        if v_lower not in ("openai", "google"):
-            raise ValueError(
-                f"Provider inválido: '{v}'. "
-                f"Valores aceitos: 'openai', 'google'. "
-                f"Verifique 'model.provider' no config.yaml."
-            )
-        return v_lower
 
 
 class PromptConfig(BaseModel):
@@ -96,7 +71,6 @@ class YamlConfig(BaseModel):
     model: ModelConfig = Field(default_factory=ModelConfig)
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     agent: AgentBehaviorConfig = Field(default_factory=AgentBehaviorConfig)
-    mcp: MCPConfig = Field(default_factory=MCPConfig)
 
     model_config = {"populate_by_name": True}
 
@@ -143,7 +117,7 @@ class YamlConfig(BaseModel):
                     if not content or not isinstance(content, str):
                         raise ConfigurationError(
                             f"Arquivo JSON '{path}': 'content' deve ser uma string não vazia.",
-                            config_key="prompt.content",
+                            config_key="prompt.content"
                         )
                     return content
                 # Fallback to instructions if content not present
@@ -153,7 +127,7 @@ class YamlConfig(BaseModel):
                 raise ConfigurationError(
                     f"Arquivo JSON '{path}' deve conter uma chave "
                     "'content' ou 'instructions' com valor string.",
-                    config_key="prompt",
+                    config_key="prompt"
                 )
             if isinstance(data, str):
                 return data
@@ -180,7 +154,7 @@ def load_yaml_config(config_path: Path | None = None) -> YamlConfig:
 
     if not path.exists():
         log.warning(
-            LogEvents.CONFIG_YAML_NAO_ENCONTRADO,
+            "yaml_config_not_found",
             path=str(path),
             message="Usando configuração padrão.",
         )
@@ -190,12 +164,12 @@ def load_yaml_config(config_path: Path | None = None) -> YamlConfig:
         with open(path, encoding="utf-8") as f:
             raw_data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        log.error(LogEvents.ERRO_PARSEAR_CONFIG_YAML, path=str(path), error=str(e))
+        log.error("yaml_config_parse_error", path=str(path), error=str(e))
         raise ValidationError(f"Erro ao parsear config.yaml: {e}") from e
 
     # Handle empty YAML file
     if raw_data is None:
-        log.warning(LogEvents.CONFIG_YAML_VAZIO, path=str(path))
+        log.warning("yaml_config_empty", path=str(path))
         return YamlConfig()
 
     if not isinstance(raw_data, dict):
@@ -207,11 +181,11 @@ def load_yaml_config(config_path: Path | None = None) -> YamlConfig:
     try:
         config = YamlConfig(**raw_data)
     except pydantic.ValidationError as e:
-        log.error(LogEvents.VALIDACAO_CONFIG_YAML_FALHOU, error=str(e))
+        log.error("yaml_config_validation_failed", error=str(e))
         raise ConfigurationError(f"Configuração YAML inválida: {e}") from e
 
     log.info(
-        LogEvents.CONFIG_YAML_CARREGADO,
+        "yaml_config_loaded",
         model_id=config.model.model_id,
         model_temperature=config.model.temperature,
         prompt_file=config.prompt.file,

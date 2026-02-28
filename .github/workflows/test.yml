@@ -97,10 +97,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      DISCORD_BOT_TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}
-      GOOGLE_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
-      DATABASE_URL: sqlite+aiosqlite:///:memory:
-      APP_ENV: testing
+      BOTSALINHA_DISCORD__TOKEN: ${{ secrets.TEST_DISCORD_TOKEN }}
+      BOTSALINHA_GOOGLE__API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+      BOTSALINHA_DATABASE__URL: sqlite+aiosqlite:///:memory:
+      BOTSALINHA_APP__ENV: testing
 
     steps:
       - name: Checkout code

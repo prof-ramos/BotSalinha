@@ -5,8 +5,8 @@ Defines SQLAlchemy ORM models and Pydantic schemas for messages.
 """
 
 from datetime import UTC, datetime
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, TypeVar
+from enum import Enum
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,10 +16,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 if TYPE_CHECKING:
     from .conversation import Conversation
 
-_BaseT = TypeVar("_BaseT", bound=type)
 
-
-class MessageRole(StrEnum):
+class MessageRole(str, Enum):
     """Role of the message sender."""
 
     USER = "user"
@@ -93,8 +91,11 @@ class MessageWithConversation(Message):
     conversation: "Conversation" = Field(..., description="Associated conversation")
 
 
+# Forward reference resolution already handled at top of file
+
+
 # Full ORM class definition for use in repository
-def create_message_orm(base: _BaseT) -> type:  # type: ignore[valid-type]  # noqa: UP047
+def create_message_orm(base: type) -> type:
     """
     Create the MessageORM class dynamically to avoid circular imports.
 
@@ -105,9 +106,7 @@ def create_message_orm(base: _BaseT) -> type:  # type: ignore[valid-type]  # noq
         MessageORM class
     """
 
-    base_type: Any = base  # type: ignore[valid-type]
-
-    class MessageORMImpl(base_type):  # type: ignore[misc]
+    class MessageORMImpl(base):
         """SQLAlchemy ORM model for messages."""
 
         __tablename__ = "messages"

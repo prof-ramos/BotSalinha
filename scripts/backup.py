@@ -8,9 +8,9 @@ Creates timestamped backups of the database with optional retention policy.
 import argparse
 import shutil
 import sqlite3
-import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
 
 
 def backup_database(
@@ -37,7 +37,7 @@ def backup_database(
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate backup filename with timestamp
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_filename = f"botsalinha_backup_{timestamp}.db"
     backup_path = backup_dir / backup_filename
 
@@ -50,23 +50,14 @@ def backup_database(
         backup = sqlite3.connect(str(backup_path))
         source.backup(backup)
 
-        # Verify backup integrity (check tables exist)
-        cursor = backup.cursor()
-        cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-        table_count = cursor.fetchone()[0]
+        # Close connections
         backup.close()
         source.close()
 
-        if table_count == 0:
-            raise ValueError("Backup verification failed: no tables found in backup")
-
-        print(f"✅ Backup created and verified: {backup_path} ({table_count} tables)")
+        print(f"✅ Backup created: {backup_path}")
 
     except Exception as e:
         print(f"❌ Backup failed: {e}")
-        # Clean up failed backup if it exists
-        if backup_path.exists():
-            backup_path.unlink()
         sys.exit(1)
 
     # Clean up old backups
@@ -87,7 +78,7 @@ def cleanup_old_backups(backup_dir: Path, retain_days: int) -> None:
         print("📝 Backup retention disabled (retain_days=0)")
         return
 
-    cutoff = datetime.now(UTC).timestamp() - (retain_days * 86400)
+    cutoff = datetime.now(timezone.utc).timestamp() - (retain_days * 86400)
     removed = 0
 
     for backup_file in backup_dir.glob("botsalinha_backup_*.db"):
@@ -122,7 +113,7 @@ def list_backups(backup_dir: Path) -> None:
     for backup in backups:
         size_mb = backup.stat().st_size / (1024 * 1024)
         total_size += backup.stat().st_size
-        mtime = datetime.fromtimestamp(backup.stat().st_mtime, tz=UTC)
+        mtime = datetime.fromtimestamp(backup.stat().st_mtime, tz=timezone.utc)
         mtime_str = mtime.strftime("%Y-%m-%d %H:%M:%S UTC")
         print(f"  {backup.name:50} {mtime_str}  {size_mb:8.2f} MB")
 
@@ -155,7 +146,7 @@ def restore_backup(backup_path: Path, db_path: Path) -> None:
     # Create backup of current database before restoring
     if db_path.exists():
         print("📝 Creating backup of current database...")
-        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         pre_restore_backup = db_path.parent / f"botsalinha_prerestore_{timestamp}.db"
         shutil.copy2(db_path, pre_restore_backup)
         print(f"✅ Pre-restore backup saved: {pre_restore_backup}")

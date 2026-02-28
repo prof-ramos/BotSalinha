@@ -40,7 +40,7 @@ class APIError(BotSalinhaError):
     """
     Exception raised when an external API call fails.
 
-    This includes OpenAI API, Discord API, etc.
+    This includes Google Gemini API, Discord API, etc.
     """
 
     def __init__(
@@ -198,16 +198,6 @@ class ConfigurationError(BotSalinhaError):
             config_details.update(details)
         super().__init__(message, details=config_details)
         self.config_key = config_key
-
-
-class RepositoryConfigurationError(ConfigurationError):
-    """
-    Exception raised when repository configuration is invalid.
-
-    This includes missing database URLs, API keys, etc.
-    """
-
-    pass
 
 
 class RetryExhaustedError(BotSalinhaError):

@@ -1,11 +1,11 @@
 """
-BotSalinha — Teste E2E: Config YAML + Prompts + API OpenAI
+BotSalinha — Teste E2E: Config YAML + Prompts + API Gemini
 
 Testa cada versão de prompt (v1, v2, v3) com uma pergunta real
-contra a API da OpenAI (gpt-4o-mini), validando o fluxo completo:
-  config.yaml → yaml_config → AgentWrapper → OpenAI API → resposta
+contra a API do Gemini, validando o fluxo completo:
+  config.yaml → yaml_config → AgentWrapper → Gemini API → resposta
 
-Inclui delay entre chamadas para respeitar rate limits.
+Inclui delay entre chamadas para respeitar rate limits do free tier.
 """
 
 import asyncio
@@ -23,12 +23,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Delay entre chamadas para respeitar rate limits (segundos)
-# OpenAI tem limites mais generosos que o Gemini free tier
-DELAY_BETWEEN_CALLS = 5
+DELAY_BETWEEN_CALLS = 40
 
 
 async def prompt_e2e(prompt_file: str, question: str) -> dict:
-    """Testa um prompt específico com a API real da OpenAI.
+    """Testa um prompt específico com a API real do Gemini.
 
     Args:
         prompt_file: Nome do arquivo de prompt (ex: prompt_v1.md)
@@ -38,19 +37,20 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
         Dict com resultados do teste
     """
     from agno.agent import Agent
-    from agno.models.openai import OpenAIChat
+    from agno.models.google import Gemini
 
+    from src.config.settings import settings
     from src.config.yaml_config import AgentBehaviorConfig, ModelConfig, PromptConfig, YamlConfig
 
     # Carregar config com o prompt específico
     config = YamlConfig(
-        model=ModelConfig(provider="openai", id="gpt-4o-mini", temperature=0.3),
+        model=ModelConfig(id="gemini-2.0-flash", temperature=0.3),
         prompt=PromptConfig(file=prompt_file),
         agent=AgentBehaviorConfig(markdown=True, add_datetime=True, debug_mode=False),
     )
 
     prompt_content = config.prompt_content
-    model_id = config.model.model_id
+    model_id = settings.google.model_id or config.model.id
 
     print(f"\n{'=' * 60}")
     print(f"📄 Prompt: {prompt_file}")
@@ -59,10 +59,10 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
     print(f"❓ Pergunta: {question}")
     print(f"{'=' * 60}")
 
-    # Criar agente com o modelo OpenAI
+    # Criar agente com o prompt
     agent = Agent(
         name="BotSalinha",
-        model=OpenAIChat(id=model_id),
+        model=Gemini(id=model_id),
         instructions=prompt_content,
         add_datetime_to_context=config.agent.add_datetime,
         markdown=config.agent.markdown,
@@ -84,6 +84,15 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
                 return {
                     "prompt": prompt_file,
                     "status": "RATE_LIMITED",
+                    "time_s": round(elapsed, 2),
+                    "response_chars": 0,
+                }
+
+            if "ClientResponse" in content or "googleapis" in content:
+                print(f"\n⚠️  Resposta contém erro HTTP encapsulado ({elapsed:.2f}s)")
+                return {
+                    "prompt": prompt_file,
+                    "status": "HTTP_ERROR",
                     "time_s": round(elapsed, 2),
                     "response_chars": 0,
                 }
@@ -136,7 +145,7 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
     except Exception as e:
         elapsed = time.time() - start_time
         error_msg = str(e)
-        if "429" in error_msg or "rate_limit" in error_msg.lower():
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
             print(f"\n⚠️  Rate limit: {elapsed:.2f}s")
             return {
                 "prompt": prompt_file,
@@ -155,7 +164,7 @@ async def prompt_e2e(prompt_file: str, question: str) -> dict:
 
 async def main() -> int:
     """Executa testes E2E com os 3 prompts."""
-    print("🚀 BotSalinha — Teste E2E: Config YAML + Prompts + OpenAI API")
+    print("🚀 BotSalinha — Teste E2E: Config YAML + Prompts + Gemini API")
     print("=" * 60)
 
     # Pergunta de teste que exercita conhecimento jurídico
@@ -188,7 +197,7 @@ async def main() -> int:
 
     print(f"\n✅ Passaram: {ok_count}/{len(results)}")
     if rate_limited:
-        print(f"⚠️  Rate limited: {rate_limited}/{len(results)} (quota esgotada)")
+        print(f"⚠️  Rate limited: {rate_limited}/{len(results)} (quota free tier esgotada)")
     if failed:
         print(f"❌ Falharam: {failed}/{len(results)}")
 
@@ -201,7 +210,7 @@ if __name__ == "__main__":
 
 
 @pytest.mark.e2e
-@pytest.mark.ai_provider
+@pytest.mark.gemini
 @pytest.mark.asyncio
 async def test_e2e_prompts():
     """
@@ -216,7 +225,6 @@ async def test_e2e_prompts():
     - Other: Failure
     """
     import pytest as pytest_module
-
     result = await main()
     if result == 2:
         pytest_module.skip("Rate limit/quota exceeded")

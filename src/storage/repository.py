@@ -123,19 +123,6 @@ class ConversationRepository(ABC):
         """
         pass
 
-    @abstractmethod
-    async def get_dm_conversations(self, user_id: str) -> list[Conversation]:
-        """
-        Get all DM (Direct Message) conversations for a user.
-
-        Args:
-            user_id: Discord user ID
-
-        Returns:
-            List of DM conversations (guild_id is None)
-        """
-        pass
-
 
 class MessageRepository(ABC):
     """

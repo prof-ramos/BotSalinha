@@ -1,479 +1,237 @@
-# Manual de Operações do BotSalinha
+# BotSalinha Operations Runbook
 
-## Verificação Rápida de Saúde (60s)
+## Bot Commands
 
-1. Verifique os containers:
+### User Commands
 
-   ```bash
-   docker-compose ps
-   ```
+| Command | Description | Example |
+|---------|-------------|---------|
+| `!ask <pergunta>` | Ask a question about law/contests | `!ask O que é prescrição?` |
+| `!ping` | Check bot latency | `!ping` |
+| `!ajuda` | Show help message | `!ajuda` |
+| `!info` | Show bot information | `!info` |
+| `!limpar` | Clear conversation history | `!limpar` |
 
-2. Verifique os logs recentes:
+## Daily Operations
 
-   ```bash
-   docker-compose logs --tail=50
-   ```
+### Monitoring
 
-3. Valide a resposta do bot no Discord com `!ping`.
-
-## Comandos do Bot
-
-### Comandos de Usuário
-
-| Comando           | Descrição                                | Exemplo                    |
-| ----------------- | ---------------------------------------- | -------------------------- |
-| `!ask <pergunta>` | Faz uma pergunta sobre direito/concursos | `!ask O que é prescrição?` |
-| `!ping`           | Verifica a latência do bot               | `!ping`                    |
-| `!ajuda`          | Exibe a mensagem de ajuda                | `!ajuda`                   |
-| `!info`           | Exibe informações do bot                 | `!info`                    |
-| `!limpar`         | Limpa o histórico de conversa no canal   | `!limpar`                  |
-
-### Modos de Interação Automática
-
-O bot oferece três modos de interação:
-
-1. **Comandos com Prefixo** - Modo tradicional (`!ask`, `!ping`, etc.)
-2. **Canal IA** - Modo automático de canal dedicado
-3. **DM (Direct Message)** - Modo automático de mensagens privadas
-
-Apenas os comandos com prefixo requerem a formatação específica. Os outros dois modos respondem a qualquer mensagem imediatamente.
-
-## Operações Diárias
-
-### Monitoramento
-
-**Verificar status do bot:**
-
+**Check bot status:**
 ```bash
 docker-compose ps
 docker-compose logs --tail=50
 ```
 
-**Verificar estatísticas do rate limiter:**
-
+**Check rate limiter stats:**
 ```python
-# No shell Python
+# In Python shell
 from src.middleware.rate_limiter import rate_limiter
 print(rate_limiter.get_stats())
 ```
 
-**Verificar tamanho do banco:**
-
+**Check database size:**
 ```bash
 ls -lh data/botsalinha.db
 ```
 
-### Manutenção
+### Maintenance
 
-**Limpar conversas antigas:**
-
+**Clean old conversations:**
 ```bash
 docker-compose exec botsalinha python -c "
 import asyncio
-from src.storage.factory import create_repository
+from src.storage.sqlite_repository import get_repository
 
 async def cleanup():
-    async with create_repository() as repo:
-        count = await repo.cleanup_old_conversations(days=30)
-        print(f'Deleted {count} old conversations')
+    repo = get_repository()
+    count = await repo.cleanup_old_conversations(days=30)
+    print(f'Deleted {count} old conversations')
 
 asyncio.run(cleanup())
 "
 ```
 
-**Resetar rate limit de um usuário específico:**
-
+**Reset rate limit for specific user:**
 ```python
-# No shell Python
+# In Python shell
 from src.middleware.rate_limiter import rate_limiter
 rate_limiter.reset_user(user_id="123456789", guild_id="987654321")
 ```
 
-**Resetar todos os rate limits:**
-
+**Reset all rate limits:**
 ```python
 from src.middleware.rate_limiter import rate_limiter
 rate_limiter.reset_all()
 ```
 
-## Backup e Recuperação
+## Backup and Recovery
 
-### Backup Manual
+### Manual Backup
 
 ```bash
-# Usando script de backup
+# Using backup script
 docker-compose exec botsalinha python scripts/backup.py backup
 
-# Ou cópia direta do arquivo
+# Or direct file copy
 cp data/botsalinha.db backups/botsalinha_manual_$(date +%Y%m%d_%H%M%S).db
 ```
 
-### Backups Agendados
+### Scheduled Backups
 
-Backups diários automáticos estão configurados em `docker-compose.prod.yml`:
+Automated daily backups are configured in `docker-compose.prod.yml`:
+- Runs at 02:00 UTC daily
+- Stores in `./backups/` directory
+- Retention: 7 days (configurable)
 
-- Execução diária às 02:00 UTC
-- Armazenamento em `./backups/`
-- Retenção de 7 dias (configurável)
+### Recovery Procedure
 
-### Procedimento de Recuperação
-
-1. **Pare o bot**
-
+1. **Stop the bot**
    ```bash
    docker-compose down
    ```
 
-2. **Restaure o backup**
-
+2. **Restore from backup**
    ```bash
    cp backups/botsalinha_backup_YYYYMMDD_HHMMSS.db data/botsalinha.db
    ```
 
-3. **Suba o bot novamente**
-
+3. **Start the bot**
    ```bash
    docker-compose up -d
    ```
 
-4. **Valide**
-
+4. **Verify**
    ```bash
    docker-compose logs -f
    ```
 
-## Solução de Problemas
+## Troubleshooting
 
 ### Bot Offline
 
-**Sintomas:** Comandos não respondem, bot aparece offline no Discord.
+**Symptoms:** Commands not responding, bot shows offline in Discord
 
-**Diagnóstico:**
-
+**Diagnosis:**
 ```bash
-# Status dos containers
+# Check container status
 docker-compose ps
 
-# Logs recentes
+# Check logs
 docker-compose logs --tail=100
 
-# Erros
+# Check for errors
 docker-compose logs | grep -i error
 ```
 
-**Soluções:**
+**Solutions:**
+1. Restart container: `docker-compose restart`
+2. Check Discord token in `.env`
+3. Verify bot is invited to server
+4. Check MESSAGE_CONTENT Intent enabled
 
-1. Reiniciar container: `docker-compose restart`
-2. Verificar token do Discord no `.env`
-3. Verificar se o bot está convidado ao servidor
-4. Confirmar `MESSAGE_CONTENT Intent` habilitado
+### Database Locked
 
----
+**Symptoms:** "database is locked" errors
 
-## Operação dos Modos de Interacao
-
-### Configuração do Canal IA
-
-Para habilitar o Canal IA:
-
+**Diagnosis:**
 ```bash
-# Adicionar ao .env
-DISCORD__CANAL_IA_ID=123456789012345678
-
-# Reiniciar bot
-docker-compose restart
-```
-
-Obtenha o ID do canal:
-1. No Discord, clique com botão direito no canal → "Copiar ID do Canal"
-2. (Ou use botões de desenvolvedor se necessário)
-
-### Verificação de Funcionamento
-
-```bash
-# Enviar mensagem de teste no canal IA
-# Verificar logs para confirmar processamento
-docker-compose logs --tail=50 | grep "message_handled"
-
-# Verificar por tipo de interação
-docker-compose logs | grep "is_dm=true"      # DMs
-docker-compose logs | grep "is_dm=false"     # Canal IA
-```
-
-### Troubleshooting de Modos de Interação
-
-**Problema:** Bot não responde no canal IA
-
-**Possíveis causas:**
-- ID do canal incorreto
-- Bot não tem permissões no canal
-- `DISCORD__CANAL_IA_ID` não configurado
-- Canal não existe ou foi deletado
-
-**Soluções:**
-```bash
-# Verificar configuração
-docker-compose exec botsalinha env | grep CANAL_IA
-
-# Verificar permissões do bot
-# No Discord: Bot → Configurações → Permissões do Servidor
-```
-
-**Problema:** Bot não responde DMs
-
-**Possíveis causas:**
-- `MESSAGE_CONTENT_INTENT` não habilitado
-- Bot foi bloqueado pelo usuário
-
-**Soluções:**
-```bash
-# Verificar MESSAGE_CONTENT_INTENT
-docker-compose exec botsalinha env | grep MESSAGE_CONTENT
-
-# Habilitar no Discord Developer Portal
-# App Settings → Bot → Message Content Intent
-```
-
-**Problema:** Rate limit muito agressivo
-
-**Soluções:**
-```bash
-# Ajustar no .env
-RATE_LIMIT_REQUESTS=20
-RATE_LIMIT_WINDOW_SECONDS=60
-
-# Reiniciar
-docker-compose up -d
-```
-
-### Monitoramento de Modos de Interação
-
-```bash
-# Verificar mensagens processadas por modo
-docker-compose logs | grep "is_dm=true"  # DMs
-docker-compose logs | grep "is_dm=false" # Canal IA
-
-# Estatísticas de uso por modo
-docker-compose logs | jq 'select(.message_handled) | .is_dm'
-
-# Monitorar rate limits específicos
-docker-compose logs | grep "rate_limit"
-```
-
-### Backup e Restauracao de Conversas
-
-```bash
-# Backup específico de conversas do canal IA/DM
-docker-compose exec botsalinha python -c "
-from src.storage.factory import create_repository
-import asyncio
-
-async def backup_conversations():
-    async with create_repository() as repo:
-        # Conversas do canal IA
-        convs = await repo.get_conversations_by_guild(guild_id='123')
-        # Conversas em DM
-        dms = await repo.get_dm_conversations()
-        print(f'Canal IA: {len(convs)} conversas')
-        print(f'DMs: {len(dms)} conversas')
-
-asyncio.run(backup_conversations())
-"
-```
-
-**Note:** Para backups completos, continue usando o script `scripts/backup.py`.
-
-### Validação Funcional
-
-```bash
-# Testar Canal IA
-docker-compose logs --tail=10 | grep -E "(message_handled|canal_ia)"
-
-# Testar DMs
-docker-compose logs --tail=10 | grep -E "(message_handled|is_dm=true)"
-
-# Verificar rate limits
-docker-compose logs --tail=10 | grep "rate_limit_exceeded"
-```
-
-### Banco Bloqueado
-
-**Sintomas:** Erros "database is locked".
-
-**Diagnóstico:**
-
-```bash
-# Verificar múltiplas instâncias
+# Check for multiple instances
 docker-compose ps
 ```
 
-**Soluções:**
+**Solutions:**
+1. Ensure only one instance running
+2. Check WAL mode enabled: `docker-compose exec botsalinha python -c "from src.storage.sqlite_repository import get_repository; import asyncio; asyncio.run(get_repository().initialize_database())"`
+3. Restart bot: `docker-compose restart`
 
-1. Garantir apenas uma instância rodando
-2. Conferir WAL habilitado: `docker-compose exec botsalinha python -c "from src.storage.factory import create_repository; import asyncio; asyncio.run(create_repository().__aenter__())"` (diagnóstico apenas)
-3. Reiniciar bot: `docker-compose restart`
+### High Memory Usage
 
-### Alto Uso de Memória
+**Symptoms:** Container using excessive memory
 
-**Sintomas:** Container consumindo memória excessiva.
-
-**Diagnóstico:**
-
+**Diagnosis:**
 ```bash
 docker stats botsalinha
 ```
 
-**Soluções:**
+**Solutions:**
+1. Clean old conversations
+2. Restart bot: `docker-compose restart`
+3. Check for memory leaks in logs
 
-1. Limpar conversas antigas
-2. Reiniciar bot: `docker-compose restart`
-3. Verificar possíveis vazamentos nos logs
+### Rate Limit Issues
 
-### Problemas de Rate Limit
+**Symptoms:** Users getting rate limited too quickly
 
-**Sintomas:** Usuários sendo limitados cedo demais.
-
-**Diagnóstico:**
-
+**Diagnosis:**
 ```bash
-# Configurações atuais
+# Check current settings
 docker-compose exec botsalinha env | grep RATE_LIMIT
 ```
 
-**Soluções:**
-
-1. Ajustar no `.env`:
+**Solutions:**
+1. Adjust in `.env`:
    ```env
    RATE_LIMIT_REQUESTS=20
    RATE_LIMIT_WINDOW_SECONDS=60
    ```
-2. Reiniciar:
+2. Restart: `docker-compose up -d`
+3. Reset user limits if needed
 
-   ```bash
-   docker-compose up -d
-   ```
+## Health Checks
 
-3. Resetar limites de usuários afetados, se necessário
-
-## Troca de Provider de IA (OpenAI ↔ Google)
-
-BotSalinha suporta dois providers de IA: **OpenAI** (padrão) e **Google AI**.
-O provider ativo é definido exclusivamente no `config.yaml`.
-
-### Procedimento
-
-1. **Garanta que a API key está configurada** no `.env`:
-
-   ```env
-   # Para OpenAI:
-   OPENAI_API_KEY=sk-...
-   # Para Google AI:
-   GOOGLE_API_KEY=AIza...
-   ```
-
-2. **Edite o `config.yaml`** alterando `model.provider` e `model.id`:
-
-   ```yaml
-   # Para OpenAI (padrão):
-   model:
-     provider: openai
-     id: gpt-4o-mini
-
-   # Para Google AI:
-   model:
-     provider: google
-     id: gemini-2.0-flash
-   ```
-
-3. **Reinicie o bot**:
-
-   ```bash
-   docker-compose restart
-   # ou localmente:
-   uv run python -m src.main
-   ```
-
-4. **Valide** enviando `!info` no Discord e conferindo provider/modelo ativo.
-
-### Validação Pós-Troca
+### Automated Health Check
 
 ```bash
-# Rodar testes relacionados a provider:
-uv run pytest -k "provider or config" -v
-
-# Checar logs de inicialização:
-docker-compose logs --tail=20 | grep "agent_wrapper_initialized"
-```
-
-### Problemas Comuns
-
-| Sintoma                         | Causa                                 | Correção                  |
-| ------------------------------- | ------------------------------------- | ------------------------- |
-| Bot não sobe                    | API key ausente para o provider ativo | Adicionar chave no `.env` |
-| `ConfigurationError` no startup | Provider inválido no `config.yaml`    | Usar `openai` ou `google` |
-| Erros 401/403                   | API key expirada ou inválida          | Regenerar chave           |
-
-> **Nota:** O provider **nunca** é definido por variável de ambiente. Apenas `config.yaml` controla o provider ativo.
-
-## Verificações de Saúde
-
-### Verificação Automatizada
-
-```bash
-# Verificar processo do bot
+# Check if bot process is running
 docker-compose exec botsalinha pgrep -f bot.py
 
-# Verificar acesso ao banco
+# Check database accessibility
 docker-compose exec botsalinha python -c "
-from src.storage.factory import create_repository
+from src.storage.sqlite_repository import get_repository
 import asyncio
-
-async def check_db():
-    async with create_repository() as repo:
-        print('Database OK')
-
-asyncio.run(check_db())
+asyncio.run(get_repository().initialize_database())
+print('Database OK')
 "
 
-# Verificar conexão com Discord
+# Check Discord connection
 docker-compose logs | grep "bot_ready"
 ```
 
-### Verificação Manual
+### Manual Health Check
 
-1. Envie o comando `!ping` no Discord
-2. Verifique o tempo de resposta
-3. Confirme que o bot está online
+1. Send `!ping` command in Discord
+2. Check response time
+3. Verify bot is online
 
-## Métricas para Monitorar
+## Metrics to Monitor
 
-| Métrica           | Descrição                            | Limite de Alerta |
-| ----------------- | ------------------------------------ | ---------------- |
-| Uptime do bot     | Tempo desde último restart           | < 24h            |
-| Tempo de resposta | Latência do `!ping`                  | > 5s             |
-| Tamanho do banco  | Tamanho do arquivo SQLite            | > 1GB            |
-| Taxa de erro      | Erros em logs / total de requisições | > 5%             |
-| Usuários ativos   | Usuários com conversas em 24h        | -                |
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| Bot uptime | Time since last restart | < 24h |
+| Response time | `!ping` latency | > 5s |
+| Database size | Size of SQLite file | > 1GB |
+| Error rate | Errors in logs / total requests | > 5% |
+| Active users | Users with conversations in 24h | - |
 
-## Procedimentos de Escalonamento
+## Escalation Procedures
 
-### Incidentes Críticos (Bot fora do ar)
+### Critical Issues (Bot Down)
 
-1. Checar logs: `docker-compose logs --tail=200`
-2. Reiniciar bot: `docker-compose restart`
-3. Se falhar, rebuild: `docker-compose up -d --build`
-4. Escalar para administrador se persistir por mais de 15 minutos
+1. Check logs: `docker-compose logs --tail=200`
+2. Restart bot: `docker-compose restart`
+3. If restart fails, rebuild: `docker-compose up -d --build`
+4. Escalate to administrator if persists > 15 minutes
 
-### Incidentes de Dados
+### Data Issues
 
-1. Parar bot: `docker-compose down`
-2. Backup emergencial: `cp data/botsalinha.db data/emergency_backup.db`
-3. Restaurar último backup válido
-4. Subir bot: `docker-compose up -d`
-5. Validar funcionamento
+1. Stop bot: `docker-compose down`
+2. Create emergency backup: `cp data/botsalinha.db data/emergency_backup.db`
+3. Restore from last known good backup
+4. Start bot: `docker-compose up -d`
+5. Verify functionality
 
-## Contato
+## Contact Information
 
-- **Repositório**: [https://github.com/prof-ramos/BotSalinha](https://github.com/prof-ramos/BotSalinha)
-- **Documentação**: [README.md](../README.md), [PRD.md](../PRD.md), [Guia de Deploy](deployment.md)
-- **Issues**: [https://github.com/prof-ramos/BotSalinha/issues](https://github.com/prof-ramos/BotSalinha/issues)
+- **Repository**: [GitHub URL]
+- **Documentation**: PRD.md, README.md
+- **Issue Tracker**: [GitHub Issues URL]

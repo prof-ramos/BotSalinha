@@ -7,14 +7,12 @@ for clean bot shutdown.
 
 import asyncio
 import signal
-import types
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 
 import structlog
 
 from ..storage.sqlite_repository import get_repository
-from ..utils.log_events import LogEvents
 
 log = structlog.get_logger()
 
@@ -42,7 +40,7 @@ class GracefulShutdown:
             task: Async function to run during cleanup
         """
         self._cleanup_tasks.append(task)
-        log.debug(LogEvents.TAREFA_LIMPEZA_REGISTRADA, task_count=len(self._cleanup_tasks))
+        log.debug("cleanup_task_registered", task_count=len(self._cleanup_tasks))
 
     def setup_signal_handlers(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         """
@@ -57,9 +55,9 @@ class GracefulShutdown:
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, self._signal_handler)
 
-        log.info(LogEvents.MANIPULADORES_SINAIS_CONFIGURADOS)
+        log.info("signal_handlers_configured")
 
-    def _signal_handler(self, signum: int, frame: types.FrameType | None) -> None:
+    def _signal_handler(self, signum: int, frame) -> None:
         """
         Handle signal for shutdown.
 
@@ -68,10 +66,10 @@ class GracefulShutdown:
             frame: Current stack frame
         """
         sig_name = signal.Signals(signum).name
-        log.info(LogEvents.SINAL_RECEBIDO, signal=sig_name)
+        log.info("signal_received", signal=sig_name)
 
         if self._shutdown:
-            log.warning(LogEvents.SAIDA_FORCADA_ACIONADA)
+            log.warning("force_quit_triggered")
             return
 
         self._shutdown = True
@@ -87,7 +85,7 @@ class GracefulShutdown:
         This should be called in the main task to wait for shutdown.
         """
         await self._shutdown_event.wait()
-        log.info(LogEvents.DESLIGAMENTO_INICIADO)
+        log.info("shutdown_initiated")
 
     @property
     def is_shutting_down(self) -> bool:
@@ -100,16 +98,16 @@ class GracefulShutdown:
 
         Should be called after shutdown is triggered.
         """
-        log.info(LogEvents.LIMPEZA_INICIADA, task_count=len(self._cleanup_tasks))
+        log.info("cleanup_started", task_count=len(self._cleanup_tasks))
 
         for i, task in enumerate(self._cleanup_tasks, 1):
             task_name = task.__name__ if hasattr(task, "__name__") else f"task_{i}"
             try:
-                log.debug(LogEvents.EXECUTANDO_TAREFA_LIMPEZA, task=task_name, index=i)
+                log.debug("running_cleanup_task", task=task_name, index=i)
                 await task()
             except Exception as e:
                 log.error(
-                    LogEvents.TAREFA_LIMPEZA_FALHOU,
+                    "cleanup_task_failed",
                     task=task_name,
                     error_type=type(e).__name__,
                     error_message=str(e),
@@ -119,23 +117,19 @@ class GracefulShutdown:
         try:
             repository = get_repository()
             await repository.close()
-            log.info(LogEvents.REPOSITORIO_FECHADO)
+            log.info("repository_closed")
         except Exception as e:
             log.error(
-                LogEvents.LIMPEZA_REPOSITORIO_FALHOU,
+                "repository_cleanup_failed",
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
 
-        # Note: MCP cleanup is handled by AgentWrapper._mcp_manager
-        # which is called when AgentWrapper goes out of scope
-        log.debug(LogEvents.LIMPEZA_MCP_TRATADA_POR_AGENTE)
-
-        log.info(LogEvents.LIMPEZA_CONCLUIDA)
+        log.info("cleanup_completed")
 
 
 @asynccontextmanager
-async def managed_lifecycle():  # type: ignore[no-untyped-def]
+async def managed_lifecycle():
     """
     Context manager for application lifecycle.
 
@@ -148,7 +142,7 @@ async def managed_lifecycle():  # type: ignore[no-untyped-def]
     shutdown_manager = GracefulShutdown()
 
     # Register cleanup tasks
-    async def cleanup_repository() -> None:
+    async def cleanup_repository():
         repository = get_repository()
         await repository.close()
 
@@ -163,11 +157,11 @@ async def managed_lifecycle():  # type: ignore[no-untyped-def]
         shutdown_manager.setup_signal_handlers()
 
     try:
-        log.info(LogEvents.APP_INICIADA)
+        log.info("application_started")
         yield shutdown_manager
     finally:
         await shutdown_manager.cleanup()
-        log.info(LogEvents.APP_PARADA)
+        log.info("application_stopped")
 
 
 async def run_with_lifecycle(
@@ -188,7 +182,7 @@ async def run_with_lifecycle(
         shutdown_manager.register_cleanup_task(shutdown_coro)
 
     # Add repository cleanup
-    async def cleanup_repository() -> None:
+    async def cleanup_repository():
         repository = get_repository()
         await repository.close()
 
@@ -198,10 +192,7 @@ async def run_with_lifecycle(
     shutdown_manager.setup_signal_handlers()
 
     # Create tasks
-    async def _start_wrapper() -> None:
-        await start_coro()
-
-    start_task = asyncio.create_task(_start_wrapper())
+    start_task = asyncio.create_task(start_coro())
     wait_shutdown_task = asyncio.create_task(shutdown_manager.wait_for_shutdown())
 
     # Wait for either startup to complete or shutdown signal

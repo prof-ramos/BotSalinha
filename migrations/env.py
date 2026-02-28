@@ -10,14 +10,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from src.config.settings import settings
-
 # Import models and base
 from src.models.conversation import Base
-from src.models.rag_models import (  # noqa: F401 (import for Alembic autogenerate)
-    ChunkORM,
-    DocumentORM,
-)
+from src.config.settings import settings
 
 # Alembic Config object
 config = context.config

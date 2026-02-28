@@ -8,10 +8,10 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 
 # Install dependencies using uv
-RUN uv sync --frozen --no-dev
+RUN uv sync --no-dev
 
 # Runtime stage
 FROM python:3.12-slim
@@ -31,21 +31,23 @@ COPY pyproject.toml ./
 # Copy source code
 COPY src/ ./src/
 COPY bot.py ./
+COPY prompt/ ./prompt/
 
-# Create non-root user
-RUN addgroup --system botsalinha && adduser --system --ingroup botsalinha botsalinha
+# Create data directory for SQLite database
+RUN mkdir -p /app/data && \
+    chmod 777 /app/data
 
-# Create data directory for SQLite database AND logs, and assign permissions
-RUN mkdir -p /app/data/logs && \
-    chown -R botsalinha:botsalinha /app/data && \
-    chmod 755 /app/data && \
-    chmod 775 /app/data/logs
+# Create logs directory
+RUN mkdir -p /app/logs && \
+    chmod 777 /app/logs
 
-# Ensure we run as non-root
-USER botsalinha
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH"
+ENV BOTSALINHA_DATABASE__URL="sqlite:///data/botsalinha.db"
 
-# Volume for database AND logs persistence
-VOLUME ["/app/data"]
+# Volume for database persistence
+VOLUME ["/app/data", "/app/logs"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

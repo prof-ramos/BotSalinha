@@ -186,7 +186,7 @@ class ConversationFactory:
         guild_id = DiscordFactory.guild_id()
         channel_id = DiscordFactory.channel_id()
 
-        messages: list[dict[str, Any]] = []
+        messages = []
         for _i in range(message_count):
             # User message
             messages.append(

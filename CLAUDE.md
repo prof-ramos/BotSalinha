@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-BotSalinha is a Discord bot specialized in **Brazilian law and public contest preparation (concursos públicos)**, powered by OpenAI gpt-4o-mini via the [Agno](https://github.com/agno-agi/agno) AI agent framework. It provides contextual conversations with persistent history, per-user rate limiting, and structured logging.
+BotSalinha is a Discord bot specialized in **Brazilian law and public contest preparation (concursos públicos)**, powered by Google Gemini 2.5 Flash Lite via the [Agno](https://github.com/agno-agi/agno) AI agent framework. It provides contextual conversations with persistent history, per-user rate limiting, and structured logging.
 
 - **Language:** Python 3.12+
 - **Framework:** discord.py + Agno
-- **AI Backend:** OpenAI gpt-4o-mini (via `openai`)
+- **AI Backend:** Google Gemini 2.5 Flash Lite (via `google-genai`)
 - **Database:** SQLite via SQLAlchemy async ORM + Alembic migrations
 - **Package Manager:** `uv`
 
@@ -14,7 +14,7 @@ BotSalinha is a Discord bot specialized in **Brazilian law and public contest pr
 
 ## Repository Structure
 
-```text
+```
 BotSalinha/
 ├── bot.py                        # Minimal entry-point wrapper
 ├── pyproject.toml                # Project metadata and all dependencies
@@ -31,7 +31,7 @@ BotSalinha/
 ├── src/                          # Main application source
 │   ├── main.py                   # CLI argument parsing and entry points
 │   ├── config/
-│   │   ├── settings.py           # Pydantic Settings (standard env vars)
+│   │   ├── settings.py           # Pydantic Settings (env vars with BOTSALINHA_ prefix)
 │   │   └── yaml_config.py        # YAML config loader with Pydantic validation
 │   ├── core/
 │   │   ├── agent.py              # Agno AgentWrapper — generates AI responses
@@ -91,14 +91,14 @@ BotSalinha/
 ### Install and Run
 
 ```bash
-uv sync                # Install dependencies
-uv run bot.py          # Run the bot locally
-uv run pytest          # Run all tests
-```
+# Install dependencies
+uv sync
 
-### Run CLI chat mode (for development/testing without Discord)
+# Run the Discord bot
+uv run botsalinha
+# or: uv run bot.py
 
-```bash
+# Run CLI chat mode (for development/testing without Discord)
 uv run bot.py --chat
 ```
 
@@ -193,27 +193,20 @@ uv run pre-commit run --all-files
 
 Copy `.env.example` to `.env` and fill in the required values:
 
-| Variable                        | Default                        | Required | Description                   |
-| -------------------------------- | ------------------------------ | -------- | ----------------------------- |
-| `DISCORD_BOT_TOKEN`             | —                              | **Yes**  | Discord bot token             |
-| `DISCORD_MESSAGE_CONTENT_INTENT`| `true`                         | No       | Enable message content intent |
-| `COMMAND_PREFIX`                | `!`                            | No       | Command prefix                |
-| `DISCORD__CANAL_IA_ID`          | None                           | No       | ID do canal dedicado IA (opcional) |
-| `OPENAI_API_KEY`                | —                              | **Yes**  | OpenAI API key               |
-| `GOOGLE_API_KEY`                | —                              | No       | Google API key                |
-| `HISTORY_RUNS`                  | `3`                            | No       | Conversation history pairs    |
-| `RATE_LIMIT_REQUESTS`           | `10`                           | No       | Max requests per window       |
-| `RATE_LIMIT_WINDOW_SECONDS`     | `60`                           | No       | Rate limit time window        |
-| `DATABASE_URL`                  | `sqlite:///data/botsalinha.db` | No       | SQLite database path          |
-| `LOG_LEVEL`                     | `INFO`                         | No       | Log level                     |
-| `LOG_FORMAT`                    | `json`                         | No       | `json` or `text`             |
-| `APP_ENV`                       | `development`                  | No       | Environment                   |
-| `DEBUG`                         | `false`                        | No       | Debug mode                    |
-| `MAX_RETRIES`                   | `3`                            | No       | Max retries                  |
-| `RETRY_DELAY_SECONDS`           | `1`                            | No       | Retry delay                  |
-| `RETRY_MAX_DELAY_SECONDS`       | `60`                           | No       | Max retry delay              |
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `BOTSALINHA_DISCORD__TOKEN` | — | **Yes** | Discord bot token |
+| `BOTSALINHA_DISCORD__MESSAGE_CONTENT_INTENT` | `true` | No | Enable message content intent |
+| `BOTSALINHA_GOOGLE__API_KEY` | — | **Yes** | Google Gemini API key |
+| `BOTSALINHA_GOOGLE__MODEL_ID` | `gemini-2.5-flash-lite` | No | Gemini model to use |
+| `BOTSALINHA_HISTORY__RUNS` | `3` | No | Conversation history pairs |
+| `BOTSALINHA_RATE_LIMIT__REQUESTS` | `10` | No | Max requests per window |
+| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS` | `60` | No | Rate limit time window |
+| `BOTSALINHA_DATABASE__URL` | `sqlite:///data/botsalinha.db` | No | SQLite database path |
+| `BOTSALINHA_LOG_LEVEL` | `INFO` | No | Log level |
+| `BOTSALINHA_LOG_FORMAT` | `json` | No | `json` or `text` |
 
-**Nota:** O projeto suporta tanto nomes flat (ex: `DATABASE_URL`) quanto nomes aninhados com underscores duplos (ex: `DATABASE__URL`). O formato aninhado tem prioridade sobre o formato flat quando ambos estão presentes.
+All env vars use the `BOTSALINHA_` prefix. Nested configs use double underscores (e.g., `BOTSALINHA_DISCORD__TOKEN`).
 
 ---
 
@@ -221,16 +214,16 @@ Copy `.env.example` to `.env` and fill in the required values:
 
 ### Layered Architecture
 
-```text
-Discord (discord.py Commands)
+```
+Discord Commands (BotSalinhaBot)
          ↓
 Middleware (RateLimiter — token bucket per user/guild)
          ↓
-Service Layer (AgentWrapper — Agno + OpenAI)
+Service Layer (AgentWrapper — Agno + Gemini)
          ↓
 Data Access Layer (Repository Pattern — abstract interfaces)
          ↓
-Storage Layer (SQLite + SQLAlchemy Async)
+Database Layer (SQLite via SQLAlchemy async ORM)
 ```
 
 ### Key Design Patterns
@@ -247,14 +240,14 @@ Storage Layer (SQLite + SQLAlchemy Async)
 
 ### Naming
 
-| Item              | Convention           | Example                               |
-| ----------------- | -------------------- | ------------------------------------- |
-| Classes           | PascalCase           | `BotSalinhaBot`, `ConversationORM`    |
-| Functions/Methods | snake_case           | `run_discord_bot`, `check_rate_limit` |
-| Private members   | `_underscore` prefix | `_ready_event`, `_initialized`        |
-| Constants         | UPPER_SNAKE_CASE     | `MAX_RETRIES`                         |
-| Async functions   | `async def`          | `async def generate_response()`       |
-| Type hints        | Always present       | `str \| None` (not `Optional[str]`)   |
+| Item | Convention | Example |
+|---|---|---|
+| Classes | PascalCase | `BotSalinhaBot`, `ConversationORM` |
+| Functions/Methods | snake_case | `run_discord_bot`, `check_rate_limit` |
+| Private members | `_underscore` prefix | `_ready_event`, `_initialized` |
+| Constants | UPPER_SNAKE_CASE | `MAX_RETRIES` |
+| Async functions | `async def` | `async def generate_response()` |
+| Type hints | Always present | `str | None` (not `Optional[str]`) |
 
 ### Import Order (enforced by Ruff/isort)
 
@@ -295,7 +288,6 @@ except SpecificError as e:
 ```
 
 Exception types:
-
 - `APIError` — External API failures
 - `RateLimitError` — Rate limit exceeded
 - `ValidationError` — Input validation failures
@@ -345,25 +337,25 @@ async def call_external_api() -> str:
 @pytest.mark.e2e           # Full system workflow
 @pytest.mark.slow          # Takes > 1 second
 @pytest.mark.discord       # Requires Discord API mock
-@pytest.mark.gemini        # Requires AI API mock (previously gemini-only)
+@pytest.mark.gemini        # Requires Gemini API mock
 @pytest.mark.database      # Requires database access
 ```
 
 ### Key Fixtures (from `tests/conftest.py`)
 
-| Fixture           | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `test_settings`   | Pydantic settings configured for test environment |
-| `test_engine`     | Async SQLAlchemy engine (in-memory SQLite)        |
-| `test_session`    | Scoped async database session                     |
-| `test_repository` | In-memory `SQLiteRepository` instance             |
-| `rate_limiter`    | `RateLimiter` instance                            |
+| Fixture | Description |
+|---|---|
+| `test_settings` | Pydantic settings configured for test environment |
+| `test_engine` | Async SQLAlchemy engine (in-memory SQLite) |
+| `test_session` | Scoped async database session |
+| `test_repository` | In-memory `SQLiteRepository` instance |
+| `rate_limiter` | `RateLimiter` instance |
 
 ### Testing Patterns
 
 - Use in-memory SQLite (`sqlite+aiosqlite:///:memory:`) for database tests.
 - Mock Discord API with `pytest-mock` — never make real Discord calls in tests.
-- Mock OpenAI API — never make real API calls in tests.
+- Mock Gemini/Google API — never make real API calls in tests.
 - Use `faker` with `pt_BR` locale for realistic Brazilian test data.
 - Use `freezegun` for time-dependent tests.
 
@@ -373,13 +365,13 @@ async def call_external_api() -> str:
 
 The GitHub Actions workflow (`.github/workflows/test.yml`) runs on push to `main`/`develop` and on pull requests:
 
-| Job                   | What it does                                       |
-| --------------------- | -------------------------------------------------- |
-| **Lint**              | `ruff check`, `ruff format --check`, `mypy src/`   |
-| **Unit Tests**        | `pytest tests/unit` with coverage upload           |
-| **Integration Tests** | `pytest tests/integration`                         |
-| **E2E Tests**         | `pytest tests/e2e` (needs Discord/OpenAI secrets)  |
-| **All Tests**         | Full parallel run, enforces 70% coverage threshold |
+| Job | What it does |
+|---|---|
+| **Lint** | `ruff check`, `ruff format --check`, `mypy src/` |
+| **Unit Tests** | `pytest tests/unit` with coverage upload |
+| **Integration Tests** | `pytest tests/integration` |
+| **E2E Tests** | `pytest tests/e2e` (needs Discord/Gemini secrets) |
+| **All Tests** | Full parallel run, enforces 70% coverage threshold |
 
 ---
 
@@ -387,11 +379,11 @@ The GitHub Actions workflow (`.github/workflows/test.yml`) runs on push to `main
 
 System prompts live in `prompt/`. The active prompt is configured in `config.yaml`:
 
-| File             | Style                     | Status               |
-| ---------------- | ------------------------- | -------------------- |
-| `prompt_v1.md`   | Simple, direct            | **Active (default)** |
-| `prompt_v2.json` | Few-shot with examples    | Available            |
-| `prompt_v3.md`   | Advanced chain-of-thought | Available            |
+| File | Style | Status |
+|---|---|---|
+| `prompt_v1.md` | Simple, direct | **Active (default)** |
+| `prompt_v2.json` | Few-shot with examples | Available |
+| `prompt_v3.md` | Advanced chain-of-thought | Available |
 
 To switch prompts, update `config.yaml` → `prompt.file`.
 
@@ -399,20 +391,13 @@ To switch prompts, update `config.yaml` → `prompt.file`.
 
 ## Discord Bot Commands
 
-| Command           | Description                                           |
-| ----------------- | ----------------------------------------------------- |
+| Command | Description |
+|---|---|
 | `!ask <question>` | Ask the AI a question about Brazilian law or contests |
-| `!ping`           | Health check                                          |
-| `!ajuda`          | Show help message                                     |
-| `!info`           | Show bot information                                  |
-| `!limpar`         | Clear conversation history for the user               |
-
-### Modos de Chat
-
-| Mode             | Description                                             | Configuration Required |
-| ---------------- | ------------------------------------------------------- | --------------------- |
-| **Channel IA**   | Automatic response in dedicated channel                  | `DISCORD__CANAL_IA_ID` |
-| **DM**           | Automatic response to direct messages                   | None (always enabled)  |
+| `!ping` | Health check |
+| `!ajuda` | Show help message |
+| `!info` | Show bot information |
+| `!limpar` | Clear conversation history for the user |
 
 ---
 
@@ -439,18 +424,6 @@ To switch prompts, update `config.yaml` → `prompt.file`.
 4. Generate a migration: `uv run alembic revision --autogenerate -m "add_my_model"`.
 5. Apply: `uv run alembic upgrade head`.
 
-### Configuring Channel IA Mode
-
-1. Add to `.env`:
-```env
-DISCORD__CANAL_IA_ID=123456789012345678
-```
-
-2. Restart the bot:
-```bash
-uv run bot.py  # or docker-compose restart
-```
-
 ### Running the Bot Locally (without Discord)
 
 ```bash
@@ -464,13 +437,13 @@ uv run bot.py --chat
 
 ## Important Files to Know
 
-| File                               | Why it matters                                             |
-| ---------------------------------- | ---------------------------------------------------------- |
-| `src/config/settings.py`           | All configuration with defaults and validation             |
-| `src/core/discord.py`              | All bot commands and Discord event handlers, including `on_message` |
-| `src/core/agent.py`                | AI response generation and conversation history            |
-| `src/storage/sqlite_repository.py` | All database operations                                    |
-| `src/utils/errors.py`              | Exception hierarchy — use these, don't use bare exceptions |
-| `config.yaml`                      | Model provider, prompt file, agent behavior flags          |
-| `tests/conftest.py`                | All shared test fixtures                                   |
-| `.env.example`                     | Canonical list of all supported environment variables      |
+| File | Why it matters |
+|---|---|
+| `src/config/settings.py` | All configuration with defaults and validation |
+| `src/core/discord.py` | All bot commands and Discord event handlers |
+| `src/core/agent.py` | AI response generation and conversation history |
+| `src/storage/sqlite_repository.py` | All database operations |
+| `src/utils/errors.py` | Exception hierarchy — use these, don't use bare exceptions |
+| `config.yaml` | Model provider, prompt file, agent behavior flags |
+| `tests/conftest.py` | All shared test fixtures |
+| `.env.example` | Canonical list of all supported environment variables |

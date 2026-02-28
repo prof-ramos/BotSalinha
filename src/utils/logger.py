@@ -17,58 +17,6 @@ from structlog.contextvars import (
     merge_contextvars,
 )
 
-# Import sanitization module (lazy import to avoid circular dependency)
-_sanitization_enabled = False
-_sanitize_partial_debug = True
-
-
-def enable_sanitization(partial_debug: bool = True) -> None:
-    """
-    Habilita sanitização de dados sensíveis nos logs.
-
-    Args:
-        partial_debug: Se True, logs DEBUG mostram mascaramento parcial
-    """
-    global _sanitization_enabled, _sanitize_partial_debug
-    _sanitization_enabled = True
-    _sanitize_partial_debug = partial_debug
-
-
-def disable_sanitization() -> None:
-    """Desabilita sanitização de dados sensíveis nos logs."""
-    global _sanitization_enabled
-    _sanitization_enabled = False
-
-
-def add_sanitization_processor(
-    logger: Any,
-    log_method: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Processor que sanitiza dados sensíveis antes de renderizar.
-
-    Posicionar ANTES do JSONRenderer ou ConsoleRenderer.
-
-    Args:
-        logger: Logger instance
-        log_method: Nome do método de log (debug, info, warning, error, critical)
-        event_dict: Dicionário de evento do structlog
-
-    Returns:
-        Dicionário de evento sanitizado
-    """
-    if not _sanitization_enabled:
-        return event_dict
-
-    from .log_sanitization import sanitize_dict
-
-    # Em modo DEBUG, sanitização parcial (preserva alguns caracteres)
-    partial = _sanitize_partial_debug and log_method == "debug"
-
-    # Sanitiza todas as string values
-    return sanitize_dict(event_dict, partial=partial)
-
 
 def configure_logging(
     log_level: str | None = None,
@@ -101,8 +49,6 @@ def configure_logging(
         structlog.processors.add_log_level,
         # Add timestamp
         structlog.processors.TimeStamper(fmt="iso", utc=True),
-        # Sanitize sensitive data (before renderer)
-        add_sanitization_processor,
         # Handle exceptions
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -173,78 +119,6 @@ def setup_logging(
         app_env=app_env,
         debug=debug,
     )
-
-    return log
-
-
-def setup_application_logging(
-    log_level: str = "INFO",
-    log_format: str = "json",
-    app_version: str = "unknown",
-    app_env: str = "unknown",
-    debug: bool = False,
-    log_dir: str | None = None,
-    max_bytes: int = 10 * 1024 * 1024,
-    backup_count: int = 30,
-    level_file: str = "INFO",
-    level_error_file: str = "ERROR",
-    sanitize: bool = True,
-    sanitize_partial_debug: bool = True,
-) -> structlog.stdlib.BoundLogger:
-    """
-    Setup completo de logging com suporte a arquivos e sanitização.
-
-    Esta função deve ser chamada no startup da aplicação, antes de
-    qualquer outra inicialização que possa gerar logs.
-
-    Args:
-        log_level: Nível de log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_format: Formato (json ou text)
-        app_version: Versão da aplicação
-        app_env: Ambiente (development, production)
-        debug: Modo debug
-        log_dir: Diretório para logs (None para desabilitar file logging)
-        max_bytes: Tamanho máximo do arquivo antes da rotação
-        backup_count: Número máximo de arquivos de backup
-        level_file: Nível mínimo para o arquivo principal
-        level_error_file: Nível para o arquivo de erros
-        sanitize: Habilitar sanitização de dados sensíveis
-        sanitize_partial_debug: Sanitização parcial em logs DEBUG
-
-    Returns:
-        Configured logger instance
-    """
-    # Configurar sanitização
-    if sanitize:
-        enable_sanitization(partial_debug=sanitize_partial_debug)
-
-    # Setup logging básico (stdout/stderr)
-    log = setup_logging(
-        log_level=log_level,
-        log_format=log_format,
-        app_version=app_version,
-        app_env=app_env,
-        debug=debug,
-    )
-
-    # Adicionar file handlers se log_dir fornecido
-    if log_dir:
-        from .log_rotation import configure_file_handlers
-
-        configure_file_handlers(
-            log_dir=log_dir,
-            max_bytes=max_bytes,
-            backup_count=backup_count,
-            level_file=level_file,
-            level_error_file=level_error_file,
-        )
-
-        log.info(
-            "file_logging_configured",
-            log_dir=log_dir,
-            max_bytes=max_bytes,
-            backup_count=backup_count,
-        )
 
     return log
 
@@ -332,12 +206,8 @@ __all__ = [
     "configure_logging",
     "get_logger",
     "setup_logging",
-    "setup_application_logging",
     "bind_request_context",
     "unbind_context",
     "clear_request_context",
     "RequestContextManager",
-    "enable_sanitization",
-    "disable_sanitization",
-    "add_sanitization_processor",
 ]

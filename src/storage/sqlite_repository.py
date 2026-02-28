@@ -6,18 +6,12 @@ Uses async patterns and proper connection management.
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 
 import structlog
-from cachetools import TTLCache
 from sqlalchemy import delete, select, text
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.sql.selectable import TypedReturnsRows
-
-if TYPE_CHECKING:
-    pass
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from ..config.settings import settings
 from ..models.conversation import (
@@ -34,7 +28,6 @@ from ..models.message import (
     MessageUpdate,
     create_message_orm,
 )
-from ..utils.log_events import LogEvents
 from .repository import ConversationRepository, MessageRepository
 
 log = structlog.get_logger()
@@ -65,27 +58,21 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             self.database_url = self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
 
         # Create async engine with optimized settings for SQLite
-        # StaticPool reuses a single connection — ideal for SQLite
-        # which serializes writes regardless of pool strategy.
         self.engine = create_async_engine(
             self.database_url,
             echo=settings.database.echo,
             connect_args={
                 "check_same_thread": False,  # Needed for SQLite
             },
-            poolclass=StaticPool,
         )
 
-        # TTL cache for conversation lookups (avoids repeated DB hits)
-        self._conversation_cache: TTLCache[str, Any] = TTLCache(maxsize=256, ttl=300)
-
         # Create session factory
-        self.async_session_maker = async_sessionmaker(
-            bind=self.engine, class_=AsyncSession, expire_on_commit=False
+        self.async_session_maker = sessionmaker(
+            self.engine, class_=AsyncSession, expire_on_commit=False
         )
 
         log.info(
-            LogEvents.REPOSITORIO_SQLITE_INICIALIZADO,
+            "sqlite_repository_initialized",
             database_url=self.database_url.replace("+aiosqlite", ""),  # Hide in logs
         )
 
@@ -102,22 +89,31 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             await conn.execute(text("PRAGMA cache_size=-64000"))  # 64MB cache
             await conn.execute(text("PRAGMA temp_store=memory"))
 
-            log.info(LogEvents.MODO_WAL_ATIVADO)
+            log.info("sqlite_wal_mode_enabled")
 
     async def create_tables(self) -> None:
         """Create all tables in the database."""
         async with self.engine.begin() as conn:
             await conn.run_sync(ConversationORM.metadata.create_all)
-            log.info(LogEvents.TABELAS_BANCO_CRIADAS)
+            log.info("database_tables_created")
 
     async def close(self) -> None:
         """Close the database connection."""
         await self.engine.dispose()
-        log.info(LogEvents.REPOSITORIO_SQLITE_FECHADO)
+        log.info("sqlite_repository_closed")
 
     # Conversation Repository Methods
 
     async def create_conversation(self, conversation: ConversationCreate) -> Conversation:
+        """
+        Create a new conversation.
+
+        Args:
+            conversation: Conversation creation data
+
+        Returns:
+            Created conversation with generated ID and timestamps
+        """
         async with self.async_session_maker() as session:
             orm = ConversationORM(
                 user_id=conversation.user_id,
@@ -132,6 +128,15 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             return Conversation.model_validate(orm)
 
     async def get_conversation_by_id(self, conversation_id: str) -> Conversation | None:
+        """
+        Retrieve a conversation by its ID.
+
+        Args:
+            conversation_id: Unique conversation identifier
+
+        Returns:
+            Conversation if found, None otherwise
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
@@ -145,6 +150,16 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def get_by_user_and_guild(
         self, user_id: str, guild_id: str | None = None
     ) -> list[Conversation]:
+        """
+        Get all conversations for a user in a guild.
+
+        Args:
+            user_id: Discord user ID
+            guild_id: Discord guild ID (None for DMs)
+
+        Returns:
+            List of conversations, ordered by most recently updated
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.user_id == user_id)
 
@@ -163,29 +178,26 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
     async def get_or_create_conversation(
         self, user_id: str, guild_id: str | None, channel_id: str
     ) -> Conversation:
-        # Check cache first
-        cache_key = f"{user_id}:{guild_id}:{channel_id}"
-        if cache_key in self._conversation_cache:
-            return cast(Conversation, self._conversation_cache[cache_key])
+        """
+        Get existing conversation or create a new one.
 
-        # Single optimized query with channel_id filter (avoids N+1 pattern)
-        async with self.async_session_maker() as session:
-            stmt = select(ConversationORM).where(
-                ConversationORM.user_id == user_id,
-                ConversationORM.channel_id == channel_id,
-            )
-            if guild_id is not None:
-                stmt = stmt.where(ConversationORM.guild_id == guild_id)
-            else:
-                stmt = stmt.where(ConversationORM.guild_id.is_(None))
+        Looks for an existing conversation in the specified channel.
+        If not found, creates a new one.
 
-            stmt = stmt.order_by(ConversationORM.updated_at.desc()).limit(1)
-            result = await session.execute(stmt)
-            orm = result.scalar_one_or_none()
+        Args:
+            user_id: Discord user ID
+            guild_id: Discord guild ID (None for DMs)
+            channel_id: Discord channel ID
 
-            if orm is not None:
-                conv = Conversation.model_validate(orm)
-                self._conversation_cache[cache_key] = conv
+        Returns:
+            Existing or newly created conversation
+        """
+        # Try to get existing conversation
+        conversations = await self.get_by_user_and_guild(user_id, guild_id)
+
+        # Filter by channel and get most recent
+        for conv in conversations:
+            if conv.channel_id == channel_id:
                 return conv
 
         # Create new conversation
@@ -194,13 +206,21 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             guild_id=guild_id,
             channel_id=channel_id,
         )
-        conv = await self.create_conversation(create_data)
-        self._conversation_cache[cache_key] = conv
-        return conv
+        return await self.create_conversation(create_data)
 
     async def update_conversation(
         self, conversation_id: str, updates: ConversationUpdate
     ) -> Conversation | None:
+        """
+        Update a conversation's metadata.
+
+        Args:
+            conversation_id: Unique conversation identifier
+            updates: Update data (currently only meta_data supported)
+
+        Returns:
+            Updated conversation if found, None otherwise
+        """
         async with self.async_session_maker() as session:
             stmt = select(ConversationORM).where(ConversationORM.id == conversation_id)
             result = await session.execute(stmt)
@@ -229,13 +249,6 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             await session.delete(orm)
             await session.commit()
 
-            # Invalidate cache entries referencing this conversation
-            keys_to_remove = [
-                k for k, v in list(self._conversation_cache.items()) if v.id == conversation_id
-            ]
-            for k in keys_to_remove:
-                self._conversation_cache.pop(k, None)
-
             return True
 
     async def cleanup_old_conversations(self, days: int = 30) -> int:
@@ -247,29 +260,24 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             result = await session.execute(stmt)
             await session.commit()
 
-            # Use cursor_result to get proper typing for rowcount
-            cursor_result = cast(CursorResult[Any], result)
-            count = cursor_result.rowcount
+            count = result.rowcount
             if count > 0:
-                log.info(LogEvents.CONVERSAS_ANTIGAS_LIMPAS, count=count, days=days)
+                log.info("old_conversations_cleaned", count=count, days=days)
 
             return count
-
-    async def get_dm_conversations(self, user_id: str) -> list[Conversation]:
-        """
-        Get all DM (Direct Message) conversations for a user.
-
-        Args:
-            user_id: Discord user ID
-
-        Returns:
-            List of DM conversations (guild_id is None)
-        """
-        return await self.get_by_user_and_guild(user_id=user_id, guild_id=None)
 
     # Message Repository Methods
 
     async def create_message(self, message: MessageCreate) -> Message:
+        """
+        Create a new message in a conversation.
+
+        Args:
+            message: Message creation data
+
+        Returns:
+            Created message with generated ID and timestamp
+        """
         async with self.async_session_maker() as session:
             orm = MessageORM(
                 conversation_id=message.conversation_id,
@@ -286,9 +294,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     async def get_message_by_id(self, message_id: str) -> Message | None:
         async with self.async_session_maker() as session:
-            stmt: TypedReturnsRows[tuple[Any]] = select(MessageORM).where(  # type: ignore[valid-type]
-                MessageORM.id == message_id  # type: ignore[attr-defined]
-            )
+            stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -304,12 +310,12 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         role: MessageRole | None = None,
     ) -> list[Message]:
         async with self.async_session_maker() as session:
-            stmt: Any = select(MessageORM).where(MessageORM.conversation_id == conversation_id)  # type: ignore[valid-type,attr-defined]
+            stmt = select(MessageORM).where(MessageORM.conversation_id == conversation_id)
 
             if role is not None:
-                stmt = stmt.where(MessageORM.role == role.value)  # type: ignore[attr-defined]
+                stmt = stmt.where(MessageORM.role == role.value)
 
-            stmt = stmt.order_by(MessageORM.created_at.asc())  # type: ignore[attr-defined]
+            stmt = stmt.order_by(MessageORM.created_at.asc())
 
             if limit is not None:
                 stmt = stmt.limit(limit)
@@ -327,30 +333,40 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         """
         Get conversation history formatted for LLM context.
 
-        Returns the last N user/assistant message pairs directly as dicts,
-        bypassing Pydantic conversion for performance.
-        """
-        async with self.async_session_maker() as session:
-            # Query only the columns we need, filter by role in SQL,
-            # fetch only the exact number of messages needed.
-            stmt = (
-                select(MessageORM.role, MessageORM.content)  # type: ignore[attr-defined]
-                .where(
-                    MessageORM.conversation_id == conversation_id,  # type: ignore[attr-defined]
-                    MessageORM.role.in_(["user", "assistant"]),  # type: ignore[attr-defined]
-                )
-                .order_by(MessageORM.created_at.desc())  # type: ignore[attr-defined]
-                .limit(max_runs * 2)
-            )
-            result = await session.execute(stmt)
-            rows = result.all()
+        Returns messages in pairs of (user, assistant) up to max_runs.
+        This format is compatible with Agno/Gemini context.
 
-        # Reverse to chronological order
-        return [{"role": r.role, "content": r.content} for r in reversed(rows)]
+        Args:
+            conversation_id: Unique conversation identifier
+            max_runs: Maximum number of user-assistant pairs to return
+
+        Returns:
+            List of messages in format [{"role": "user/assistant", "content": "..."}]
+        """
+        messages = await self.get_conversation_messages(
+            conversation_id,
+            limit=max_runs * 2 + 10,  # Get extra, then filter
+        )
+
+        # Convert to LLM format
+        history = []
+        for msg in messages:
+            if msg.role in (MessageRole.USER, MessageRole.ASSISTANT):
+                history.append({"role": msg.role.value, "content": msg.content})
+
+        # Limit to max_runs pairs
+        # Keep system messages, then truncate user/assistant pairs
+        system_messages = [m for m in history if m["role"] == "system"]
+        user_assistant = [m for m in history if m["role"] != "system"]
+
+        # Keep last max_runs pairs (2 messages per run)
+        user_assistant = user_assistant[-(max_runs * 2) :]
+
+        return system_messages + user_assistant
 
     async def update_message(self, message_id: str, updates: MessageUpdate) -> Message | None:
         async with self.async_session_maker() as session:
-            stmt: Any = select(MessageORM).where(MessageORM.id == message_id)  # type: ignore[valid-type,attr-defined]
+            stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -369,7 +385,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     async def delete_message(self, message_id: str) -> bool:
         async with self.async_session_maker() as session:
-            stmt: Any = select(MessageORM).where(MessageORM.id == message_id)  # type: ignore[valid-type,attr-defined]
+            stmt = select(MessageORM).where(MessageORM.id == message_id)
             result = await session.execute(stmt)
             orm = result.scalar_one_or_none()
 
@@ -383,56 +399,65 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
 
     async def delete_conversation_messages(self, conversation_id: str) -> int:
         async with self.async_session_maker() as session:
-            stmt = delete(MessageORM).where(MessageORM.conversation_id == conversation_id)  # type: ignore[attr-defined]
-            cursor_result = cast(CursorResult[Any], await session.execute(stmt))
+            stmt = delete(MessageORM).where(MessageORM.conversation_id == conversation_id)
+            result = await session.execute(stmt)
             await session.commit()
 
-            return cursor_result.rowcount
-
-    async def clear_all_history(self) -> dict[str, int]:
-        """
-        Delete all conversations and messages from the database.
-
-        Returns:
-            Dictionary with counts of deleted items
-        """
-        async with self.async_session_maker() as session:
-            # Delete messages first (foreign key constraints)
-            msg_stmt = delete(MessageORM)
-            msg_result = await session.execute(msg_stmt)
-
-            # Delete conversations
-            conv_stmt = delete(ConversationORM)
-            conv_result = await session.execute(conv_stmt)
-
-            await session.commit()
-
-            # Clear cache
-            self._conversation_cache.clear()
-
-            counts = {
-                "messages": msg_result.rowcount,  # type: ignore[attr-defined]
-                "conversations": conv_result.rowcount,  # type: ignore[attr-defined]
-            }
-
-            log.info(LogEvents.BANCO_DADOS_LIMPO, **counts)
-            return counts
+            return result.rowcount
 
 
-# Global repository instance
-repository: SQLiteRepository | None = None
+# Global repository instance (for backward compatibility)
+_repository: SQLiteRepository | None = None
 
 
 def get_repository() -> SQLiteRepository:
-    """Get the global repository instance."""
-    global repository
-    if repository is None:
-        repository = SQLiteRepository()
-    return repository
+    """
+    Get the global repository instance.
+
+    Creates a new instance if none exists.
+    For testing, use set_repository() to inject a mock.
+    """
+    global _repository
+    if _repository is None:
+        _repository = SQLiteRepository()
+    return _repository
+
+
+def set_repository(repo: SQLiteRepository | None) -> None:
+    """
+    Set the global repository instance.
+
+    Use this for dependency injection in tests.
+
+    Args:
+        repo: Repository instance to use, or None to reset
+    """
+    global _repository
+    _repository = repo
+
+
+def reset_repository() -> None:
+    """
+    Reset the global repository instance.
+
+    Call this in test teardown to ensure clean state.
+    """
+    global _repository
+    if _repository is not None:
+        # Close existing connection if any
+        try:
+            import asyncio
+
+            asyncio.get_event_loop().run_until_complete(_repository.close())
+        except Exception:
+            pass
+    _repository = None
 
 
 __all__ = [
     "SQLiteRepository",
     "MessageORM",
     "get_repository",
+    "set_repository",
+    "reset_repository",
 ]

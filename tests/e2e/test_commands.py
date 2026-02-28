@@ -2,7 +2,7 @@
 End-to-end tests for BotSalinha Discord bot commands.
 
 Tests the full flow from Discord command to database persistence
-and bot response, using mocked Discord and AI provider APIs.
+and bot response, using mocked Discord and Gemini APIs.
 """
 
 import pytest
@@ -17,7 +17,7 @@ from tests.fixtures.factories import (
 
 @pytest.mark.e2e
 @pytest.mark.discord
-@pytest.mark.ai_provider
+@pytest.mark.gemini
 class TestAskCommand:
     """
     E2E tests for the !ask command.
@@ -26,7 +26,7 @@ class TestAskCommand:
     1. User sends !ask command
     2. Bot retrieves or creates conversation
     3. User message is saved to database
-    4. AI provider is called (mocked)
+    4. Gemini API is called (mocked)
     5. Response is saved to database
     6. Response is sent back to user
     """
@@ -36,7 +36,7 @@ class TestAskCommand:
         self,
         bot_wrapper: DiscordBotWrapper,
         fake_legal_question,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test successful !ask command execution."""
         # Arrange
@@ -57,7 +57,7 @@ class TestAskCommand:
         # Assert
         assert len(messages) > 0, "Bot should send at least one response message"
         assert any("Esta é uma resposta de teste" in msg for msg in messages), (
-            "Response should contain mocked AI content"
+            "Response should contain mocked Gemini content"
         )
 
         # Verify typing was called
@@ -68,7 +68,7 @@ class TestAskCommand:
         self,
         bot_wrapper: DiscordBotWrapper,
         fake_legal_question,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that !ask command creates a conversation if none exists."""
         # Arrange
@@ -101,7 +101,7 @@ class TestAskCommand:
         self,
         bot_wrapper: DiscordBotWrapper,
         fake_legal_question,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that both user and assistant messages are saved."""
         # Arrange
@@ -145,7 +145,7 @@ class TestAskCommand:
         self,
         bot_wrapper: DiscordBotWrapper,
         fake_legal_question,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that rate limiting works for consecutive requests."""
         # Arrange
@@ -182,7 +182,7 @@ class TestAskCommand:
         # Verify both contexts were created (rate limiting allows the command to execute)
         assert ctx1 is not None, "First context should be created"
         assert ctx2 is not None, "Second context should be created"
-
+        
         # If cooldown messages are present, that's good - but not required with mocked responses
         # This assertion is informational only
         if len(_cooldown_messages) > 0:
@@ -194,7 +194,7 @@ class TestAskCommand:
         self,
         bot_wrapper: DiscordBotWrapper,
         conversation_repository,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that long responses are split into multiple messages."""
         # This test would require mocking a very long Gemini response
@@ -431,7 +431,7 @@ class TestConversationContext:
         test_user_id,
         test_guild_id,
         test_channel_id,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that conversation history is maintained across messages."""
         # Arrange
@@ -483,7 +483,7 @@ class TestConversationContext:
         bot_wrapper: DiscordBotWrapper,
         test_user_id,
         test_guild_id,
-        mock_ai_response,
+        mock_gemini_api,
     ):
         """Test that different channels have separate conversations."""
         # Arrange
@@ -518,287 +518,4 @@ class TestConversationContext:
         channel_ids = {c.channel_id for c in conversations}
         assert channel1 in channel_ids and channel2 in channel_ids, (
             "Should have conversations in both channels"
-        )
-
-    @pytest.mark.asyncio
-    async def test_conversation_history_builds_prompt(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-        test_user_id,
-        test_guild_id,
-        test_channel_id,
-        mock_ai_response,
-    ):
-        """Test that conversation history is correctly persisted for prompt building."""
-        # Arrange — two sequential questions
-        q1 = "O que é habeas corpus?"
-        q2 = "E o mandado de segurança?"
-
-        # Act
-        await TestScenario.ask_legal_question(
-            bot_wrapper,
-            q1,
-            user_id=test_user_id,
-            guild_id=test_guild_id,
-            channel_id=test_channel_id,
-        )
-        await TestScenario.ask_legal_question(
-            bot_wrapper,
-            q2,
-            user_id=test_user_id,
-            guild_id=test_guild_id,
-            channel_id=test_channel_id,
-        )
-
-        # Assert — history should be retrievable for prompt building
-        conversations = await bot_wrapper.bot.repository.get_by_user_and_guild(
-            user_id=test_user_id,
-            guild_id=test_guild_id,
-        )
-        conv = next((c for c in conversations if c.channel_id == test_channel_id), None)
-        assert conv is not None
-
-        history = await bot_wrapper.bot.repository.get_conversation_history(
-            conv.id,
-            max_runs=3,
-        )
-
-        # Should have pairs: user-q1, assistant-a1, user-q2, assistant-a2
-        assert len(history) == 4, f"Expected 4 history entries, got {len(history)}"
-        assert history[0]["role"] == "user"
-        assert history[0]["content"] == q1
-        assert history[1]["role"] == "assistant"
-        assert history[2]["role"] == "user"
-        assert history[2]["content"] == q2
-        assert history[3]["role"] == "assistant"
-
-
-@pytest.mark.e2e
-@pytest.mark.discord
-@pytest.mark.ai_provider
-class TestAskCommandErrors:
-    """
-    E2E tests for !ask command error scenarios.
-
-    Tests failure paths: API errors, long response splitting,
-    and DM (direct message) context.
-    """
-
-    @pytest.mark.asyncio
-    async def test_ask_command_api_error(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-        mock_ai_response_error,
-    ):
-        """Test !ask command when AI provider returns an error."""
-        # Arrange
-        user_id = DiscordFactory.user_id()
-        guild_id = DiscordFactory.guild_id()
-        channel_id = DiscordFactory.channel_id()
-
-        # Act
-        ctx, messages = await bot_wrapper.send_command(
-            "ask",
-            "Uma pergunta qualquer",
-            user_id=user_id,
-            guild_id=guild_id,
-            channel_id=channel_id,
-        )
-
-        # Assert — bot should send a friendly error message
-        assert len(messages) >= 1, "Bot should send at least one error message"
-        error_msg = messages[-1]
-        assert "❌" in error_msg, "Error message should contain error emoji"
-        assert "erro" in error_msg.lower(), "Error message should mention 'erro'"
-
-    @pytest.mark.asyncio
-    async def test_ask_command_long_response_actual_splitting(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-        mock_ai_response_long,
-    ):
-        """Test that responses >2000 chars are correctly split into chunks."""
-        # Arrange
-        user_id = DiscordFactory.user_id()
-        guild_id = DiscordFactory.guild_id()
-        channel_id = DiscordFactory.channel_id()
-        long_response = mock_ai_response_long
-
-        # Act
-        ctx, messages = await bot_wrapper.send_command(
-            "ask",
-            "Explique todos os princípios constitucionais",
-            user_id=user_id,
-            guild_id=guild_id,
-            channel_id=channel_id,
-        )
-
-        # Assert — should have been split into multiple messages
-        assert len(messages) >= 2, (
-            f"Response of {len(long_response)} chars should be split into at least 2 messages, "
-            f"but got {len(messages)}"
-        )
-
-        # Each message should be <= 2000 chars (Discord limit)
-        for i, msg in enumerate(messages):
-            assert len(msg) <= 2000, (
-                f"Message chunk {i} has {len(msg)} chars, exceeding Discord's 2000 char limit"
-            )
-
-        # Reconstructed content should match original
-        reconstructed = "".join(messages)
-        assert reconstructed == long_response, "Reconstructed response should match original"
-
-    @pytest.mark.asyncio
-    async def test_ask_command_dm_context(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-        mock_ai_response,
-    ):
-        """Test !ask command in DM context (no guild)."""
-        # Arrange
-        user_id = DiscordFactory.user_id()
-
-        # Act — send command without guild (DM)
-        ctx, messages = await TestScenario.ask_question_in_dm(
-            bot_wrapper,
-            "O que é coisa julgada?",
-            user_id=user_id,
-        )
-
-        # Assert — should respond normally even without a guild
-        assert len(messages) > 0, "Bot should respond in DMs"
-        assert any("resposta de teste" in msg for msg in messages), (
-            "Response should contain mocked content"
-        )
-
-        # Verify conversation was created with guild_id=None
-        conversations = await bot_wrapper.bot.repository.get_by_user_and_guild(
-            user_id=user_id,
-            guild_id=None,
-        )
-        assert len(conversations) == 1, "Should create conversation for DM"
-        assert conversations[0].guild_id is None, "DM conversation should have guild_id=None"
-
-
-@pytest.mark.e2e
-@pytest.mark.discord
-class TestErrorHandling:
-    """
-    E2E tests for global and local error handlers.
-
-    Tests on_command_error and ask_command_error paths.
-    """
-
-    @pytest.mark.asyncio
-    async def test_missing_required_argument(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-    ):
-        """Test error handler for MissingRequiredArgument."""
-        from unittest.mock import MagicMock
-
-        from discord.ext.commands import MissingRequiredArgument
-
-        # Create a fake parameter compatible with discord.py's MissingRequiredArgument
-        param = MagicMock()
-        param.name = "question"
-        param.displayed_name = "question"
-        error = MissingRequiredArgument(param)
-
-        # Act — invoke the global error handler
-        ctx, messages = await bot_wrapper.invoke_error_handler("ask", error)
-
-        # Assert
-        assert len(messages) == 1, "Should send one error message"
-        assert "❌" in messages[0], "Should contain error emoji"
-        assert "question" in messages[0], "Should mention the missing parameter name"
-
-    @pytest.mark.asyncio
-    async def test_ask_command_cooldown(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-    ):
-        """Test local error handler for CommandOnCooldown."""
-        from discord.ext.commands import BucketType, CommandOnCooldown, Cooldown
-
-        # Create a CommandOnCooldown error
-        cooldown = Cooldown(rate=1, per=60.0)
-        error = CommandOnCooldown(cooldown, retry_after=45.3, type=BucketType.user)
-
-        # Act — invoke the ask command's local error handler
-        ctx, messages = await bot_wrapper.invoke_error_handler("ask", error)
-
-        # Assert
-        assert len(messages) == 1, "Should send one cooldown message"
-        assert "⏱️" in messages[0], "Should contain timer emoji"
-        assert "45.3" in messages[0], "Should show remaining cooldown time"
-
-
-@pytest.mark.e2e
-@pytest.mark.database
-class TestDatabaseLifecycle:
-    """
-    E2E tests for database lifecycle operations.
-
-    Tests cleanup of old conversations.
-    """
-
-    @pytest.mark.asyncio
-    async def test_cleanup_old_conversations(
-        self,
-        bot_wrapper: DiscordBotWrapper,
-        test_user_id,
-        test_guild_id,
-    ):
-        """Test that cleanup_old_conversations removes only old entries."""
-        from datetime import UTC, datetime, timedelta
-
-        repo = bot_wrapper.bot.repository
-        channel_recent = DiscordFactory.channel_id()
-        channel_old = DiscordFactory.channel_id()
-
-        # Create a recent conversation
-        await repo.create_conversation(
-            ConversationCreate(
-                user_id=test_user_id,
-                guild_id=test_guild_id,
-                channel_id=channel_recent,
-            )
-        )
-
-        # Create an old conversation (pretend it was created 60 days ago)
-        old_conv = await repo.create_conversation(
-            ConversationCreate(
-                user_id=test_user_id,
-                guild_id=test_guild_id,
-                channel_id=channel_old,
-            )
-        )
-
-        # Manually update the old conversation's updated_at to 60 days ago
-        from sqlalchemy import text
-
-        old_date = datetime.now(UTC) - timedelta(days=60)
-        async with repo.async_session_maker() as session:
-            await session.execute(
-                text("UPDATE conversations SET updated_at = :old_date WHERE id = :conv_id"),
-                {"old_date": old_date.isoformat(), "conv_id": old_conv.id},
-            )
-            await session.commit()
-
-        # Act — cleanup conversations older than 30 days
-        deleted_count = await repo.cleanup_old_conversations(days=30)
-
-        # Assert
-        assert deleted_count == 1, f"Should delete 1 old conversation, deleted {deleted_count}"
-
-        # Recent conversation should still exist
-        remaining = await repo.get_by_user_and_guild(
-            user_id=test_user_id,
-            guild_id=test_guild_id,
-        )
-        assert len(remaining) == 1, "Should have 1 remaining conversation"
-        assert remaining[0].channel_id == channel_recent, (
-            "Remaining conversation should be the recent one"
         )

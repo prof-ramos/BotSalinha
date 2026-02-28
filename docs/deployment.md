@@ -1,279 +1,234 @@
-# Guia de Deploy do BotSalinha
+# BotSalinha Deployment Guide
 
-## Início Rápido (Docker)
+## Quick Start (Docker)
 
-### Pré-requisitos
+### Prerequisites
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
 
-### Configuração Inicial
+### Initial Setup
 
-1. **Clone o repositório**
-
+1. **Clone the repository**
    ```bash
    git clone <repository-url>
    cd BotSalinha
    ```
 
-2. **Crie o arquivo de ambiente**
-
+2. **Create environment file**
    ```bash
    cp .env.example .env
    ```
 
-3. **Edite o `.env` com suas credenciais**
-
+3. **Edit `.env` with your credentials**
    ```env
    DISCORD_BOT_TOKEN=your_discord_bot_token_here
-   OPENAI_API_KEY=your_openai_api_key_here
-   # Opcional ao usar provider Google:
-   # GOOGLE_API_KEY=your_google_api_key_here
+   GOOGLE_API_KEY=your_google_api_key_here
    ```
 
-   > O provider/modelo ativo é definido no `config.yaml`.
-
-4. **Build e start do bot**
-
+4. **Build and start the bot**
    ```bash
    docker-compose up -d
    ```
 
-5. **Verifique os logs**
-
+5. **Check logs**
    ```bash
    docker-compose logs -f
    ```
 
-## Desenvolvimento Local (sem Docker)
+## Local Development (without Docker)
 
-### Pré-requisitos
+### Prerequisites
 
 - Python 3.12+
-- uv
+- uv package manager
 
-## Configuração Local (Sem Docker)
+### Setup
 
-1. **Instale dependências**
-
+1. **Install dependencies**
    ```bash
    uv sync
    ```
 
-2. **Crie o arquivo de ambiente**
-
+2. **Create environment file**
    ```bash
    cp .env.example .env
-   # Edite o .env com suas credenciais
+   # Edit .env with your credentials
    ```
 
-3. **Execute o bot**
-
+3. **Run the bot**
    ```bash
    uv run bot.py
    ```
 
-## Operações com Docker
+## Docker Operations
 
-### Build da imagem
-
+### Building the image
 ```bash
 docker-compose build
 ```
 
-### Subir o bot
-
+### Starting the bot
 ```bash
-# Desenvolvimento
+# Development
 docker-compose up -d
 
-# Produção
+# Production
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Parar o bot
-
+### Stopping the bot
 ```bash
 docker-compose down
 ```
 
-### Ver logs
-
+### Viewing logs
 ```bash
-# Seguir logs
+# Follow logs
 docker-compose logs -f
 
-# Últimas 100 linhas
+# Last 100 lines
 docker-compose logs --tail=100
 
-# Serviço específico
+# Specific service
 docker-compose logs -f botsalinha
 ```
 
-### Reiniciar o bot
-
+### Restarting the bot
 ```bash
 docker-compose restart
 ```
 
-### Atualizar o bot
-
+### Updating the bot
 ```bash
-# Buscar código mais recente
+# Pull latest code
 git pull
 
-# Rebuild e restart
+# Rebuild and restart
 docker-compose up -d --build
 ```
 
-## Operações de Banco
+## Database Operations
 
-### Rodar migrações
-
+### Running migrations
 ```bash
 docker-compose exec botsalinha uv run alembic upgrade head
 ```
 
-### Criar backup
-
+### Creating a backup
 ```bash
-# Usando script de backup
+# Using the backup script
 docker-compose exec botsalinha python scripts/backup.py backup
 
-# Ou copiando arquivo do banco
+# Or copy the database file
 docker cp botsalinha:/app/data/botsalinha.db ./backups/
 ```
 
-### Listar backups
-
+### Listing backups
 ```bash
 docker-compose exec botsalinha python scripts/backup.py list
 ```
 
-### Restaurar backup
-
+### Restoring from backup
 ```bash
 docker-compose exec botsalinha python scripts/backup.py restore --restore-from /app/backups/botsalinha_backup_20260225_120000.db
 ```
 
-## Monitoramento
+## Monitoring
 
 ### Health check
-
 ```bash
 docker-compose ps
 ```
 
-### Uso de recursos
-
+### Resource usage
 ```bash
 docker stats botsalinha
 ```
 
-### Localização do banco
-
-- **Docker**: `./data/botsalinha.db` (volume montado)
+### Database location
+- **Docker**: `./data/botsalinha.db` (mounted volume)
 - **Local**: `data/botsalinha.db`
 
-## Solução de Problemas
+## Troubleshooting
 
-### Bot não responde aos comandos
+### Bot doesn't respond to commands
 
-1. Verifique se o bot está online
-
+1. Check if bot is online
    ```bash
    docker-compose logs | grep "bot_ready"
    ```
 
-2. Verifique token do Discord
-
+2. Verify Discord token
    ```bash
    docker-compose exec botsalinha env | grep DISCORD_BOT_TOKEN
    ```
 
-3. Confirme `MESSAGE_CONTENT Intent` habilitado no Discord Developer Portal
+3. Check MESSAGE_CONTENT Intent is enabled in Discord Developer Portal
 
-### Erros de conexão com banco
+### Database connection errors
 
-1. Verifique se o diretório de dados existe
-
+1. Check if data directory exists
    ```bash
    ls -la data/
    ```
 
-2. Verifique permissões
-
+2. Verify permissions
    ```bash
-   chmod 750 data/
+   chmod 777 data/
    ```
 
-   > **Nota:** Se o bot roda como um usuário específico (ex: dentro do Docker),
-   > ajuste a propriedade do diretório para garantir que apenas o processo
-   > correto tenha acesso:
-   >
-   > ```bash
-   > chown -R 1000:1000 data/
-   > ```
-
-3. Reinicie o bot
-
+3. Restart the bot
    ```bash
    docker-compose restart
    ```
 
-### Problemas de rate limit
+### Rate limiting issues
 
-1. Verifique configurações no `.env`
-
+1. Check rate limit settings in `.env`
    ```env
    RATE_LIMIT_REQUESTS=10
    RATE_LIMIT_WINDOW_SECONDS=60
    ```
 
-2. Reinicie com novas configurações
-
+2. Restart with new settings
    ```bash
    docker-compose up -d
    ```
 
-## Boas Práticas de Segurança
+## Security Best Practices
 
-1. **Nunca commitar `.env`** (já está no `.gitignore`)
+1. **Never commit `.env` file** - Already in `.gitignore`
 
-2. **Use token forte de Discord** gerado no Developer Portal
+2. **Use strong Discord bot token** - Generate in Discord Developer Portal
 
-3. **Restrinja permissões do bot** ao mínimo necessário
+3. **Restrict bot permissions** - Only grant necessary permissions in Discord
 
-4. **Faça backups regulares** com automação no `docker-compose.prod.yml`
+4. **Regular backups** - Set up automated backups via docker-compose.prod.yml
 
-5. **Mantenha dependências atualizadas**
-
+5. **Keep dependencies updated**
    ```bash
    docker-compose build --no-cache
    ```
 
-## Considerações de Produção
+## Production Considerations
 
-1. **Use o compose de produção**
-
+1. **Use production compose file**
    ```bash
    docker-compose -f docker-compose.prod.yml up -d
    ```
 
-2. **Configure rotação de logs** (já previsto no `docker-compose.prod.yml`)
+2. **Set up log rotation** - Configured in docker-compose.prod.yml
 
-3. **Monitore espaço em disco** (banco cresce com o tempo)
+3. **Monitor disk space** - Database grows over time
 
-4. **Faça limpeza periódica** (conversas antigas são removidas automaticamente)
+4. **Regular cleanup** - Old conversations are automatically cleaned up
 
-5. **Defina estratégia de backup** (backups diários em produção)
+5. **Backup strategy** - Daily automated backups in production
 
-## Suporte
+## Support
 
-Para dúvidas e incidentes:
-
-- Verifique logs: `docker-compose logs -f`
-- Consulte [PRD.md](../PRD.md) para contexto de produto
-- Consulte [README.md](../README.md) para troubleshooting geral
-- Siga [docs/operations.md](operations.md) para runbook e escalonamento
-- Consulte [docs/DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) para fluxo de desenvolvimento
+For issues and questions:
+- Check logs: `docker-compose logs -f`
+- Review PRD.md for feature documentation
+- Check troubleshooting section in README.md
