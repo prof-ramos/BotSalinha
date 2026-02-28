@@ -353,7 +353,7 @@ class LoadTestRunner:
         async def spike_user(user_id: str, is_spike: bool) -> list[QueryMetrics]:
             """Usuário que executa durante o pico."""
             metrics = []
-            generator = LegalWorkloadGenerator(seed=int(user_id.split("_")[1]))
+            generator = LegalWorkloadGenerator(seed=int(user_id.split("_")[-1]))
 
             # Spike users wait for event
             if is_spike:
@@ -431,11 +431,16 @@ class LoadTestRunner:
         # Wait for all to complete
         user_results = await asyncio.gather(*all_tasks, return_exceptions=True)
 
-        # Collect metrics
-        for result in user_results:
+        # Collect metrics - log any exceptions
+        import logging
+        logger = logging.getLogger(__name__)
+        for i, result in enumerate(user_results):
             if isinstance(result, Exception):
-                continue
-            query_metrics.extend(result)
+                logger.error(f"Task {i} failed: {type(result).__name__}: {result}")
+            elif result is None:
+                logger.warning(f"Task {i} returned None")
+            else:
+                query_metrics.extend(result)
 
         end_time = time.time()
 

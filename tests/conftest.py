@@ -262,15 +262,19 @@ def mock_ai_response():
     """
     Mock the AI agent response for testing.
 
-    This fixture mocks AgentWrapper.generate_response to return a predictable response
+    This fixture mocks AgentWrapper response methods to return a predictable response
     without making actual API calls to the active AI provider.
     """
     from unittest.mock import AsyncMock, patch
 
     mock_response = "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
 
-    with patch(
-        "src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)
+    with (
+        patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)),
+        patch(
+            "src.core.agent.AgentWrapper.generate_response_with_rag",
+            new=AsyncMock(return_value=(mock_response, None)),
+        ),
     ):
         yield
 
@@ -286,9 +290,15 @@ def mock_ai_response_error():
 
     from src.utils.errors import APIError
 
-    with patch(
-        "src.core.agent.AgentWrapper.generate_response",
-        new=AsyncMock(side_effect=APIError("AI provider unavailable", status_code=503)),
+    with (
+        patch(
+            "src.core.agent.AgentWrapper.generate_response",
+            new=AsyncMock(side_effect=APIError("AI provider unavailable", status_code=503)),
+        ),
+        patch(
+            "src.core.agent.AgentWrapper.generate_response_with_rag",
+            new=AsyncMock(side_effect=APIError("AI provider unavailable", status_code=503)),
+        ),
     ):
         yield
 
@@ -315,9 +325,15 @@ def mock_ai_response_long():
         "fundamenta toda a atuação estatal no Brasil."
     )
 
-    with patch(
-        "src.core.agent.AgentWrapper.generate_response",
-        new=AsyncMock(return_value=long_response),
+    with (
+        patch(
+            "src.core.agent.AgentWrapper.generate_response",
+            new=AsyncMock(return_value=long_response),
+        ),
+        patch(
+            "src.core.agent.AgentWrapper.generate_response_with_rag",
+            new=AsyncMock(return_value=(long_response, None)),
+        ),
     ):
         yield long_response
 

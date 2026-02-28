@@ -34,7 +34,7 @@ class EmbeddingService:
         """
         settings = get_settings()
 
-        self._api_key = api_key or settings.openai.api_key
+        self._api_key = api_key or settings.get_openai_api_key()
         if not self._api_key:
             msg = "OpenAI API key not configured"
             log.error(LogEvents.API_ERRO_GERAR_RESPOSTA, error=msg)

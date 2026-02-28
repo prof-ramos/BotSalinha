@@ -507,8 +507,9 @@ def generate_performance_chart(data: list[dict[str, str]]) -> str:
         prompt = row.get("prompt", "Unknown")[:40]
         duration = float(row.get("duration_seconds", 0))
         status = row.get("status", "unknown")
-        used_rag = row.get("used_rag", "")
-        rag = "RAG" if used_rag in ("true", "1", True) else "No RAG"
+        used_rag_raw = row.get("used_rag", "")
+        used_rag = str(used_rag_raw).strip().lower()
+        rag = "RAG" if used_rag in {"true", "1", "yes", "y", "sim"} else "No RAG"
 
         if status != "success":
             continue

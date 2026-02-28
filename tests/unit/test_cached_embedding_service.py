@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.rag import CachedEmbeddingService, LRUCache
+from src.rag.services.embedding_service import EMBEDDING_DIM
 
 
 @pytest.mark.unit
@@ -132,11 +132,15 @@ async def test_cached_embedding_service_cache_key_generation():
 
 
 @pytest.mark.unit
-def test_cached_embedding_service_empty_text():
-    """Teste: Texto vazio retorna chave de cache vazia."""
-    # Texto vazio gera chave de cache consistente
-    empty_key = hashlib.md5(b"").hexdigest()
-    assert empty_key == "d41d8cd98f00b204e9800998ecf8427e"
+@pytest.mark.asyncio
+async def test_cached_embedding_service_empty_text():
+    """Teste: Texto vazio retorna embedding zerado com dimensão correta."""
+    service = CachedEmbeddingService(api_key="test-key", cache_size=10)
+
+    embedding = await service.embed_text("")
+
+    assert len(embedding) == EMBEDDING_DIM
+    assert all(value == 0.0 for value in embedding)
 
 
 @pytest.mark.unit

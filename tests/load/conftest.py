@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -104,7 +105,6 @@ async def rag_query_service_with_mock_data(
     for load testing, avoiding the need for real embeddings.
     """
     import json
-    import random
 
     from src.rag.storage.vector_store import serialize_embedding
 
@@ -128,8 +128,7 @@ async def rag_query_service_with_mock_data(
     chunk_count = 0
 
     for doc in documents:
-
-        for j in range(chunks_per_doc):
+        for _ in range(doc.chunk_count):
             # Create realistic metadata
             meta = {
                 "documento": doc.nome,
@@ -176,8 +175,8 @@ async def rag_query_service_with_mock_data(
         import hashlib
 
         seed = int(hashlib.md5(text.encode()).hexdigest()[:8], 16)
-        random.seed(seed)
-        embedding = [random.uniform(-0.1, 0.1) for _ in range(1536)]
+        rng = random.Random(seed)
+        embedding = [rng.uniform(-0.1, 0.1) for _ in range(1536)]
         norm = sum(x**2 for x in embedding) ** 0.5
         return [x / norm for x in embedding] if norm > 0 else embedding
 
@@ -208,9 +207,5 @@ def load_test_report_dir(tmp_path):
 # Configure pytest markers for load tests
 def pytest_configure(config):
     """Add custom marker for load tests."""
-    config.addinivalue_line(
-        "markers", "load: Load and performance tests (may take > 1 minute)"
-    )
-    config.addinivalue_line(
-        "markers", "rag_load: RAG-specific load tests"
-    )
+    config.addinivalue_line("markers", "load: Load and performance tests (may take > 1 minute)")
+    config.addinivalue_line("markers", "rag_load: RAG-specific load tests")

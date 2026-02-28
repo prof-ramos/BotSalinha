@@ -162,9 +162,9 @@ async def check_quality(
             writer = csv.DictWriter(f, fieldnames=["metric", "value"])
             writer.writeheader()
             for conf_level, percentage in confidence_dist.items():
-                writer.writerow(
-                    {"metric": f"confidence_{conf_level}_percent", "value": f"{percentage:.1f}"}
-                )
+                metric = f"confidence_{conf_level}_percent"
+                row = {"metric": metric, "value": f"{percentage:.1f}"}
+                writer.writerow(row)
             writer.writerow(
                 {"metric": "avg_similarity_aggregated", "value": f"{mean_similarity:.4f}"}
             )

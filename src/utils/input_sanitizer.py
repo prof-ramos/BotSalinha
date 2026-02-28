@@ -27,9 +27,9 @@ MAX_CONSECUTIVE_SPECIAL: Final[int] = 3
 # Minimum ratio of visible characters to total (to detect invisible flooding)
 MIN_VISIBLE_RATIO: Final[float] = 0.3
 
-# Control character ranges (C0 and C1 control sets, excluding \t, \n, \r)
+# Control character ranges (C0 and C1 control sets, excluding \t, \n)
 _CONTROL_CHARS = {
-    *(chr(i) for i in range(0, 32) if i not in (9, 10, 13)),  # C0 (except \t, \n, \r)
+    *(chr(i) for i in range(0, 32) if i not in (9, 10)),  # C0 (except \t, \n)
     *(chr(i) for i in range(0x80, 0x9F)),  # C1 control characters
     chr(0x7F),  # Delete
 }

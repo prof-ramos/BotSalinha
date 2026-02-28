@@ -2,15 +2,19 @@
 
 import contextlib
 from collections.abc import AsyncIterator
+from typing import Union
 
 from ..config.settings import settings
-from .repository import Repository
+from .repository import ConversationRepository, MessageRepository
 from .sqlite_repository import SQLiteRepository
 from .supabase_repository import SupabaseRepository
 
 
+RepositoryType = Union[ConversationRepository, MessageRepository]
+
+
 @contextlib.asynccontextmanager
-async def create_repository() -> AsyncIterator[Repository]:
+async def create_repository() -> AsyncIterator[RepositoryType]:
     """Create and initialize a repository with lifecycle management.
 
     If Supabase URL and Key are configured, it initializes a SupabaseRepository.

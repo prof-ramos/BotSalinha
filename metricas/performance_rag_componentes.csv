@@ -1,7 +1,7 @@
 text_snippet,char_length,embedding_time_ms,search_time_ms,chunks_found
-o que é estágio probatório?,27,677.42,16.04,5
-quais os requisitos para ser presidente da repúbli,53,427.72,2.61,5
-como funciona a licença maternidade?,36,478.74,9.77,5
-"princípios da administração pública, impessoalidad",65,465.24,3.36,5
-uma frase curta.,16,476.7,10.69,0
-um texto muito mais longo para avaliar se o tempo ,201,498.52,6.81,0
+o que é estágio probatório?,27,568.26,11.28,5
+quais os requisitos para ser presidente da repúbli,53,774.97,3.17,5
+como funciona a licença maternidade?,36,358.54,5.26,5
+"princípios da administração pública, impessoalidad",65,293.09,2.66,5
+uma frase curta.,16,308.76,3.27,0
+um texto muito mais longo para avaliar se o tempo ,201,446.35,3.98,0

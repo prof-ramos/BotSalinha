@@ -385,12 +385,12 @@ class Settings(BaseSettings):
         return None
 
     def get_google_api_key(self) -> str | None:
-        """Get the Google API key."""
-        return self.google.api_key
+        """Get the Google API key with legacy env fallback."""
+        return self.google.api_key or os.getenv("GOOGLE_API_KEY")
 
     def get_openai_api_key(self) -> str | None:
-        """Get the OpenAI API key."""
-        return self.openai.api_key
+        """Get the OpenAI API key with legacy env fallback."""
+        return self.openai.api_key or os.getenv("OPENAI_API_KEY")
 
     def get_ai_api_key(self, provider: str = "openai") -> str | None:
         """
