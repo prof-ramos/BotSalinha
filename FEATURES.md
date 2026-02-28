@@ -1,87 +1,125 @@
-# 🛠️ Features
+# Features
 
 Este documento cataloga as funcionalidades do BotSalinha, detalhando seu estado atual, capacidades técnicas e critérios de verificação.
 
-## 📊 Visão Geral de Estabilidade
+## Visão Geral de Estabilidade
 
-| Funcionalidade           | Estado       | Categoria | Descrição                                           |
-| :----------------------- | :----------- | :-------- | :-------------------------------------------------- |
-| **Comando !ask**         | ✅ Estável   | Core      | Interface principal de conversação via Discord      |
-| **Multi-Model Provider** | ✅ Estável   | Core      | Suporte a OpenAI (padrão) e Google Gemini           |
-| **Histórico Contextual** | ✅ Estável   | Memória   | Retenção de até 3 pares de mensagens via SQLite     |
-| **Rate Limiting**        | ✅ Estável   | Segurança | Algoritmo Token Bucket para proteção da API         |
-| **CLI Developer**        | 🛠️ Beta      | Tooling   | Interface rica para gestão de DB, Sessões e Prompts |
-| **RAG Local**            | 🔭 Planejado | IA/RAG    | Busca semântica em ~1.000 documentos jurídicos      |
-| **Citação de Fontes**    | 🔭 Planejado | IA/RAG    | Referenciamento automático de leis e jurisprudência |
+| Funcionalidade             | Estado       | Categoria | Descrição                                                          |
+| :------------------------- | :----------- | :-------- | :----------------------------------------------------------------- |
+| **Comando !ask**           | ✅ Estável   | Core      | Interface principal de conversação via Discord                     |
+| **Canal IA / DM**          | ✅ Estável   | Core      | Resposta automática em canal dedicado e mensagens diretas          |
+| **Multi-Model Provider**   | ✅ Estável   | Core      | Suporte a OpenAI (padrão) e Google Gemini via `config.yaml`        |
+| **Histórico Contextual**   | ✅ Estável   | Memória   | Retenção de até 3 pares de mensagens via SQLite persistente        |
+| **Rate Limiting**          | ✅ Estável   | Segurança | Algoritmo Token Bucket por usuário/guild                           |
+| **RAG Jurídico**           | ✅ Estável   | IA/RAG    | Busca semântica em documentos (CF/88, Lei 8.112/90) via embeddings |
+| **Citação de Fontes**      | ✅ Estável   | IA/RAG    | Referência automática a artigos, incisos e parágrafos              |
+| **Nível de Confiança RAG** | ✅ Estável   | IA/RAG    | Indicadores ALTA/MÉDIA/BAIXA/SEM_RAG por similaridade cosseno      |
+| **Deduplicação SHA-256**   | ✅ Estável   | IA/RAG    | Rejeição de documentos duplicados via hash de arquivo              |
+| **DatabaseGuard**          | ✅ Estável   | Dados     | Backup automático + integridade SQLite a cada inicialização        |
+| **CLI Developer**          | ✅ Estável   | Tooling   | Interface rica para DB, sessões, RAG e prompts                     |
+| **MCP Integration**        | ✅ Estável   | Tooling   | Suporte a servidores MCP (stdio/sse/streamable-http)               |
+| **Dashboard Analytics**    | 🔭 Planejado | Futuro    | Interface web para visualizar uso, tokens e tópicos                |
 
 ---
 
-## 💎 Execução Core
+## Execução Core
 
 ### 1. Comando `!ask`
 
-- **Descrição**: Processa perguntas em linguagem natural sobre direito brasileiro.
+- **Trigger**: `!ask <pergunta>`
 - **Capacidades**:
-  - Respostas formatadas em Markdown.
-  - Injeção de data/hora no contexto.
-  - Suporte a mensagens longas (com divisão automática no Discord).
-- **Verificação**: `uv run pytest tests/test_bot.py`
+  - Respostas formatadas em Markdown com divisão automática (limite Discord 2.000 chars)
+  - Injeção de data/hora no contexto
+  - Histórico de até 3 pares de mensagens (persistente em SQLite)
+  - Prompt aumentado com contexto RAG quando relevante
+- **Verificação**: `uv run pytest tests/unit -k ask`
 
-### 2. Multi-Model (Agno Framework)
+### 2. Modos de Interação
 
-- **Descrição**: Abstração que permite troca rápida de LLMs.
-- **Provedores**:
-  - `openai`: GPT-4o-mini (padrão).
-  - `google`: Gemini 2.0 Flash.
-- **Configuração**: Definido via `config.yaml`.
-- **Verificação**: `uv run botsalinha config check`
+| Modo               | Trigger                                 | Configuração                     |
+| ------------------ | --------------------------------------- | -------------------------------- |
+| Comandos prefixados | `!ask`, `!buscar`, `!fontes`, etc.    | Nenhuma                          |
+| Canal IA           | Qualquer mensagem no canal configurado  | `DISCORD__CANAL_IA_ID` no `.env` |
+| DM automático      | Mensagem direta para o bot             | Nenhuma (sempre ativo)           |
 
----
+### 3. Multi-Model (Agno Framework)
 
-## 🧠 Inteligência e Contexto
-
-### 1. Persistência de Histórico
-
-- **Tecnologia**: SQLAlchemy + SQLite.
-- **Capacidade**: Mantém o contexto de conversas mesmo após reinicialização do bot.
-- **Configuração**: `HISTORY_RUNS` no `.env`.
-
-### 2. Rate Limiter (Token Bucket)
-
-- **Descrição**: Previne custos excessivos e abusos.
-- **Capacidade**: 10 requisições por minuto (configurável).
-- **Verificação**: `tests/test_middleware.py`.
+- Provedores: `openai` (GPT-4o-mini, padrão) e `google` (Gemini 2.0 Flash)
+- Provider definido exclusivamente em `config.yaml` → `model.provider`
+- Credenciais em `.env` (`OPENAI_API_KEY` / `GOOGLE_API_KEY`)
+- Falha rápida no startup se API key do provider ativo estiver ausente
 
 ---
 
-## 🔭 Próximas Features (Future Features)
+## RAG — Retrieval-Augmented Generation
 
-### 1. 📚 RAG Local (Retrieval-Augmented Generation)
+### Comandos Discord
 
-- **Status**: Planejado (Q2 2026).
-- **Objetivo**: Permitir que o bot responda com base em documentos internos (PDF/TXT) sem enviá-los para um Vector DB externo.
-- **Stack Prevista**:
-  - ChromaDB (Local).
-  - Sentence Transformers (`multilingual-e5-large`).
-- **Capacidade**: ~1.000 documentos em 2-4GB RAM.
+| Comando              | Descrição                                                                  |
+| -------------------- | -------------------------------------------------------------------------- |
+| `!buscar <query>`    | Busca semântica nos documentos indexados                                   |
+| `!buscar <q> <tipo>` | Busca filtrada: `artigo`, `jurisprudencia`, `questao`, `nota`, `todos`     |
+| `!fontes`            | Lista documentos indexados com contagem de chunks                          |
+| `!reindexar`         | Reconstrói o índice RAG completo (apenas admin)                            |
 
-### 2. 🏛️ Citação de Fontes Jurídicas
+### Documentos Indexados
 
-- **Status**: Planejado.
-- **Objetivo**: Garantir que cada resposta mencione o artigo da lei ou o número do processo correspondente.
-- **Mecanismo**: Metadados estruturados no RAG.
+| Documento           | Chunks | Tokens |
+| ------------------- | ------ | ------ |
+| CF/88 (até EC 138)  | 687    | ~303K  |
+| Lei 8.112/90        | 88     | ~41K   |
 
-### 3. 📊 Dashboard de Analytics
+### Pipeline
 
-- **Status**: Planejado.
-- **Objetivo**: Interface web para visualizar volume de uso, tokens gastos e tópicos mais perguntados.
+1. **Ingestão**: `DOCXParser` → `ChunkExtractor` (max 500 tokens, overlap 50) → `MetadataExtractor` → `EmbeddingService` (OpenAI `text-embedding-3-small`) → SQLite BLOB (float32, 1536 dims)
+2. **Consulta**: `embed_text(query)` → `cosine_similarity` em Python → top-K chunks → `ConfiancaCalculator` → `RAGContext` → prompt aumentado
+
+### Nível de Confiança
+
+| Nível   | Threshold avg similarity | Comportamento              |
+| ------- | ------------------------ | -------------------------- |
+| ALTA    | ≥ 0.85                   | Resposta com fontes        |
+| MÉDIA   | ≥ 0.70                   | Resposta parcial           |
+| BAIXA   | ≥ 0.60                   | Aviso de baixa certeza     |
+| SEM_RAG | < 0.60 ou sem resultado  | Conhecimento geral da IA   |
+
+> 📋 Schema técnico completo: [`docs/rag_schema.md`](docs/rag_schema.md)
 
 ---
 
-## 📝 Como testar uma Feature?
+## Dados e Segurança
+
+### DatabaseGuard
+
+- Backup automático no startup em `data/backups/` (mantém 5 mais recentes)
+- `PRAGMA integrity_check` a cada inicialização
+- Proteção contra corrupção com instrução de restauração
+
+### Rate Limiter (Token Bucket)
+
+- 10 requisições/minuto por usuário (configurável via `.env`)
+- Proteção contra abuso e custos excessivos de API
+
+---
+
+## Observabilidade
+
+- Logs estruturados JSON via `structlog` com correlation IDs
+- Eventos RAG rastreáveis: `rag_ingestion_started`, `rag_busca_iniciada`, `rag_confidence_calculada`
+- Scripts de métricas em `metricas/` (qualidade, performance, RAG, acesso)
+
+---
+
+## Como Testar uma Feature?
 
 Cada feature nova deve acompanhar:
 
-1. Um teste unitário em `tests/`.
+1. Um teste unitário em `tests/unit/`.
 2. Uma entrada neste `FEATURES.md`.
 3. Atualização no `ROADMAP.md` caso altere a visão de longo prazo.
+
+```bash
+uv run pytest tests/unit -v
+uv run pytest tests/integration -v
+uv run pytest tests/e2e -v
+```

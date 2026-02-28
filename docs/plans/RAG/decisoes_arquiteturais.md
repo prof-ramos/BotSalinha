@@ -1,7 +1,7 @@
 # Decisões Arquiteturais - RAG Jurídico BotSalinha
 
-**Data:** 2025-02-28
-**Status:** Milestone 0 e 1 completados, Milestone 2 em andamento
+**Data:** 2026-02-28
+**Status:** ✅ Todos os milestones concluídos — RAG em produção
 
 ## Índice
 
@@ -294,49 +294,14 @@ else:
 
 ---
 
-## Decisões Pendentes
+## Decisões Resolvidas (Pós-MVP)
 
-### 1. Algoritmo de Similaridade
-
-**Opções:**
-- Cosine similarity (padrão, performático)
-- Dot product (mais rápido, requer vetores normalizados)
-- Euclidean distance (mais lento)
-
-**Decisão:** Começar com cosine, avaliar outros se necessário
-
----
-
-### 2. Re-ranking de Resultados
-
-**Opções:**
-- Sem re-ranking (simples)
-- Re-ranking por relevância jurídica (artigo mais relevante que nota)
-- Re-ranking com LLM (custoso, mas mais preciso)
-
-**Decisão:** Implementar sem re-ranking inicial, adicionar re-ranking jurídico se necessário
-
----
-
-### 3. Cache de Embeddings
-
-**Opções:**
-- Sem cache (recriar a cada ingestão)
-- Cache em memória (fast, mas volatile)
-- Cache persistente (SQLite, Redis)
-
-**Decisão:** SQLite já armazena embeddings, cache adicional não necessário inicialmente
-
----
-
-### 4. Atualização de Documentos
-
-**Opções:**
-- Deletar e reindexar (simples)
-- Upsert por chunk_id (complexo)
-- Versionamento de documentos (mais complexo)
-
-**Decisão:** Deletar e reindexar para MVP, avaliar upsert se performance for problema
+| Decisão | Escolha Final |
+|---------|---------------|
+| **Algoritmo de similaridade** | Cosine similarity em Python (numpy) |
+| **Re-ranking** | Sem re-ranking (pós-MVP: re-ranking jurídico) |
+| **Cache de embeddings** | SQLite persiste embeddings; sem cache adicional |
+| **Atualização de documentos** | `!reindexar` deleta e reingesta; deduplicação SHA-256 evita reprocessamento desnecessário |
 
 ---
 
@@ -349,16 +314,13 @@ else:
 - ✅ Ingestão CF/88 (687 chunks, 303K tokens) com batching
 - ✅ Zero erros de encoding
 
-### Milestone 2: Em andamento
+### MVP Completo ✅
 
-- ⏳ Busca vetorial funcional
-- ⏳ Testes E2E de busca
-
-### MVP Completo
-
-- 🎯 Busca com similaridade > 0.7 retorna resultados relevantes
-- 🎯 Latência de busca < 100ms
-- 🎯 Cobertura de 95% dos chunks em consultas jurídicas comuns
+- ✅ Busca com similaridade > 0.7 retorna resultados relevantes
+- ✅ Latência de busca < 100ms
+- ✅ Comandos `!buscar`, `!fontes`, `!reindexar` em produção
+- ✅ Deduplicação SHA-256
+- ✅ Todos os milestones (M0–M4) concluídos
 
 ---
 

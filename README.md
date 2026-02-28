@@ -619,6 +619,7 @@ Este projeto segue [Conventional Commits](https://www.conventionalcommits.org/):
 | ------------------------------------------------------------------------------------ | ---------------------------------- |
 | [docs/README.md](docs/README.md)                                                     | Índice da documentação             |
 | [docs/architecture.md](docs/architecture.md)                                         | Visão geral da arquitetura         |
+| [docs/rag_schema.md](docs/rag_schema.md)                                             | Schema técnico completo do RAG     |
 | [PRD.md](PRD.md)                                                                     | Documento de Requisitos do Produto |
 | [docs/api.md](docs/api.md)                                                           | Referência de comandos Discord     |
 | [docs/cli.md](docs/cli.md)                                                           | Interface CLI de Operações         |

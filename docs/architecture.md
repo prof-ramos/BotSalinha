@@ -62,7 +62,8 @@ This section provides a high-level overview of the project's directory and file 
 │       ├── 001_initial.py
 │       ├── 002_rename_metadata_to_meta_data.py
 │       ├── 20260228_0236_203b07bc02cc_add_rag_documents_and_chunks_tables.py
-│       └── 20260228_1000_add_embedding_column_to_rag_chunks.py
+│       ├── 20260228_1000_add_embedding_column_to_rag_chunks.py
+│       └── 20260228_1100_add_file_hash_to_rag_documents.py
 ├── data/                   # Persistent storage for SQLite database (git-ignored)
 │   └── documents/          # RAG documents directory
 ├── bot.py                  # Main entry point of the application
@@ -484,6 +485,7 @@ Stores metadata about indexed documents:
 | `arquivo_origem` | VARCHAR(500) | Source file path |
 | `chunk_count` | INTEGER | Number of chunks generated |
 | `token_count` | INTEGER | Total token count |
+| `file_hash` | VARCHAR(64) UNIQUE | SHA-256 hex digest for deduplication (nullable for legacy rows) |
 | `created_at` | DATETIME | Document ingestion timestamp |
 
 **Relationships:**

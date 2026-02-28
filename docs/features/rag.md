@@ -112,7 +112,7 @@ Recria o índice RAG do zero. Deleta todos chunks e documentos, então reingesta
 
 **Requisitos:**
 - Apenas o dono do bot pode executar
-- Documentos DOCX devem estar em `docs/plans/RAG/`
+- Documentos DOCX devem estar em `data/documents/`
 
 **Resposta:**
 ```
@@ -130,13 +130,13 @@ O índice RAG foi reconstruído com sucesso.
 ### Variáveis de Ambiente
 
 ```bash
-# .env
-RAG_ENABLED=true                    # Habilitar/desabilitar RAG
-RAG_TOP_K=5                         # Número de chunks a recuperar
-RAG_MIN_SIMILARITY=0.6              # Similaridade mínima aceitável
-RAG_MAX_CONTEXT_TOKENS=2000         # Máximo de tokens no contexto
-RAG_CONFIDENCE_THRESHOLD=0.70       # Limiar para confiança média
-OPENAI_API_KEY=sk-...               # Usada para embeddings
+# .env (formato aninhado com __ é obrigatório para RAG)
+RAG__ENABLED=true                    # Habilitar/desabilitar RAG
+RAG__TOP_K=5                         # Número de chunks a recuperar
+RAG__MIN_SIMILARITY=0.6              # Similaridade mínima aceitável
+RAG__MAX_CONTEXT_TOKENS=2000         # Máximo de tokens no contexto
+RAG__CONFIDENCE_THRESHOLD=0.70       # Limiar para confiança média
+OPENAI_API_KEY=sk-...                # Usada para embeddings
 ```
 
 ### Configuração YAML (`config.yaml`)
@@ -188,17 +188,17 @@ CHUNK_CONFIG = {
 
 Coloque o arquivo DOCX em:
 ```
-docs/plans/RAG/novo_documento.docx
+data/documents/novo_documento.docx
 ```
 
-### 3. Executar Reindexação
+### 3. Indexar via CLI ou Discord
 
 ```bash
-# Via Discord (admin)
-!reindexar
+# Via CLI
+uv run botsalinha ingest data/documents/novo_documento.docx --name "Nome do Documento"
 
-# Ou via CLI (futuro)
-uv run python -m src.rag.ingest
+# Via Discord (admin) — reindexar tudo
+!reindexar
 ```
 
 ### 4. Verificar
@@ -375,6 +375,7 @@ uv run pytest tests/integration/rag/test_recall.py -v
 
 ## Referências
 
-- [Plano de Implementação RAG](../../.omc/plans/rag-feature-implementation.md)
-- [Modelos RAG](../../src/models/rag_models.py)
+- [Schema Técnico Completo do RAG](../rag_schema.md)
+- [Modelos ORM RAG](../../src/models/rag_models.py)
 - [Configurações RAG](../../src/config/settings.py)
+- [Decisões Arquiteturais](../plans/RAG/decisoes_arquiteturais.md)

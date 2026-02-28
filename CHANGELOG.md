@@ -6,27 +6,46 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
-- Rodada de fortalecimento de documentação:
-  - `docs/api.md` com referência da interface por comandos Discord
-  - `docs/adr/ADR-001-multi-model-provider.md` para registrar decisão arquitetural
-  - `llms.txt` para indexação AI-friendly
+- `docs/rag_schema.md` — schema técnico completo do RAG (DDL, Pydantic, pipelines, thresholds, erros)
+- Deduplicação de documentos por SHA-256 (`file_hash` em `rag_documents`, `DuplicateDocumentError`)
+- Migração Alembic `add_file_hash_to_rag_documents` com índice único (permite NULL para retrocompatibilidade)
+- `DatabaseGuard` — backup automático + `PRAGMA integrity_check` a cada startup
 
 ### Alterado
 
-- `README.md`:
-  - Adicionado sumário para navegação mais rápida
-  - Adicionados links para referência de API, ADR, changelog e llms.txt
-  - Corrigida renderização da seção de roadmap
-  - Padronizados nomes de variáveis de ambiente
-- `docs/operations.md`:
-  - Adicionada seção de verificação rápida de saúde
-  - Substituídos links placeholders por URLs reais do GitHub
-- `docs/deployment.md`:
-  - Atualizados nomes de variáveis de ambiente para o contrato atual
-  - Adicionados links cruzados para operações e guia do desenvolvedor
-- `docs/DEVELOPER_GUIDE.md`:
-  - Adicionada tabela clara de variáveis de ambiente
-  - Atualizados nomes de variáveis para o formato simplificado (sem prefixo `BOTSALINHA_`)
+- `FEATURES.md` — RAG atualizado de "Planejado" → "Estável"; CLI de "Beta" → "Estável"
+- `ROADMAP.md` — RAG marcado como concluído; seção de stack obsoleta removida
+- `docs/plans/RAG/README.md` e `decisoes_arquiteturais.md` — milestones atualizados para concluídos
+
+### Removido
+
+- `implementation_plan.md` — plano de tarefa concluída
+- `docs/plans/alinhamento-multi-model.md` — plano 100% concluído
+- `docs/plans/RAGV1.md` — plano inicial substituído pela implementação real
+
+---
+
+## [2.1.0] - 2026-02-28
+
+### Adicionado
+
+- RAG completo com embeddings OpenAI `text-embedding-3-small` (1536 dims, BLOB float32)
+- Pipeline de ingestão DOCX: parse → chunking hierárquico (500 tokens, overlap 50) → metadata → embed → SQLite
+- Pipeline de consulta: embed query → similaridade cosseno → `ConfiancaCalculator` → prompt aumentado
+- Modelos ORM: `DocumentORM` (`rag_documents`) e `ChunkORM` (`rag_chunks`)
+- Modelos Pydantic: `ChunkMetadata` (9 marcadores booleanos), `RAGContext`, `ConfiancaLevel`
+- Comandos Discord: `!buscar`, `!fontes`, `!reindexar`
+- Modo Canal IA automático via `DISCORD__CANAL_IA_ID`
+- Modo DM automático (sempre ativo)
+- Integração MCP via `MCPToolsManager` (stdio/sse/streamable-http)
+- CLI `uv run botsalinha ingest` para indexar documentos DOCX
+
+### Alterado
+
+- `AgentWrapper` integrado com `QueryService` para augmentação automática de prompts
+- `docs/architecture.md` — documentação completa do RAG (seção 3.4)
+
+---
 
 ## [2.0.0] - 2026-02-26
 
