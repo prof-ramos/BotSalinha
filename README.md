@@ -69,6 +69,9 @@ BotSalinha é um assistente inteligente para Discord que responde perguntas sobr
 - 🚀 **Três Modos de Interação**: Comandos prefixados, Canal IA dedicado e DMs automáticos
 - 🔒 **Proteção do Banco**: Backup automático + verificação de integridade a cada inicialização
 - 🔐 **RAG com Deduplicação**: Documentos indexados por SHA-256 — sem duplicatas acidentais
+- 🔎 **Busca Híbrida + Reranking**: Combina similaridade semântica e sobreposição lexical para melhorar recall/precisão
+- 🧭 **Vector DB Dedicado (Qdrant)**: Backend vetorial opcional para escalar busca semântica
+- 📄 **Suporte a PDF nativo**: Ingestão RAG para `.pdf` além de `.docx`
 
 ---
 
@@ -198,10 +201,30 @@ A configuração usa duas fontes complementares:
 | `HISTORY_RUNS`               | `3`                            | Pares de mensagens no histórico            |
 | `RATE_LIMIT__REQUESTS`       | `10`                           | Máximo de requisições por janela           |
 | `RATE_LIMIT__WINDOW_SECONDS` | `60`                           | Janela de tempo (segundos)                 |
+| `RAG__HYBRID_SEARCH_ENABLED` | `true`                         | Habilita busca híbrida (semântica + lexical) |
+| `RAG__RERANK_ALPHA`          | `0.8`                          | Peso semântico no reranking (0.0-1.0)      |
+| `RAG__VECTOR_BACKEND`        | `sqlite`                       | Backend vetorial (`sqlite` ou `qdrant`)    |
+| `RAG__QDRANT_URL`            | `http://localhost:6333`        | URL do serviço Qdrant                       |
+| `RAG__QDRANT_COLLECTION`     | `botsalinha_chunks`            | Nome da collection no Qdrant                |
 | `DATABASE__URL`              | `sqlite:///data/botsalinha.db` | URL de conexão do banco (formato aninhado) |
 | `LOG_LEVEL`                  | `INFO`                         | Nível de log (DEBUG, INFO, WARNING, ERROR) |
 
 ¹ Obrigatório quando `model.provider` = `openai` (padrão). ² Obrigatório quando `model.provider` = `google`.
+
+
+### Vector DB dedicado (Qdrant)
+
+Para habilitar backend vetorial dedicado:
+
+```env
+RAG__VECTOR_BACKEND=qdrant
+RAG__QDRANT_URL=http://localhost:6333
+RAG__QDRANT_COLLECTION=botsalinha_chunks
+# Opcional:
+# RAG__QDRANT_API_KEY=seu_token
+```
+
+Com isso, a ingestão envia embeddings para o Qdrant e as consultas RAG passam a buscar no vector DB dedicado.
 
 ### Configuração do Canal IA
 

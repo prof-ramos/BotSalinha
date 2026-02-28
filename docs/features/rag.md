@@ -7,9 +7,9 @@ O BotSalinha implementa um sistema RAG que permite respostas jurídicas fundamen
 ## Arquitetura
 
 ```
-DOCX → Parser → MetadataExtractor → ChunkExtractor → EmbeddingService → SQLite
-                                                              ↓
-Usuario → Discord → QueryService → VectorStore → Agno → Resposta com Fontes
+DOCX/PDF → Parser → MetadataExtractor → ChunkExtractor → EmbeddingService → SQLite/Qdrant
+                                                                   ↓
+Usuario → Discord → QueryService → VectorStore (SQLite ou Qdrant) → Agno → Resposta com Fontes
 ```
 
 ## Componentes
@@ -136,6 +136,9 @@ RAG__TOP_K=5                         # Número de chunks a recuperar
 RAG__MIN_SIMILARITY=0.6              # Similaridade mínima aceitável
 RAG__MAX_CONTEXT_TOKENS=2000         # Máximo de tokens no contexto
 RAG__CONFIDENCE_THRESHOLD=0.70       # Limiar para confiança média
+RAG__VECTOR_BACKEND=sqlite            # sqlite (padrao) ou qdrant
+RAG__QDRANT_URL=http://localhost:6333 # URL do Qdrant
+RAG__QDRANT_COLLECTION=botsalinha_chunks
 OPENAI_API_KEY=sk-...                # Usada para embeddings
 ```
 

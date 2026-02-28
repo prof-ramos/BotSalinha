@@ -11,12 +11,15 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...config.settings import get_settings
 from ...models.rag_models import ChunkORM, DocumentORM
 from ...utils.errors import BotSalinhaError
 from ...utils.log_events import LogEvents
 from ..models import Chunk, Document
 from ..parser.chunker import ChunkExtractor
 from ..parser.docx_parser import DOCXParser
+from ..parser.pdf_parser import PDFParser
+from ..storage import get_vector_store
 from ..storage.vector_store import serialize_embedding
 from ..utils.metadata_extractor import MetadataExtractor
 from .embedding_service import EMBEDDING_DIM, EmbeddingService
@@ -59,7 +62,7 @@ class IngestionService:
     Service for ingesting documents into the RAG system.
 
     Implements the complete pipeline:
-    DOCXParser -> MetadataExtractor -> ChunkExtractor -> EmbeddingService -> Database
+    Parser (DOCX/PDF) -> MetadataExtractor -> ChunkExtractor -> EmbeddingService -> Database
     """
 
     def __init__(self, session: AsyncSession, embedding_service: EmbeddingService) -> None:
@@ -86,14 +89,14 @@ class IngestionService:
 
         Pipeline steps:
         0. Compute SHA-256 hash and check for duplicates
-        1. Parse DOCX file with DOCXParser
+        1. Parse document file with parser based on extension (.docx/.pdf)
         2. Extract metadata with MetadataExtractor
         3. Extract chunks with ChunkExtractor
         4. Generate embeddings with EmbeddingService
         5. Store DocumentORM and ChunkORM in database
 
         Args:
-            file_path: Path to the DOCX file
+            file_path: Path to the input document (.docx or .pdf)
             document_name: Document identifier (e.g., 'CF/88')
 
         Returns:
@@ -130,7 +133,7 @@ class IngestionService:
                 )
 
             # Step 1: Parse the document
-            parser = DOCXParser(file_path)
+            parser = self._get_parser(file_path)
             parsed_doc = parser.parse()
 
             if not parsed_doc:
@@ -208,6 +211,13 @@ class IngestionService:
                 event_name="rag_ingestion_progress",
             )
 
+            # Optional Step 4.1: Sync embeddings to dedicated vector DB
+            if get_settings().rag.vector_backend == "qdrant":
+                vector_store = get_vector_store(self._session)
+                await vector_store.add_embeddings(
+                    list(zip(chunks, embeddings, strict=True))
+                )
+
             # Step 5: Update document statistics
             self._update_document_stats(document_orm, chunks)
 
@@ -254,6 +264,21 @@ class IngestionService:
             raise IngestionError(
                 msg, details={"file_path": file_path, "document_name": document_name}
             ) from e
+
+
+    @staticmethod
+    def _get_parser(file_path: str) -> DOCXParser | PDFParser:
+        """Return parser instance based on file extension."""
+        suffix = Path(file_path).suffix.lower()
+        if suffix == ".docx":
+            return DOCXParser(file_path)
+        if suffix == ".pdf":
+            return PDFParser(file_path)
+
+        raise IngestionError(
+            f"Formato de arquivo não suportado: '{suffix}'. Use .docx ou .pdf.",
+            details={"file_path": file_path, "suffix": suffix},
+        )
 
     def _create_document_orm(
         self, document_name: str, file_path: str, file_hash: str | None = None
