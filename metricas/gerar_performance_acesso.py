@@ -3,36 +3,22 @@ Script for generating Database Access Metrics.
 Measures latency for SQLite write/read operations under load.
 """
 
-import argparse
 import asyncio
-import csv
-import logging
-import sys
 import time
 from pathlib import Path
 
 import structlog
 
+from metricas.utils import (
+    configure_logging,
+    get_base_parser,
+    print_summary_box,
+    save_results_csv,
+    save_summary_csv,
+)
 from src.storage.factory import create_repository
 
 log = structlog.get_logger(__name__)
-
-
-def configure_logging(verbose: bool = False, quiet: bool = False) -> None:
-    """Configure logging level based on verbosity flags."""
-    if quiet:
-        level = logging.ERROR
-    elif verbose:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        stream=sys.stderr,
-    )
-
 
 async def check_access_performance(
     output_file: str = "metricas/performance_acesso.csv",
@@ -103,14 +89,7 @@ async def check_access_performance(
 
     # Save Results
     output_path = Path(output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["operation", "count", "total_time_ms", "avg_time_ms"]
-        )
-        writer.writeheader()
-        writer.writerows(results)
+    save_results_csv(output_path, results, ["operation", "count", "total_time_ms", "avg_time_ms"])
 
     # Calculate and print statistical summary
     if len(results) >= 2:
@@ -121,95 +100,37 @@ async def check_access_performance(
             total_ops = insert_result["count"] + read_result["count"]
             total_time_sec = (insert_result["total_time_ms"] + read_result["total_time_ms"]) / 1000
             throughput = total_ops / total_time_sec if total_time_sec > 0 else 0
-            ratio = 0.0
+            ratio = read_result["avg_time_ms"] / insert_result["avg_time_ms"] if insert_result["avg_time_ms"] > 0 else 0
 
-            print("\n" + "=" * 60)
-            print("SUMÁRIO ESTATÍSTICO - PERFORMANCE ACESSO DB")
-            print("=" * 60)
-            print(f"Throughput:                    {throughput:.2f} ops/segundo")
-            print("\nComparação Insert vs Read:")
-            print(
-                f"  Insert: {insert_result['avg_time_ms']:.2f}ms avg ({insert_result['count']} ops)"
-            )
-            print(f"  Read:   {read_result['avg_time_ms']:.2f}ms avg ({read_result['count']} ops)")
-            if insert_result["avg_time_ms"] > 0:
-                ratio = read_result["avg_time_ms"] / insert_result["avg_time_ms"]
-                print(f"  Ratio (Read/Insert):         {ratio:.2f}x")
-            print(f"\nTotal de operações:            {total_ops}")
-            print(f"Tempo total:                   {total_time_sec:.3f}s")
-            print("=" * 60)
+            metrics = [
+                ("Throughput:", f"{throughput:.2f} ops/segundo"),
+                (None, None), # Spacer
+                ("Comparação Insert vs Read:", None),
+                ("  Insert:", f"{insert_result['avg_time_ms']:.2f}ms avg ({insert_result['count']} ops)"),
+                ("  Read:", f"{read_result['avg_time_ms']:.2f}ms avg ({read_result['count']} ops)"),
+                ("  Ratio (Read/Insert):", f"{ratio:.2f}x"),
+                (None, None), # Spacer
+                ("Total de operações:", total_ops),
+                ("Tempo total:", f"{total_time_sec:.3f}s"),
+            ]
+            print_summary_box("PERFORMANCE ACESSO DB", metrics)
 
-            # Also save summary to CSV
-            summary_path = output_path.parent / f"{output_path.stem}_summary{output_path.suffix}"
-            with open(summary_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=["metric", "value"])
-                writer.writeheader()
-                writer.writerow(
-                    {"metric": "throughput_ops_per_second", "value": f"{throughput:.2f}"}
-                )
-                writer.writerow(
-                    {"metric": "insert_avg_ms", "value": f"{insert_result['avg_time_ms']:.2f}"}
-                )
-                writer.writerow(
-                    {"metric": "read_avg_ms", "value": f"{read_result['avg_time_ms']:.2f}"}
-                )
-                writer.writerow({"metric": "read_insert_ratio", "value": f"{ratio:.2f}"})
-                writer.writerow({"metric": "total_operations", "value": total_ops})
-                writer.writerow({"metric": "total_time_seconds", "value": f"{total_time_sec:.3f}"})
-
-            log.info("access_performance_summary_saved", summary_file=str(summary_path))
-
-    log.info("db_access_performance_completed", output_file=str(output_path))
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Generate database access performance metrics",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="metricas/performance_acesso.csv",
-        help="Path to the output CSV file",
-    )
-    parser.add_argument(
-        "-i",
-        "--inserts",
-        type=int,
-        default=50,
-        help="Number of insert operations to perform",
-    )
-    parser.add_argument(
-        "-r",
-        "--reads",
-        type=int,
-        default=100,
-        help="Number of read operations to perform",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Suppress info logs (only errors will be shown)",
-    )
-    return parser.parse_args()
-
+            summary_data = [
+                {"metric": "throughput_ops_per_second", "value": f"{throughput:.2f}"},
+                {"metric": "insert_avg_ms", "value": f"{insert_result['avg_time_ms']:.2f}"},
+                {"metric": "read_avg_ms", "value": f"{read_result['avg_time_ms']:.2f}"},
+                {"metric": "read_insert_ratio", "value": f"{ratio:.2f}"},
+                {"metric": "total_operations", "value": total_ops},
+                {"metric": "total_time_seconds", "value": f"{total_time_sec:.3f}"},
+            ]
+            save_summary_csv(output_path, summary_data)
 
 if __name__ == "__main__":
-    args = parse_args()
+    parser = get_base_parser("Generate database access performance metrics")
+    parser.add_argument("-i", "--inserts", type=int, default=50, help="Number of insert operations")
+    parser.add_argument("-r", "--reads", type=int, default=100, help="Number of read operations")
+    args = parser.parse_args()
+    
+    output_file = args.output or "metricas/performance_acesso.csv"
     configure_logging(verbose=args.verbose, quiet=args.quiet)
-    asyncio.run(
-        check_access_performance(
-            output_file=args.output,
-            num_inserts=args.inserts,
-            num_reads=args.reads,
-        )
-    )
+    asyncio.run(check_access_performance(output_file=output_file, num_inserts=args.inserts, num_reads=args.reads))

@@ -1,6 +1,7 @@
-# AGENTS.md — Database Migrations
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-02-28 | Updated: 2026-02-28 -->
 
-Parent reference: ../AGENTS.md (root)
+# AGENTS.md — Database Migrations
 
 ## Context
 
@@ -427,3 +428,5 @@ When working with migrations:
 7. **Never apply migrations to production without backup**
 
 Remember: Migrations are permanent and can cause data loss if not handled carefully.
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

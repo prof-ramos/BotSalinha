@@ -1,8 +1,7 @@
 # AGENTS.md — BotSalinha Source Code
 
-<!-- PARENT: ../AGENTS.md -->
-<!-- GENERATED: 2026-02-27 -->
-<!-- UPDATED: 2026-02-27 -->
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-02-28 | Updated: 2026-02-28 -->
 
 ## Purpose
 

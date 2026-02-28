@@ -1,0 +1,14 @@
+{% macro summary_card(title, value, card_class='') %}
+<div class="summary-card {{ card_class }}">
+    <h3>{{ title }}</h3>
+    <div class="value">{{ value }}</div>
+</div>
+{% endmacro %}
+
+{% macro render_summary(total, successful, failed) %}
+<div class="summary">
+    {{ summary_card("Escopo", total) }}
+    {{ summary_card("Deferidos", successful, "success") }}
+    {{ summary_card("Indeferidos", failed, "failed") }}
+</div>
+{% endmacro %}

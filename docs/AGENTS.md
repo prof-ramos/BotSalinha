@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-02-27 | Updated: 2026-02-27 -->
+<!-- Generated: 2026-02-28 | Updated: 2026-02-28 -->
 
 # AGENTS.md — BotSalinha
 
@@ -254,3 +254,5 @@ async def test_generate_response(self, test_repository, test_settings):
 - Manter documentação atualizada
 
 <!-- OMC:END -->
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

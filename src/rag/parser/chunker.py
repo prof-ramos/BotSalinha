@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
+import tiktoken
 
 from src.rag.models import Chunk
 from src.rag.utils.metadata_extractor import MetadataExtractor
@@ -51,6 +52,14 @@ class ChunkExtractor:
         self._metadata_max_depth = self.config.get(
             "metadata_max_depth", self.DEFAULT_METADATA_MAX_DEPTH
         )
+
+        # Initialize tiktoken encoding
+        try:
+            # Try to get encoding for a common model, default to o200k_base (GPT-4o)
+            self._encoding = tiktoken.get_encoding("o200k_base")
+        except Exception:
+            # Fallback to cl100k_base (GPT-4/GPT-3.5)
+            self._encoding = tiktoken.get_encoding("cl100k_base")
 
         log.debug(
             "rag_chunker_initialized",
@@ -311,8 +320,7 @@ class ChunkExtractor:
         """
         if not text:
             return 0
-        # Approximate: 4 characters per token for Portuguese/English
-        return max(1, len(text) // 4)
+        return len(self._encoding.encode(text))
 
     def _should_break_chunk(
         self, paragraph: dict[str, Any], current_tokens: int, paragraph_tokens: int

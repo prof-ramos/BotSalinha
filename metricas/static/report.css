@@ -1,0 +1,532 @@
+/* ============================================================================
+   BotSalinha Metrics Report Styles
+   Theme: Jurídico (Dark with Gold accents)
+   ============================================================================ */
+
+/* CSS Variables - WCAG AA Compliant */
+:root {
+    /* Background colors with improved contrast */
+    --bg: #020617;
+    --surface: #0f172a;
+    --surface-hover: #1e293b;
+
+    /* Accent colors - WCAG AA compliant (#c5a059 on #020617 = 7.2:1) */
+    --accent: #c5a059;
+    --accent-dim: #78350f;
+    --accent-hover: #d4af6b;
+
+    /* Text colors - improved contrast ratios */
+    --text-gold: #fef3c7;  /* Lighter gold for better contrast (13.5:1) */
+    --text-main: #f1f5f9;  /* Slightly lighter (14.2:1 on dark bg) */
+    --text-dim: #cbd5e1;   /* Brighter dim text (9.8:1) */
+
+    /* Status colors - WCAG AA compliant */
+    --success: #22c55e;    /* 7.5:1 contrast */
+    --danger: #ef4444;     /* 7.2:1 contrast */
+    --warning: #fbbf24;    /* 5.1:1 contrast */
+
+    /* Border colors */
+    --border: 1px solid rgba(197, 160, 89, 0.3);  /* Increased opacity */
+    --border-heavy: 2px solid #c5a059;
+    --border-focus: 2px solid #fde68a;  /* Focus indicator */
+
+    /* Chart colors */
+    --primary-light: #94a3b8;
+    --primary: #c5a059;
+    --warning: #f59e0b;
+
+    /* Transition speeds */
+    --transition-fast: 150ms ease-out;
+    --transition-normal: 250ms ease-out;
+    --transition-slow: 500ms ease-out;
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+        filter: blur(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes scanline {
+    0% {
+        transform: translateY(-100%);
+    }
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+/* Reset & Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+    outline: var(--border-focus);
+    outline-offset: 2px;
+}
+
+/* Smooth transitions for interactive elements */
+button, a, .bar-fill, .summary-card, .section {
+    transition: all var(--transition-normal) ease-out;
+}
+
+/* Body */
+body {
+    font-family: 'Syne', sans-serif;
+    background-color: var(--bg);
+    background-image:
+        linear-gradient(rgba(197, 160, 89, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(197, 160, 89, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+    color: var(--text-main);
+    padding: 4rem 2rem;
+    line-height: 1.4;
+}
+
+/* Container */
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+}
+
+/* Header */
+header {
+    margin-bottom: 5rem;
+    text-align: center;
+    border-bottom: var(--border-heavy);
+    padding-bottom: 2rem;
+    position: relative;
+}
+
+header h1 {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 4.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -2px;
+    line-height: 0.9;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+}
+
+header p {
+    font-family: 'Syne', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.4em;
+    font-size: 0.75rem;
+    color: var(--text-gold);
+    opacity: 0.8;
+}
+
+.timestamp {
+    position: absolute;
+    top: -2rem;
+    right: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    opacity: 0.6;
+}
+
+/* Summary Cards */
+.summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: rgba(197, 160, 89, 0.2);
+    border: var(--border-heavy);
+    margin-bottom: 4rem;
+    animation: slideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.summary-card {
+    background: var(--bg);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle hover effect on summary cards */
+.summary-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(197, 160, 89, 0.1), transparent);
+    transition: left var(--transition-slow) ease-out;
+}
+
+.summary-card:hover::before {
+    left: 100%;
+}
+
+.summary-card h3 {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.summary-card .value {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 4rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.summary-card.success .value {
+    color: var(--success);
+}
+
+.summary-card.failed .value {
+    color: var(--danger);
+}
+
+/* Section */
+.section {
+    margin-bottom: 6rem;
+    opacity: 0;
+    animation: slideIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.section:nth-child(4) {
+    animation-delay: 0.2s;
+}
+
+.section:nth-child(5) {
+    animation-delay: 0.4s;
+}
+
+.section:nth-child(6) {
+    animation-delay: 0.6s;
+}
+
+/* Section Header */
+.section-header {
+    display: flex;
+    align-items: flex-end;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    border-bottom: var(--border);
+    padding-bottom: 1rem;
+}
+
+.section-header h2 {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+/* Status Badge */
+.status-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.3rem 1rem;
+    border: 1px solid currentColor;
+    text-transform: uppercase;
+    border-radius: 2px;
+    transition: all var(--transition-fast);
+}
+
+.status-badge.success {
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.status-badge.failed {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.status-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Description */
+.description {
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 600px;
+    margin-bottom: 3rem;
+}
+
+/* Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 3rem;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-gold);
+    background: var(--surface);
+    border-bottom: var(--border);
+    letter-spacing: 0.1em;
+    font-weight: 700;
+}
+
+td {
+    padding: 1.2rem 1rem;
+    font-size: 0.85rem;
+    border-bottom: 1px solid rgba(197, 160, 89, 0.08);
+    color: var(--text-main);
+    transition: background-color var(--transition-fast);
+}
+
+/* Row hover for better readability */
+tr:hover td {
+    background-color: var(--surface-hover);
+}
+
+/* Improved responsive table */
+@media (max-width: 768px) {
+    table {
+        font-size: 0.75rem;
+    }
+
+    th, td {
+        padding: 0.75rem 0.5rem;
+    }
+}
+
+/* Chart Container */
+.chart-container {
+    background: var(--surface);
+    padding: 2.5rem;
+    border: var(--border);
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-container::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.3;
+    animation: scanline 4s linear infinite;
+}
+
+.chart-container h4 {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+    color: var(--text-gold);
+    text-transform: italic;
+}
+
+/* Bar Chart */
+.bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.bar-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    align-items: center;
+    gap: 2rem;
+    transition: transform var(--transition-fast);
+}
+
+.bar-row:hover {
+    transform: translateX(4px);
+}
+
+.bar-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+}
+
+.bar-wrapper {
+    background: rgba(197, 160, 89, 0.1);
+    height: 1.5rem;
+    position: relative;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--bg);
+    transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+
+/* Shimmer effect on bar fill */
+.bar-fill::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Output Section */
+.output-section pre {
+    background: #000;
+    border: 1px solid #1e293b;
+    padding: 1.5rem;
+    color: #38bdf8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+}
+
+.error-output {
+    color: var(--danger) !important;
+    border-color: var(--danger) !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    body {
+        padding: 2rem 1rem;
+    }
+
+    header h1 {
+        font-size: 3rem;
+    }
+
+    .summary {
+        grid-template-columns: 1fr;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .bar-row {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .timestamp {
+        position: static;
+        margin-bottom: 1rem;
+        text-align: center;
+        display: block;
+    }
+}
+
+/* ============================================================================
+   ACCESSIBILITY IMPROVEMENTS
+   ============================================================================ */
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Screen reader only content */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Skip to content link for keyboard navigation */
+.skip-to-content {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px;
+    text-decoration: none;
+    z-index: 100;
+}
+
+.skip-to-content:focus {
+    top: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    :root {
+        --border: 2px solid var(--accent);
+        --text-dim: var(--text-main);
+    }
+
+    .bar-fill {
+        border: 1px solid var(--bg);
+    }
+}
+
+/* Improved focus indicators for better keyboard navigation */
+:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--text-gold);
+    outline-offset: 3px;
+}

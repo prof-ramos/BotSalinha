@@ -1,0 +1,7 @@
+query,confidence,avg_similarity,max_similarity,chunks_retrieved,duration_ms
+o que é estágio probatório?,sem_rag,0.0,0.0,0,459.55
+quais os requisitos para ser presidente da república?,sem_rag,0.0,0.0,0,253.07
+como funciona a licença maternidade?,sem_rag,0.0,0.0,0,324.36
+quais são os princípios da administração pública?,sem_rag,0.0,0.0,0,365.3
+o que é habeas corpus?,sem_rag,0.0,0.0,0,521.91
+qual o prazo para impetrar mandado de segurança?,sem_rag,0.0,0.0,0,260.88

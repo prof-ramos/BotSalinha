@@ -1,6 +1,0 @@
-metric,value
-avg_embedding_time_ms,458.33
-avg_search_time_ms,4.94
-avg_text_length_chars,66
-length_time_correlation,0.010
-total_texts_tested,6

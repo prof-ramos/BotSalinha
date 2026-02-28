@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% import 'summary.html' as summary %}
+{% import 'section.html' as section %}
+
+{% block content %}
+{{ summary.render_summary(total_results, successful_results, failed_results) }}
+
+{% for key, metric_info in metrics.items() %}
+{% set success, stdout, stderr = results[key] %}
+{% set data = csv_data[key] %}
+
+{{ section.render_section(
+    metric_info.name,
+    metric_info.description,
+    success,
+    data,
+    stderr,
+    stdout
+) }}
+{% endfor %}
+{% endblock %}

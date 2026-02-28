@@ -1,0 +1,70 @@
+{% macro status_badge(success) %}
+<span class="status-badge {{ 'success' if success else 'failed' }}">
+    {{ "✓ Sucesso" if success else "✗ Falha" }}
+</span>
+{% endmacro %}
+
+{% macro section_header(name, success) %}
+<div class="section-header">
+    <h2>{{ name }}</h2>
+    {{ status_badge(success) }}
+</div>
+{% endmacro %}
+
+{% macro data_table(headers, rows, max_rows=10) %}
+<h3>Resultados</h3>
+<table>
+    <tr>
+        {% for header in headers %}
+        <th>{{ header }}</th>
+        {% endfor %}
+    </tr>
+    {% for row in rows[:max_rows] %}
+    <tr>
+        {% for header in headers %}
+        <td>{{ row.get(header, '') }}</td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+    {% if rows | length > max_rows %}
+    <tr>
+        <td colspan="{{ headers | length }}"><em>... e mais {{ rows | length - max_rows }} linhas</em></td>
+    </tr>
+    {% endif %}
+</table>
+{% endmacro %}
+
+{% macro chart_container(title, chart_html) %}
+<div class="chart-container">
+    <h4>{{ title }}</h4>
+    <div class="bar-chart">
+        {{ chart_html | safe }}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro output_section(output, is_error=false) %}
+<div class="output-section">
+    <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; {{ 'color: var(--danger);' if is_error else '' }}">
+        {{ 'Logs de Erro:' if is_error else 'Saída do Script:' }}
+    </h4>
+    <pre class="{{ 'error-output' if is_error else '' }}">{{ output }}</pre>
+</div>
+{% endmacro %}
+
+{% macro render_section(name, description, success, data=None, stderr='', stdout='') %}
+<div class="section">
+    {{ section_header(name, success) }}
+    <p class="description">{{ description }}</p>
+
+    {% if data %}
+    {{ data_table(data[0] | keys, data) }}
+    {% endif %}
+
+    {% if stderr %}
+    {{ output_section(stderr, is_error=true) }}
+    {% elif stdout and not success %}
+    {{ output_section(stdout) }}
+    {% endif %}
+</div>
+{% endmacro %}

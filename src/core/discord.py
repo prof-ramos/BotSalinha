@@ -24,6 +24,7 @@ from ..utils.input_sanitizer import (
 )
 from ..utils.log_correlation import bind_discord_context
 from ..utils.log_events import LogEvents
+from ..utils.ui_errors import get_user_friendly_message
 from .agent import AgentWrapper
 
 log = structlog.get_logger()
@@ -175,14 +176,11 @@ class BotSalinhaBot(commands.Bot):
             await ctx.send(f"❌ Argumento inválido: {error}")
 
         elif isinstance(error, BotRateLimitError):
-            await ctx.send(f"⏱️ {error.message}")
+            await ctx.send(get_user_friendly_message(error))
 
         else:
-            # Generic error message
-            await ctx.send(
-                "❌ Ocorreu um erro ao processar seu comando. "
-                "Por favor, tente novamente mais tarde."
-            )
+            # Generic error message via central mapper
+            await ctx.send(get_user_friendly_message(error))
 
     async def _handle_chat_message(
         self,
@@ -217,20 +215,11 @@ class BotSalinhaBot(commands.Bot):
                 content_length=len(message.content),
             )
 
-            # Send appropriate error message
-            error_messages = {
-                "too_long": "❌ Mensagem muito longa. Por favor, use no máximo 10.000 caracteres.",
-                "control_chars": "❌ Mensagem contém caracteres inválidos. Por favor, remova caracteres especiais.",
-                "zero_width_abuse": "❌ Mensagem contém caracteres invisíveis em excesso. Por favor, envie texto normal.",
-                "special_char_flood": "❌ Mensagem contém excesso de caracteres especiais consecutivos.",
-                "unicode_flood": "❌ Mensagem contém caracteres Unicode incomuns em excesso.",
-                "invisible_flood": "❌ Mensagem contém muitos caracteres invisíveis. Por favor, envie texto legível.",
-                "injection_detected": "❌ Mensagem contém padrões suspeitos. Por favor, reformule sua pergunta.",
-                "empty": "",  # Silent fail for empty messages
-            }
+            # Send appropriate error message via central mapper
+            from ..utils.errors import ValidationError
 
-            error_msg = error_messages.get(validation.reason or "ok", "❌ Entrada inválida.")
-            if error_msg:
+            error_msg = get_user_friendly_message(ValidationError(validation.reason or "invalid"))
+            if error_msg and validation.reason != "empty":
                 await message.channel.send(error_msg)
             return
 
@@ -244,10 +233,7 @@ class BotSalinhaBot(commands.Bot):
                 guild_id=guild_id,
             )
         except BotRateLimitError as e:
-            await message.channel.send(
-                f"⏱️ Você excedeu o limite de solicitações. "
-                f"Tente novamente em {e.retry_after:.0f} segundos."
-            )
+            await message.channel.send(get_user_friendly_message(e))
             return
 
         # 4. Show typing indicator and process message
@@ -775,7 +761,9 @@ Desenvolvido com ❤️ usando Agno + OpenAI
             )
 
             if not rag_context or not rag_context.chunks_usados:
-                await ctx.send(f"❌ Nenhum resultado encontrado para '{query_to_process}' do tipo '{tipo}'.")
+                await ctx.send(
+                    f"❌ Nenhum resultado encontrado para '{query_to_process}' do tipo '{tipo}'."
+                )
                 return
 
             # Build and send results using augmentation text from QueryService

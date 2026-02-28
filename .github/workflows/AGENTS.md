@@ -1,5 +1,5 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-02-27 | Updated: 2026-02-27 -->
+<!-- Generated: 2026-02-28 | Updated: 2026-02-28 -->
 
 
 
@@ -189,3 +189,5 @@ When working with this pipeline:
 ---
 
 **Note:** This file is auto-generated. Manual edits will be overwritten. Update the parent AGENTS.md file for project-wide changes.
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

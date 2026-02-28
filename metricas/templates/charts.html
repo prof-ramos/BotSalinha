@@ -1,0 +1,97 @@
+{% macro bar_row(label, percentage, value, color_var='var(--accent)') %}
+<div class="bar-row">
+    <div class="bar-label">{{ label }}</div>
+    <div class="bar-wrapper">
+        <div class="bar-fill" style="width: {{ percentage }}%; background: {{ color_var }};">
+            {{ value }}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro access_chart(data) %}
+{% set max_time = 0 %}
+{% for row in data %}
+{% if row.avg_time_ms | float > max_time %}
+{% set max_time = row.avg_time_ms | float %}
+{% endif %}
+{% endfor %}
+
+{% for row in data %}
+{% set op = row.operation %}
+{% set time_ms = row.avg_time_ms | float %}
+{% set percentage = (time_ms / max_time * 100) if max_time > 0 else 0 %}
+{{ bar_row(op, percentage, (time_ms | round(2)) ~ ' ms') }}
+{% endfor %}
+{% endmacro %}
+
+{% macro rag_chart(data) %}
+{% set max_time = 0 %}
+{% for row in data %}
+{% if row.embedding_time_ms | float > max_time %}
+{% set max_time = row.embedding_time_ms | float %}
+{% endif %}
+{% if row.search_time_ms | float > max_time %}
+{% set max_time = row.search_time_ms | float %}
+{% endif %}
+{% endfor %}
+
+{% for row in data[:5] %}
+{% set snippet = row.text_snippet[:30] %}
+{% set emb_time = row.embedding_time_ms | float %}
+{% set search_time = row.search_time_ms | float %}
+{% set emb_pct = (emb_time / max_time * 100) if max_time > 0 else 0 %}
+{% set search_pct = (search_time / max_time * 100) if max_time > 0 else 0 %}
+<div class="bar-row">
+    <div class="bar-label">{{ snippet }}</div>
+    <div class="bar-wrapper">
+        <div class="bar-fill" style="width: {{ emb_pct }}%; background: var(--primary-light);">
+            Emb: {{ emb_time | round(2) }}ms
+        </div>
+    </div>
+    <div class="bar-wrapper" style="flex: 0.6;">
+        <div class="bar-fill" style="width: {{ search_pct }}%; background: var(--primary);">
+            Search: {{ search_time | round(2) }}ms
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% macro quality_chart(data) %}
+{% set max_sim = 0 %}
+{% for row in data %}
+{% if row.avg_similarity | float > max_sim %}
+{% set max_sim = row.avg_similarity | float %}
+{% endif %}
+{% endfor %}
+
+{% for row in data %}
+{% set query = row.query[:40] %}
+{% set sim = row.avg_similarity | float %}
+{% set conf = row.confidence %}
+{% set percentage = (sim / max_sim * 100) if max_sim > 0 else 0 %}
+{% set color = 'var(--success)' if conf == 'ALTA' else 'var(--warning)' if conf == 'MEDIA' else 'var(--danger)' %}
+{{ bar_row(query, percentage, (sim | round(4)) ~ ' (' ~ conf ~ ')', color) }}
+{% endfor %}
+{% endmacro %}
+
+{% macro performance_chart(data) %}
+{% set max_time = 0 %}
+{% for row in data if row.status == 'success' %}
+{% if row.duration_seconds | float > max_time %}
+{% set max_time = row.duration_seconds | float %}
+{% endif %}
+{% endfor %}
+
+{% for row in data %}
+{% if row.status == 'success' %}
+{% set prompt = row.prompt[:40] %}
+{% set duration = row.duration_seconds | float %}
+{% set used_rag = row.used_rag %}
+{% set rag = 'RAG' if used_rag else 'No RAG' %}
+{% set percentage = (duration / max_time * 100) if max_time > 0 else 0 %}
+{{ bar_row(prompt ~ ' [' ~ rag ~ ']', percentage, (duration | round(3)) ~ 's') }}
+{% endif %}
+{% endfor %}
+{% endmacro %}

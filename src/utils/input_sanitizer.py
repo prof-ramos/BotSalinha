@@ -27,6 +27,9 @@ MAX_CONSECUTIVE_SPECIAL: Final[int] = 3
 # Minimum ratio of visible characters to total (to detect invisible flooding)
 MIN_VISIBLE_RATIO: Final[float] = 0.3
 
+# Maximum characters to process for complexity checks to prevent DoS
+MAX_CHARS_FOR_COMPLEXITY: Final[int] = 2_000
+
 # Control character ranges (C0 and C1 control sets, excluding \t, \n)
 _CONTROL_CHARS = {
     *(chr(i) for i in range(0, 32) if i not in (9, 10)),  # C0 (except \t, \n)
@@ -38,11 +41,19 @@ _CONTROL_CHARS = {
 # These patterns are based on common injection techniques
 INJECTION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     # Role confusion attempts
-    re.compile(r"ignore\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)", re.IGNORECASE),
-    re.compile(r"forget\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)", re.IGNORECASE),
-    re.compile(r"disregard\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)", re.IGNORECASE),
+    re.compile(
+        r"ignore\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"forget\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"disregard\s+(all\s+)?(previous|above|earlier)\s+(instructions?|prompts?|commands?)",
+        re.IGNORECASE,
+    ),
     re.compile(r"override\s+(the\s+)?(system|default|original)\s+instructions?", re.IGNORECASE),
-
     # Direct role manipulation
     re.compile(r"\bsystem\s*:\s*", re.IGNORECASE),
     re.compile(r"\bassistant\s*:\s*", re.IGNORECASE),
@@ -51,7 +62,6 @@ INJECTION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\[INST\].*?\[/INST\]", re.IGNORECASE | re.DOTALL),
     re.compile(r"<\|im_start\|>\s*(system|assistant|user)", re.IGNORECASE),
     re.compile(r"<\|im_end\|>", re.IGNORECASE),
-
     # Jailbreak patterns
     re.compile(r"\b(jailbreak|jail\s*break)\b", re.IGNORECASE),
     re.compile(r"\b(dan|developer\s*mode|developer\s*mode\s*on)\b", re.IGNORECASE),
@@ -60,24 +70,20 @@ INJECTION_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"pretend\s+(to\s+be\s+)?(a|an)\s+", re.IGNORECASE),
     re.compile(r"role\s*play\s+as\s+(a|an)\s+", re.IGNORECASE),
     re.compile(r"assume\s+(the\s+)?role\s+of\s+(a|an)\s+", re.IGNORECASE),
-
     # Instruction override patterns
     re.compile(r"from\s+now\s+on", re.IGNORECASE),
     re.compile(r"from\s+this\s+point\s+forward", re.IGNORECASE),
     re.compile(r"starting\s+now", re.IGNORECASE),
     re.compile(r"for\s+the\s+rest\s+of\s+this\s+(conversation|chat)", re.IGNORECASE),
-
     # JSON/injection attempts - more specific patterns with anchors
     re.compile(r"^\s*\}\s*\{\s*", re.IGNORECASE),
     re.compile(r"^\s*\]\s*\[\s*", re.IGNORECASE),
     re.compile(r"^\s*\{.*\".*\"\s*:\s*\".*\".*\}\s*$", re.IGNORECASE),
-
     # Code injection patterns
     re.compile(r"__import__\s*\(", re.IGNORECASE),
     re.compile(r"exec\s*\(", re.IGNORECASE),
     re.compile(r"eval\s*\(", re.IGNORECASE),
     re.compile(r"\${.*?}", re.IGNORECASE),
-
     # Prompt template injection
     re.compile(r"\{\{.*?\}\}", re.IGNORECASE),
     re.compile(r"\{%.*?%\}", re.IGNORECASE),
@@ -164,7 +170,9 @@ def sanitize_user_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
     return text
 
 
-def validate_and_sanitize(text: str, max_length: int = MAX_INPUT_LENGTH) -> tuple[str, bool, list[str]]:
+def validate_and_sanitize(
+    text: str, max_length: int = MAX_INPUT_LENGTH
+) -> tuple[str, bool, list[str]]:
     """
     Validate and sanitize user input, returning detailed information.
 
@@ -215,7 +223,6 @@ def validate_and_sanitize(text: str, max_length: int = MAX_INPUT_LENGTH) -> tupl
     return sanitized, is_suspicious, warnings
 
 
-
 class ValidationResult:
     """Result of input validation with detailed feedback."""
 
@@ -232,7 +239,8 @@ class ValidationResult:
             "invisible_flood",
             "empty",
             "injection_detected",
-        ] | None = None,
+        ]
+        | None = None,
         details: str | None = None,
         sanitized: str = "",
     ) -> None:
@@ -284,8 +292,10 @@ def get_visible_char_ratio(text: str) -> float:
     if not text:
         return 0.0
 
+    # Prevent DoS: process only the first MAX_CHARS_FOR_COMPLEXITY
+    check_text = text[:MAX_CHARS_FOR_COMPLEXITY]
     visible_count = 0
-    for char in text:
+    for char in check_text:
         if char in (" ", "\n", "\t"):
             continue
         category = unicodedata.category(char)
@@ -293,7 +303,7 @@ def get_visible_char_ratio(text: str) -> float:
         if category[0] in ("L", "N", "P", "S"):
             visible_count += 1
 
-    return visible_count / len(text) if text else 0.0
+    return visible_count / len(check_text) if check_text else 0.0
 
 
 def detect_unicode_flood(text: str, threshold: int = 50) -> bool:
@@ -304,15 +314,22 @@ def detect_unicode_flood(text: str, threshold: int = 50) -> bool:
         text: Text to check
         threshold: Maximum count of suspicious Unicode characters
     """
+    # Prevent DoS: process only the first MAX_CHARS_FOR_COMPLEXITY
+    check_text = text[:MAX_CHARS_FOR_COMPLEXITY]
     suspicious_count = 0
-    for char in text:
+    for char in check_text:
         code = ord(char)
         # Check for private use, unassigned, or unusual ranges
         is_private_use = 0xE000 <= code <= 0xF8FF
         is_supplementary_private = 0xF0000 <= code <= 0xFFFFD
         is_supplementary_reserved = 0x100000 <= code <= 0x10FFFD
         is_above_threshold = code > 0x2FFFF
-        if is_private_use or is_supplementary_private or is_supplementary_reserved or is_above_threshold:
+        if (
+            is_private_use
+            or is_supplementary_private
+            or is_supplementary_reserved
+            or is_above_threshold
+        ):
             suspicious_count += 1
 
     return suspicious_count > threshold

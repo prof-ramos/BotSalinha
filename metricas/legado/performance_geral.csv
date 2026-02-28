@@ -1,0 +1,5 @@
+prompt,response_length,used_rag,duration_seconds,status
+"Olá, tudo bem?",59,False,3.322,success
+Me explique o artigo 5 da constituição.,0,False,0.0,error: Operation 'ai_generate' failed after 3 attempts
+Quais as regras de vacância na lei 8112?,0,False,0.0,error: Operation 'ai_generate' failed after 3 attempts
+Quais os fundamentos da República Federativa do Brasil?,0,False,0.0,error: Operation 'ai_generate' failed after 3 attempts

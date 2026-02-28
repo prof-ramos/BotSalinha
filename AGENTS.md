@@ -1,4 +1,4 @@
-<!-- Generated: 2026-02-27 | Updated: 2026-02-27 -->
+<!-- Generated: 2026-02-28 | Updated: 2026-02-28 -->
 
 # AGENTS.md — BotSalinha
 
@@ -157,3 +157,5 @@ docker-compose logs -f
 # Produção
 docker-compose -f docker-compose.prod.yml up -d
 ```
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
