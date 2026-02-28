@@ -56,6 +56,7 @@ class Document(BaseModel):
     arquivo_origem: str = Field(..., description="Source file path")
     chunk_count: int = Field(..., description="Number of chunks", ge=0)
     token_count: int = Field(..., description="Total token count", ge=0)
+    file_hash: str | None = Field(None, description="SHA-256 hex digest of the source file")
 
 
 class ConfiancaLevel(StrEnum):

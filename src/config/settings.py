@@ -74,7 +74,11 @@ class RateLimitConfig(BaseSettings):
 
 
 class DatabaseConfig(BaseSettings):
-    """Database configuration."""
+    """Database configuration.
+
+    Only SQLite is supported. Any non-SQLite URL raises a validation error at
+    startup to prevent accidental connections to PostgreSQL/Supabase/etc.
+    """
 
     url: str = Field(default="sqlite:///data/botsalinha.db", description="Database connection URL")
     echo: bool = Field(default=False, description="Echo SQL statements")
@@ -87,6 +91,17 @@ class DatabaseConfig(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+
+    @field_validator("url")
+    @classmethod
+    def validate_sqlite_only(cls, v: str) -> str:
+        """Reject any non-SQLite database URL at startup."""
+        if not v.startswith(("sqlite:///", "sqlite+aiosqlite://")):
+            raise ValidationError(
+                f"BotSalinha suporta apenas SQLite. URL inválida: '{v}'. "
+                "Use o formato: sqlite:///data/botsalinha.db"
+            )
+        return v
 
 
 class RetryConfig(BaseSettings):

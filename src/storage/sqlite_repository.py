@@ -110,7 +110,19 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
         Initialize the database schema and enable WAL mode.
 
         Should be called on application startup.
+        Skips the guard for in-memory databases (tests).
         """
+        # Run the file-level guard before touching the engine
+        if ":memory:" not in self.database_url:
+            from pathlib import Path
+
+            from .db_guard import DatabaseGuard
+
+            db_path = Path(
+                self.database_url.replace("sqlite+aiosqlite:///", "").replace("sqlite:///", "")
+            )
+            DatabaseGuard(db_path=db_path).run()
+
         async with self.engine.begin() as conn:
             # Enable WAL mode for better concurrency
             await conn.execute(text("PRAGMA journal_mode=WAL"))
@@ -466,5 +478,4 @@ __all__ = [
     "SQLiteRepository",
     "MessageORM",
     "get_repository",
-    "repository",
 ]
