@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import structlog
 from typing import Any
 
 import numpy as np
+import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -192,14 +192,23 @@ class VectorStore:
             chunk_orms = result.scalars().all()
 
             # Calculate similarities in Python
+            expected_dim = len(query_embedding)
             results: list[tuple[ChunkORM, float]] = []
             for chunk_orm in chunk_orms:
-                if chunk_orm.embedding:
-                    chunk_embedding = deserialize_embedding(chunk_orm.embedding)
-                    similarity = cosine_similarity(query_embedding, chunk_embedding)
-
-                    if similarity >= min_similarity:
-                        results.append((chunk_orm, similarity))
+                if not chunk_orm.embedding:
+                    continue
+                chunk_embedding = deserialize_embedding(chunk_orm.embedding)
+                if len(chunk_embedding) != expected_dim:
+                    log.warning(
+                        "rag_vector_store_dim_mismatch",
+                        chunk_id=chunk_orm.id,
+                        expected=expected_dim,
+                        actual=len(chunk_embedding),
+                    )
+                    continue
+                similarity = cosine_similarity(query_embedding, chunk_embedding)
+                if similarity >= min_similarity:
+                    results.append((chunk_orm, similarity))
 
             # Sort by similarity descending
             results.sort(key=lambda x: x[1], reverse=True)
@@ -207,11 +216,19 @@ class VectorStore:
             # Apply limit
             results = results[:limit]
 
-            # Convert to Pydantic models
+            # Convert to Pydantic models; skip any corrupt chunks
             chunks_with_scores: list[tuple[Chunk, float]] = []
             for chunk_orm, score in results:
-                metadata_dict = json.loads(chunk_orm.metadados)
-                metadata = ChunkMetadata(**metadata_dict)
+                try:
+                    metadata_dict = json.loads(chunk_orm.metadados)
+                    metadata = ChunkMetadata(**metadata_dict)
+                except (json.JSONDecodeError, ValueError) as exc:
+                    log.warning(
+                        "rag_vector_store_corrupt_metadata",
+                        chunk_id=chunk_orm.id,
+                        error=str(exc),
+                    )
+                    continue
 
                 chunk = Chunk(
                     chunk_id=chunk_orm.id,

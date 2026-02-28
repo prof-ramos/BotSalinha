@@ -207,17 +207,17 @@ class TestRAGIntegrationE2E:
         self,
         rag_query_service,
         db_session: AsyncSession,
+        conversation_repository,
     ) -> None:
         """Test !fontes command lists indexed documents."""
         from src.rag import QueryService
         import discord
 
-        # Create bot
-        repository = SQLiteRepository("sqlite+aiosqlite:///:memory:")
-        await repository.initialize_database()
-        await repository.create_tables()
-
-        bot = BotSalinhaBot(repository=repository)
+        # Use the shared repository (same test_engine as db_session) so fontes_command
+        # sees documents added via db_session.
+        bot = BotSalinhaBot(repository=conversation_repository)
+        # Enable RAG so fontes_command renders the embed instead of the "not enabled" message
+        bot.agent.enable_rag = True
 
         # Create mock context with proper Discord context mock
         ctx = MagicMock()

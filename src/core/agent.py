@@ -5,6 +5,9 @@ Wraps the Agno Agent class with proper abstractions and error handling.
 Integrates with RAG (Retrieval-Augmented Generation) for enhanced responses.
 """
 
+import asyncio
+import json
+from collections.abc import Callable
 from typing import Any
 
 import structlog
@@ -16,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config.settings import get_settings
 from ..config.yaml_config import yaml_config
-from ..rag import QueryService, RAGContext, ConfiancaCalculator
+from ..rag import ConfiancaCalculator, QueryService, RAGContext
 from ..rag.services.embedding_service import EmbeddingService
 from ..storage.repository import MessageRepository
 from ..tools.mcp_manager import MCPToolsManager
@@ -64,6 +67,10 @@ class AgentWrapper:
             self.enable_rag = self.settings.rag.enabled
         else:
             self.enable_rag = enable_rag
+
+        # Session factory for per-request RAG sessions (preferred over a bare session).
+        # Set via enable_rag_with_session_maker(); takes priority over _query_service.
+        self._session_maker: Callable[..., Any] | None = None
 
         # Initialize RAG services if enabled and db_session provided
         self._query_service: QueryService | None = None
@@ -193,6 +200,34 @@ class AgentWrapper:
                 "rag_enable_failed",
                 error=str(e),
             )
+            self.enable_rag = False
+
+    def enable_rag_with_session_maker(self, session_maker: Callable[..., Any]) -> None:
+        """
+        Enable RAG using a session factory that creates one session per query.
+
+        Preferred over enable_rag_with_session() for production: avoids sharing a
+        single AsyncSession across concurrent coroutines, which SQLAlchemy does not
+        support.
+
+        Args:
+            session_maker: Async context manager factory, e.g. repository.session.
+        """
+        if not self.settings.rag.enabled:
+            return
+
+        try:
+            self._session_maker = session_maker
+            self._confianca_calculator = ConfiancaCalculator(
+                alta_threshold=self.settings.rag.confidence_threshold,
+            )
+            self.enable_rag = True
+            log.debug(
+                "rag_enabled_with_session_maker",
+                confidence_threshold=self.settings.rag.confidence_threshold,
+            )
+        except Exception as e:
+            log.warning("rag_enable_session_maker_failed", error=str(e))
             self.enable_rag = False
 
     @property
@@ -325,15 +360,42 @@ class AgentWrapper:
         # Initialize RAG context
         rag_context: RAGContext | None = None
 
-        # Perform RAG search if enabled
-        if self.enable_rag and self._query_service:
+        # Perform RAG search if enabled.
+        # _session_maker (preferred): creates an isolated session per request to
+        # avoid concurrent-session issues in SQLAlchemy async.
+        # _query_service (fallback): used by tests that inject a session directly.
+        if self.enable_rag and self._session_maker:
+            try:
+                async with self._session_maker() as session:
+                    query_service = QueryService(
+                        session=session,
+                        embedding_service=EmbeddingService(),
+                    )
+                    rag_context = await query_service.query(
+                        query_text=prompt,
+                        top_k=self.settings.rag.top_k,
+                        min_similarity=self.settings.rag.min_similarity,
+                    )
+                log.info(
+                    LogEvents.RAG_BUSCA_CONCLUIDA,
+                    chunks_count=len(rag_context.chunks_usados),
+                    confidence=rag_context.confianca.value,
+                    sources_count=len(rag_context.fontes),
+                )
+            except Exception as e:
+                log.warning(
+                    LogEvents.API_ERRO_GERAR_RESPOSTA,
+                    error="RAG search failed, falling back to normal generation",
+                    details=str(e),
+                )
+                rag_context = None
+        elif self.enable_rag and self._query_service:
             try:
                 rag_context = await self._query_service.query(
                     query_text=prompt,
                     top_k=self.settings.rag.top_k,
                     min_similarity=self.settings.rag.min_similarity,
                 )
-
                 log.info(
                     LogEvents.RAG_BUSCA_CONCLUIDA,
                     chunks_count=len(rag_context.chunks_usados),
@@ -408,9 +470,15 @@ class AgentWrapper:
             # Build full prompt with history and RAG context
             full_prompt = self._build_prompt(prompt, history, rag_context)
 
-            # Run the agent (async API) - arun returns RunOutput directly
-            result = self.agent.arun(full_prompt)
-            response = await result  # type: ignore[misc]
+            # Run the agent with a timeout to avoid hanging indefinitely.
+            # arun() is typed as returning RunOutput but is actually a coroutine.
+            try:
+                result = self.agent.arun(full_prompt)
+                response = await asyncio.wait_for(result, timeout=60.0)  # type: ignore[misc]
+            except TimeoutError as exc:
+                raise APIError(
+                    "Tempo limite de resposta da IA excedido (60s)"
+                ) from exc
 
             if not response or not response.content:
                 raise APIError("Empty response from AI provider")
@@ -422,8 +490,6 @@ class AgentWrapper:
             elif isinstance(content, bytes):
                 return content.decode("utf-8")
             elif isinstance(content, (dict, list)):
-                import json
-
                 return json.dumps(content, ensure_ascii=False)
             else:
                 raise TypeError(

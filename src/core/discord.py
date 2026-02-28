@@ -6,18 +6,18 @@ and integration with the AI agent.
 """
 
 import asyncio
-from typing import TYPE_CHECKING
 
 import discord
 import structlog
 from discord.ext import commands
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from ..config.settings import settings
 from ..config.yaml_config import yaml_config
 from ..middleware.rate_limiter import rate_limiter
+from ..models.rag_models import DocumentORM
+from ..rag.services.embedding_service import EmbeddingService
+from ..rag.services.ingestion_service import IngestionService
 from ..storage.sqlite_repository import SQLiteRepository
 from ..utils.errors import APIError
 from ..utils.errors import RateLimitError as BotRateLimitError
@@ -55,11 +55,9 @@ class BotSalinhaBot(commands.Bot):
 
         # Initialize components with dependency injection
         self.repository = repository
-        # Agent is created without a RAG session; setup_hook enables RAG once the DB is ready.
+        # Agent is created without RAG; setup_hook wires the session factory after DB is ready.
         self.agent = AgentWrapper(repository=self.repository)
         self._ready_event = asyncio.Event()
-        # Persistent session opened in setup_hook and closed in close().
-        self._rag_session: "AsyncSession | None" = None
 
         log.info(LogEvents.BOT_DISCORD_INICIALIZADO, prefix=settings.discord.command_prefix)
 
@@ -69,17 +67,14 @@ class BotSalinhaBot(commands.Bot):
         await self.repository.initialize_database()
         await self.repository.create_tables()
 
-        # Open a long-lived session for RAG and wire it into the agent.
-        self._rag_session = self.repository.async_session_maker()
-        self.agent.enable_rag_with_session(self._rag_session)
+        # Wire a session factory so the agent creates an isolated session per request,
+        # avoiding concurrent-session issues in SQLAlchemy async.
+        self.agent.enable_rag_with_session_maker(self.repository.session)
 
         log.info(LogEvents.BANCO_DADOS_INICIALIZADO)
 
     async def close(self) -> None:
-        """Shutdown the bot and release the RAG session."""
-        if self._rag_session is not None:
-            await self._rag_session.close()
-            self._rag_session = None
+        """Shutdown the bot gracefully."""
         await super().close()
 
     async def on_ready(self) -> None:
@@ -307,13 +302,11 @@ class BotSalinhaBot(commands.Bot):
             await message.channel.send(
                 "❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente."
             )
-        except Exception as e:
-            log.error(
+        except Exception:
+            log.exception(
                 LogEvents.ERRO_INESPERADO_PROCESSAR_MENSAGEM,
                 user_id=str(user_id),
                 guild_id=str(guild_id),
-                error=str(e),
-                error_type=type(e).__name__,
             )
             await message.channel.send("❌ Ocorreu um erro inesperado. Por favor, tente novamente.")
         finally:
@@ -542,10 +535,6 @@ Desenvolvido com ❤️ usando Agno + OpenAI
         await ctx.typing()
 
         try:
-            from sqlalchemy import func, select
-
-            from src.models.rag_models import DocumentORM
-
             async with self.repository.session() as db_session:
                 # Get document count
                 doc_count_stmt = select(func.count(DocumentORM.id))
@@ -606,9 +595,6 @@ Desenvolvido com ❤️ usando Agno + OpenAI
         await ctx.typing()
 
         try:
-            from src.rag.services.embedding_service import EmbeddingService
-            from src.rag.services.ingestion_service import IngestionService
-
             async with self.repository.session() as db_session:
                 # Create ingestion service
                 embedding_service = EmbeddingService()

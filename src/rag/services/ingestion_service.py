@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -284,9 +285,15 @@ class IngestionService:
         Reads the file in 64 KiB chunks so large files don't exhaust memory.
         """
         h = hashlib.sha256()
-        with open(file_path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(65536), b""):
-                h.update(chunk)
+        try:
+            with open(file_path, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    h.update(chunk)
+        except FileNotFoundError as exc:
+            raise IngestionError(
+                f"Arquivo não encontrado: {file_path}",
+                details={"file_path": file_path},
+            ) from exc
         return h.hexdigest()
 
     async def _find_by_hash(self, file_hash: str) -> DocumentORM | None:
@@ -383,16 +390,13 @@ class IngestionService:
         Raises:
             IngestionError: If reindexing fails
         """
-        import time
-
         start_time = time.time()
 
-        # Default to docs/plans/RAG/ if not specified
+        # Default to data/documents/ (project root / data / documents)
         if documents_dir is None:
-            # Get project root (3 levels up from this file)
             current_file = Path(__file__)
             project_root = current_file.parent.parent.parent.parent
-            documents_dir = str(project_root / "docs" / "plans" / "RAG")
+            documents_dir = str(project_root / "data" / "documents")
 
         documents_path = Path(documents_dir)
         if not documents_path.exists():
