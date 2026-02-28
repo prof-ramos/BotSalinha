@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotSalinha - Tribunal de Métricas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020617;
+            --surface: #0f172a;
+            --accent: #c5a059;
+            --accent-dim: #78350f;
+            --text-gold: #fde68a;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --danger: #b91c1c;
+            --border: 1px solid rgba(197, 160, 89, 0.2);
+            --border-heavy: 2px solid #c5a059;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); filter: blur(5px); }
+            to { opacity: 1; transform: translateY(0); filter: blur(0); }
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background-color: var(--bg);
+            background-image: 
+                linear-gradient(rgba(197, 160, 89, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(197, 160, 89, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--text-main);
+            padding: 4rem 2rem;
+            line-height: 1.4;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        header {
+            margin-bottom: 5rem;
+            text-align: center;
+            border-bottom: var(--border-heavy);
+            padding-bottom: 2rem;
+            position: relative;
+        }
+
+        header h1 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 4.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+            line-height: 0.9;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            font-family: 'Syne', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.4em;
+            font-size: 0.75rem;
+            color: var(--text-gold);
+            opacity: 0.8;
+        }
+
+        .timestamp {
+            position: absolute;
+            top: -2rem;
+            right: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--accent);
+            opacity: 0.6;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: rgba(197, 160, 89, 0.2);
+            border: var(--border-heavy);
+            margin-bottom: 4rem;
+            animation: slideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .summary-card {
+            background: var(--bg);
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+        }
+
+        .summary-card h3 {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        .summary-card .value {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .summary-card.success .value { color: var(--success); }
+        .summary-card.failed .value { color: var(--danger); }
+
+        .section {
+            margin-bottom: 6rem;
+            opacity: 0;
+            animation: slideIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .section:nth-child(4) { animation-delay: 0.2s; }
+        .section:nth-child(5) { animation-delay: 0.4s; }
+        .section:nth-child(6) { animation-delay: 0.6s; }
+
+        .section-header {
+            display: flex;
+            align-items: flex-end;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            border-bottom: var(--border);
+            padding-bottom: 1rem;
+        }
+
+        .section-header h2 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .status-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.2rem 1rem;
+            border: 1px solid currentColor;
+            text-transform: uppercase;
+        }
+
+        .status-badge.success { color: var(--success); }
+        .status-badge.failed { color: var(--danger); }
+
+        .description {
+            font-family: 'Syne', sans-serif;
+            font-size: 1rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            margin-bottom: 3rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 3rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: var(--accent);
+            border-bottom: var(--border);
+            letter-spacing: 0.1em;
+        }
+
+        td {
+            padding: 1.2rem 1rem;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(197, 160, 89, 0.05);
+        }
+
+        .chart-container {
+            background: var(--surface);
+            padding: 2.5rem;
+            border: var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-container::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: var(--accent);
+            opacity: 0.3;
+            animation: scanline 4s linear infinite;
+        }
+
+        .chart-container h4 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            color: var(--text-gold);
+            text-transform: italic;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .bar-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-dim);
+        }
+
+        .bar-wrapper {
+            background: rgba(197, 160, 89, 0.1);
+            height: 1.5rem;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--bg);
+            transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .output-section pre {
+            background: #000;
+            border: 1px solid #1e293b;
+            padding: 1.5rem;
+            color: #38bdf8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
+        }
+
+        .error-output {
+            color: var(--danger) !important;
+            border-color: var(--danger) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="timestamp">PROCESSO Nº 2026.02.28.0353</div>
+        <header>
+            <h1>Tribunal de<br>Métricas</h1>
+            <p>Relatório de Auditoria BotSalinha</p>
+        </header>
+
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Escopo</h3>
+                <div class="value">4</div>
+            </div>
+            <div class="summary-card success">
+                <h3>Deferidos</h3>
+                <div class="value">3</div>
+            </div>
+            <div class="summary-card failed">
+                <h3>Indeferidos</h3>
+                <div class="value">1</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Database Access Performance</h2>
+                <span class="status-badge success">
+                    ✓ Sucesso
+                </span>
+            </div>
+            <p class="description">Database write/read operation latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>operation</th>
+    <th>count</th>
+    <th>total_time_ms</th>
+    <th>avg_time_ms</th>
+  </tr>
+  <tr>
+    <td>Insert Conversation</td>
+    <td>50</td>
+    <td>205.71</td>
+    <td>4.11</td>
+  </tr>
+  <tr>
+    <td>Read Conversations</td>
+    <td>100</td>
+    <td>228.76</td>
+    <td>2.29</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo Médio por Operação (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Insert Conversation</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%">4.11 ms</div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">Read Conversations</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 55.71776155717762%">2.29 ms</div>
+                </div>
+            </div>
+</div></div>        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>RAG Component Performance</h2>
+                <span class="status-badge success">
+                    ✓ Sucesso
+                </span>
+            </div>
+            <p class="description">Embedding generation and vector search latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>text_snippet</th>
+    <th>char_length</th>
+    <th>embedding_time_ms</th>
+    <th>search_time_ms</th>
+    <th>chunks_found</th>
+  </tr>
+  <tr>
+    <td>o que é estágio probatório?</td>
+    <td>27</td>
+    <td>674.64</td>
+    <td>55.7</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>quais os requisitos para ser presidente da repúbli</td>
+    <td>53</td>
+    <td>281.88</td>
+    <td>4.85</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>como funciona a licença maternidade?</td>
+    <td>36</td>
+    <td>274.09</td>
+    <td>6.22</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>princípios da administração pública, impessoalidad</td>
+    <td>65</td>
+    <td>307.54</td>
+    <td>6.81</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>uma frase curta.</td>
+    <td>16</td>
+    <td>341.8</td>
+    <td>11.19</td>
+    <td>0</td>
+  </tr>
+  <tr>
+    <td>um texto muito mais longo para avaliar se o tempo </td>
+    <td>201</td>
+    <td>880.83</td>
+    <td>45.82</td>
+    <td>0</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo de Embedding vs Busca (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">o que é estágio probatório?</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 76.59139675079186%; background: var(--primary-light);">
+                        Emb: 674.64ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 6.323581167762224%; background: var(--primary);">
+                        Search: 55.70ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">quais os requisitos para ser p</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 32.001634821702254%; background: var(--primary-light);">
+                        Emb: 281.88ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 0.5506170316633174%; background: var(--primary);">
+                        Search: 4.85ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">como funciona a licença matern</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 31.117241692494574%; background: var(--primary-light);">
+                        Emb: 274.09ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 0.7061521519475947%; background: var(--primary);">
+                        Search: 6.22ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">princípios da administração pú</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 34.914796271698286%; background: var(--primary-light);">
+                        Emb: 307.54ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 0.7731344300262252%; background: var(--primary);">
+                        Search: 6.81ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">uma frase curta.</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 38.804309571654%; background: var(--primary-light);">
+                        Emb: 341.80ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 1.2703926977963964%; background: var(--primary);">
+                        Search: 11.19ms
+                    </div>
+                </div>
+            </div>
+</div></div>
+            <div class="output-section">
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--danger);">Logs de Erro:</h4>
+                <pre class="error-output">2026-02-28 03:52:57,881 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:52:58,238 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:52:58,515 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:52:58,830 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:52:59,179 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:53:00,060 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+</pre>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>RAG Quality Metrics</h2>
+                <span class="status-badge failed">
+                    ✗ Falha
+                </span>
+            </div>
+            <p class="description">Semantic similarity and confidence distribution</p>
+
+            <div class="output-section">
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--danger);">Logs de Erro:</h4>
+                <pre class="error-output">Traceback (most recent call last):
+  File &quot;/Users/gabrielramos/BotSalinha/metricas/gerar_qualidade.py&quot;, line 147, in &lt;module&gt;
+    parser.add_argument(&quot;-q&quot;, &quot;--queries&quot;, type=int, default=None, help=&quot;Number of queries to test&quot;)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1489, in add_argument
+    return self._add_action(action)
+           ~~~~~~~~~~~~~~~~^^^^^^^^
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1878, in _add_action
+    self._optionals._add_action(action)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1696, in _add_action
+    action = super(_ArgumentGroup, self)._add_action(action)
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1503, in _add_action
+    self._check_conflict(action)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1645, in _check_conflict
+    conflict_handler(action, confl_optionals)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File &quot;/Users/gabrielramos/.local/share/uv/python/cpython-3.13.11-macos-aarch64-none/lib/python3.13/argparse.py&quot;, line 1654, in _handle_conflict_error
+    raise ArgumentError(action, message % conflict_string)
+argparse.ArgumentError: argument -q/--queries: conflicting option string: -q
+</pre>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>End-to-End Performance</h2>
+                <span class="status-badge success">
+                    ✓ Sucesso
+                </span>
+            </div>
+            <p class="description">Full bot response generation latency including RAG</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>prompt</th>
+    <th>response_length</th>
+    <th>used_rag</th>
+    <th>duration_seconds</th>
+    <th>status</th>
+  </tr>
+  <tr>
+    <td>Olá, tudo bem?</td>
+    <td>59</td>
+    <td>False</td>
+    <td>3.322</td>
+    <td>success</td>
+  </tr>
+  <tr>
+    <td>Me explique o artigo 5 da constituição.</td>
+    <td>0</td>
+    <td>False</td>
+    <td>0.0</td>
+    <td>error: Operation &#39;ai_generate&#39; failed after 3 attempts</td>
+  </tr>
+  <tr>
+    <td>Quais as regras de vacância na lei 8112?</td>
+    <td>0</td>
+    <td>False</td>
+    <td>0.0</td>
+    <td>error: Operation &#39;ai_generate&#39; failed after 3 attempts</td>
+  </tr>
+  <tr>
+    <td>Quais os fundamentos da República Federativa do Brasil?</td>
+    <td>0</td>
+    <td>False</td>
+    <td>0.0</td>
+    <td>error: Operation &#39;ai_generate&#39; failed after 3 attempts</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo de Resposta por Prompt (s)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Olá, tudo bem? [No RAG]</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%;">
+                        3.322s
+                    </div>
+                </div>
+            </div>
+</div></div>
+            <div class="output-section">
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--danger);">Logs de Erro:</h4>
+                <pre class="error-output">2026-02-28 03:53:11,547 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:53:12,721 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions &quot;HTTP/2 200 OK&quot;
+2026-02-28 03:53:13,503 - httpx - INFO - HTTP Request: POST https://os-api.agno.com/telemetry/runs &quot;HTTP/2 201 Created&quot;
+2026-02-28 03:53:13,859 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:53:14,162 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 03:53:14,511 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+</pre>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

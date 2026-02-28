@@ -91,220 +91,300 @@ def generate_html_report(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BotSalinha - Relatório de Métricas</title>
+    <title>BotSalinha - Tribunal de Métricas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {{
+            --bg: #020617;
+            --surface: #0f172a;
+            --accent: #c5a059;
+            --accent-dim: #78350f;
+            --text-gold: #fde68a;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --danger: #b91c1c;
+            --border: 1px solid rgba(197, 160, 89, 0.2);
+            --border-heavy: 2px solid #c5a059;
+        }}
+
+        @keyframes slideIn {{
+            from {{ opacity: 0; transform: translateY(20px); filter: blur(5px); }}
+            to {{ opacity: 1; transform: translateY(0); filter: blur(0); }}
+        }}
+
+        @keyframes scanline {{
+            0% {{ transform: translateY(-100%); }}
+            100% {{ transform: translateY(100%); }}
+        }}
+
         * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }}
+
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f5f5f5;
-            padding: 20px;
+            font-family: 'Syne', sans-serif;
+            background-color: var(--bg);
+            background-image: 
+                linear-gradient(rgba(197, 160, 89, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(197, 160, 89, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--text-main);
+            padding: 4rem 2rem;
+            line-height: 1.4;
         }}
+
         .container {{
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
+            position: relative;
         }}
+
         header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
+            margin-bottom: 5rem;
             text-align: center;
+            border-bottom: var(--border-heavy);
+            padding-bottom: 2rem;
+            position: relative;
         }}
+
         header h1 {{
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-family: 'Bodoni Moda', serif;
+            font-size: 4.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+            line-height: 0.9;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
         }}
-        header .timestamp {{
-            opacity: 0.9;
-            font-size: 1.1em;
+
+        header p {{
+            font-family: 'Syne', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.4em;
+            font-size: 0.75rem;
+            color: var(--text-gold);
+            opacity: 0.8;
         }}
+
+        .timestamp {{
+            position: absolute;
+            top: -2rem;
+            right: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--accent);
+            opacity: 0.6;
+        }}
+
         .summary {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            padding: 30px;
-            background: #f8f9fa;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: rgba(197, 160, 89, 0.2);
+            border: var(--border-heavy);
+            margin-bottom: 4rem;
+            animation: slideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }}
+
         .summary-card {{
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background: var(--bg);
+            padding: 2.5rem 1.5rem;
             text-align: center;
         }}
+
         .summary-card h3 {{
-            font-size: 0.9em;
-            color: #666;
-            margin-bottom: 10px;
+            font-size: 0.65rem;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.2em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
         }}
+
         .summary-card .value {{
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
+            font-family: 'Bodoni Moda', serif;
+            font-size: 4rem;
+            font-weight: 800;
+            line-height: 1;
         }}
-        .summary-card.success .value {{
-            color: #28a745;
-        }}
-        .summary-card.failed .value {{
-            color: #dc3545;
-        }}
+
+        .summary-card.success .value {{ color: var(--success); }}
+        .summary-card.failed .value {{ color: var(--danger); }}
+
         .section {{
-            padding: 30px;
-            border-bottom: 1px solid #eee;
+            margin-bottom: 6rem;
+            opacity: 0;
+            animation: slideIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }}
-        .section:last-child {{
-            border-bottom: none;
+
+        .section:nth-child(4) {{ animation-delay: 0.2s; }}
+        .section:nth-child(5) {{ animation-delay: 0.4s; }}
+        .section:nth-child(6) {{ animation-delay: 0.6s; }}
+
+        .section-header {{
+            display: flex;
+            align-items: flex-end;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            border-bottom: var(--border);
+            padding-bottom: 1rem;
         }}
-        .section h2 {{
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 1.8em;
+
+        .section-header h2 {{
+            font-family: 'Bodoni Moda', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent);
         }}
-        .section .description {{
-            color: #666;
-            margin-bottom: 20px;
-            font-style: italic;
-        }}
+
         .status-badge {{
-            display: inline-block;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: bold;
-            margin-left: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.2rem 1rem;
+            border: 1px solid currentColor;
+            text-transform: uppercase;
         }}
-        .status-badge.success {{
-            background: #d4edda;
-            color: #155724;
+
+        .status-badge.success {{ color: var(--success); }}
+        .status-badge.failed {{ color: var(--danger); }}
+
+        .description {{
+            font-family: 'Syne', sans-serif;
+            font-size: 1rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            margin-bottom: 3rem;
         }}
-        .status-badge.failed {{
-            background: #f8d7da;
-            color: #721c24;
-        }}
+
         table {{
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 3rem;
         }}
+
         th {{
-            background: #667eea;
-            color: white;
-            padding: 15px;
             text-align: left;
-            font-weight: 600;
+            padding: 1rem;
+            font-size: 0.65rem;
             text-transform: uppercase;
-            font-size: 0.85em;
-            letter-spacing: 0.5px;
+            color: var(--accent);
+            border-bottom: var(--border);
+            letter-spacing: 0.1em;
         }}
+
         td {{
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
+            padding: 1.2rem 1rem;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(197, 160, 89, 0.05);
         }}
-        tr:last-child td {{
-            border-bottom: none;
-        }}
-        tr:hover {{
-            background: #f8f9fa;
-        }}
+
         .chart-container {{
-            margin: 20px 0;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
+            background: var(--surface);
+            padding: 2.5rem;
+            border: var(--border);
+            position: relative;
+            overflow: hidden;
         }}
+
+        .chart-container::after {{
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: var(--accent);
+            opacity: 0.3;
+            animation: scanline 4s linear infinite;
+        }}
+
+        .chart-container h4 {{
+            font-family: 'Bodoni Moda', serif;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            color: var(--text-gold);
+            text-transform: italic;
+        }}
+
         .bar-chart {{
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 1.5rem;
         }}
+
         .bar-row {{
-            display: flex;
+            display: grid;
+            grid-template-columns: 200px 1fr;
             align-items: center;
-            gap: 10px;
+            gap: 2rem;
         }}
+
         .bar-label {{
-            min-width: 150px;
-            font-size: 0.9em;
-            color: #555;
-            text-align: right;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-dim);
         }}
+
         .bar-wrapper {{
-            flex: 1;
-            background: #e9ecef;
-            border-radius: 4px;
-            overflow: hidden;
-            height: 30px;
+            background: rgba(197, 160, 89, 0.1);
+            height: 1.5rem;
             position: relative;
         }}
+
         .bar-fill {{
             height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.3s ease;
+            background: var(--accent);
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            padding-right: 10px;
-            color: white;
-            font-size: 0.85em;
-            font-weight: bold;
+            padding-right: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--bg);
+            transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
         }}
-        .output-section {{
-            margin-top: 20px;
+
+        .output-section pre {{
+            background: #000;
+            border: 1px solid #1e293b;
+            padding: 1.5rem;
+            color: #38bdf8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
         }}
-        .output-section h4 {{
-            color: #555;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-        }}
-        pre {{
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 15px;
-            border-radius: 6px;
-            overflow-x: auto;
-            font-size: 0.85em;
-            line-height: 1.5;
-        }}
+
         .error-output {{
-            background: #721c24;
-            color: white;
+            color: var(--danger) !important;
+            border-color: var(--danger) !important;
         }}
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="timestamp">PROCESSO Nº {datetime.now().strftime("%Y.%m.%d.%H%M")}</div>
         <header>
-            <h1>BotSalinha</h1>
-            <div style="font-size: 1.3em; margin: 10px 0;">Relatório de Métricas</div>
-            <div class="timestamp">{timestamp}</div>
+            <h1>Tribunal de<br>Métricas</h1>
+            <p>Relatório de Auditoria BotSalinha</p>
         </header>
 
         <div class="summary">
             <div class="summary-card">
-                <h3>Total de Testes</h3>
+                <h3>Escopo</h3>
                 <div class="value">{len(results)}</div>
             </div>
             <div class="summary-card success">
-                <h3>Sucesso</h3>
+                <h3>Deferidos</h3>
                 <div class="value">{sum(1 for r in results.values() if r[0])}</div>
             </div>
             <div class="summary-card failed">
-                <h3>Falhas</h3>
+                <h3>Indeferidos</h3>
                 <div class="value">{sum(1 for r in results.values() if not r[0])}</div>
             </div>
         </div>
@@ -317,9 +397,12 @@ def generate_html_report(
 
         html += f"""
         <div class="section">
-            <h2>{config["name"]} <span class="status-badge {"success" if success else "failed"}">
-                {"✓ Sucesso" if success else "✗ Falha"}
-            </span></h2>
+            <div class="section-header">
+                <h2>{config["name"]}</h2>
+                <span class="status-badge {"success" if success else "failed"}">
+                    {"✓ Sucesso" if success else "✗ Falha"}
+                </span>
+            </div>
             <p class="description">{config["description"]}</p>
 """
 
@@ -331,14 +414,14 @@ def generate_html_report(
         if stderr:
             html += f"""
             <div class="output-section">
-                <h4>Stderr:</h4>
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--danger);">Logs de Erro:</h4>
                 <pre class="error-output">{escape_html(stderr)}</pre>
             </div>
 """
         elif stdout and not success:
             html += f"""
             <div class="output-section">
-                <h4>Stdout:</h4>
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Saída do Script:</h4>
                 <pre>{escape_html(stdout)}</pre>
             </div>
 """
@@ -444,12 +527,12 @@ def generate_rag_chart(data: list[dict[str, str]]) -> str:
             <div class="bar-row">
                 <div class="bar-label">{escape_html(snippet)}</div>
                 <div class="bar-wrapper">
-                    <div class="bar-fill" style="width: {emb_pct}%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                    <div class="bar-fill" style="width: {emb_pct}%; background: var(--primary-light);">
                         Emb: {emb_time:.2f}ms
                     </div>
                 </div>
                 <div class="bar-wrapper" style="flex: 0.6;">
-                    <div class="bar-fill" style="width: {search_pct}%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                    <div class="bar-fill" style="width: {search_pct}%; background: var(--primary);">
                         Search: {search_time:.2f}ms
                     </div>
                 </div>
@@ -475,7 +558,7 @@ def generate_quality_chart(data: list[dict[str, str]]) -> str:
         percentage = (sim / max_sim * 100) if max_sim > 0 else 0
 
         # Color based on confidence
-        color = "#28a745" if conf == "alta" else "#ffc107" if conf == "media" else "#dc3545"
+        color = "var(--success)" if conf == "alta" else "var(--warning)" if conf == "media" else "var(--danger)"
 
         html += f"""
             <div class="bar-row">
