@@ -43,15 +43,11 @@ class DiscordBotWrapper:
     def _setup_mock_discord(self):
         """Set up mock Discord objects for testing."""
         from src.core.discord import BotSalinhaBot
+        from src.storage.sqlite_repository import SQLiteRepository
 
+        repo = self.repository or SQLiteRepository()
         # Create the bot (without initializing the discord.py client)
-        self.bot = BotSalinhaBot()
-
-        # Replace repository if provided
-        if self.repository:
-            self.bot.repository = self.repository
-            if self.bot.agent is not None:
-                self.bot.agent.repository = self.repository
+        self.bot = BotSalinhaBot(repository=repo)
 
         # Mock bot.user (needed for get_context in process_commands)
         mock_user = MagicMock()

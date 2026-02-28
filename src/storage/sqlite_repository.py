@@ -462,20 +462,7 @@ class SQLiteRepository(ConversationRepository, MessageRepository):
             return counts
 
 
-# Global repository instance
-repository: SQLiteRepository | None = None
-
-
-def get_repository() -> SQLiteRepository:
-    """Get the global repository instance."""
-    global repository
-    if repository is None:
-        repository = SQLiteRepository()
-    return repository
-
-
 __all__ = [
     "SQLiteRepository",
     "MessageORM",
-    "get_repository",
 ]

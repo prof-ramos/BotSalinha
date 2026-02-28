@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 from ..config.settings import settings
 from ..config.yaml_config import yaml_config
 from ..middleware.rate_limiter import rate_limiter
-from ..storage.sqlite_repository import SQLiteRepository, get_repository
+from ..storage.sqlite_repository import SQLiteRepository
 from ..utils.errors import APIError
 from ..utils.errors import RateLimitError as BotRateLimitError
 from ..utils.log_correlation import bind_discord_context
@@ -36,12 +36,11 @@ class BotSalinhaBot(commands.Bot):
     rate limiting, and AI integration.
     """
 
-    def __init__(self, repository: SQLiteRepository | None = None) -> None:
+    def __init__(self, repository: SQLiteRepository) -> None:
         """Initialize the bot.
 
         Args:
-            repository: Optional repository instance for dependency injection.
-                        If not provided, uses the global repository.
+            repository: Repository instance (required, injected by caller).
         """
         intents = discord.Intents.default()
         intents.message_content = True
@@ -55,7 +54,7 @@ class BotSalinhaBot(commands.Bot):
         )
 
         # Initialize components with dependency injection
-        self.repository = repository or get_repository()
+        self.repository = repository
         # Agent is created without a RAG session; setup_hook enables RAG once the DB is ready.
         self.agent = AgentWrapper(repository=self.repository)
         self._ready_event = asyncio.Event()

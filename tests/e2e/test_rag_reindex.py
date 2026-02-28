@@ -30,7 +30,7 @@ class TestRAGReindexCommand:
         await repository.initialize_database()
         await repository.create_tables()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        bot = BotSalinhaBot(repository=repository)
 
         # Create mock context with owner
         ctx = MagicMock()
@@ -103,7 +103,7 @@ class TestRAGReindexCommand:
         await repository.initialize_database()
         await repository.create_tables()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        bot = BotSalinhaBot(repository=repository)
 
         # Check if command exists
         command = bot.get_command("reindexar")

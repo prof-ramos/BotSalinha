@@ -59,7 +59,7 @@ class TestRAGIntegrationE2E:
         await repository.initialize_database()
         await repository.create_tables()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        bot = BotSalinhaBot(repository=repository)
 
         # Mock the agent response to avoid real API call
         async def mock_generate_with_rag(prompt, *args, **kwargs):
@@ -134,7 +134,7 @@ class TestRAGIntegrationE2E:
         await repository.initialize_database()
         await repository.create_tables()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        bot = BotSalinhaBot(repository=repository)
         bot.agent.enable_rag = False  # Disable RAG
 
         # Mock the agent response
@@ -217,7 +217,7 @@ class TestRAGIntegrationE2E:
         await repository.initialize_database()
         await repository.create_tables()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        bot = BotSalinhaBot(repository=repository)
 
         # Create mock context with proper Discord context mock
         ctx = MagicMock()

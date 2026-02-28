@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager, suppress
 
 import structlog
 
-from ..storage.sqlite_repository import get_repository
 from ..utils.log_events import LogEvents
 
 log = structlog.get_logger()
@@ -96,9 +95,10 @@ class GracefulShutdown:
 
     async def cleanup(self) -> None:
         """
-        Run all cleanup tasks.
+        Run all registered cleanup tasks.
 
-        Should be called after shutdown is triggered.
+        Repository lifecycle is managed externally by the caller
+        (e.g. the create_repository() context manager in cli.py).
         """
         log.info(LogEvents.LIMPEZA_INICIADA, task_count=len(self._cleanup_tasks))
 
@@ -114,18 +114,6 @@ class GracefulShutdown:
                     error_type=type(e).__name__,
                     error_message=str(e),
                 )
-
-        # Close repository
-        try:
-            repository = get_repository()
-            await repository.close()
-            log.info(LogEvents.REPOSITORIO_FECHADO)
-        except Exception as e:
-            log.error(
-                LogEvents.LIMPEZA_REPOSITORIO_FALHOU,
-                error_type=type(e).__name__,
-                error_message=str(e),
-            )
 
         # Note: MCP cleanup is handled by AgentWrapper._mcp_manager
         # which is called when AgentWrapper goes out of scope
@@ -146,13 +134,6 @@ async def managed_lifecycle():  # type: ignore[no-untyped-def]
             await bot.start()
     """
     shutdown_manager = GracefulShutdown()
-
-    # Register cleanup tasks
-    async def cleanup_repository() -> None:
-        repository = get_repository()
-        await repository.close()
-
-    shutdown_manager.register_cleanup_task(cleanup_repository)
 
     # Setup signal handlers
     try:
@@ -177,6 +158,8 @@ async def run_with_lifecycle(
     """
     Run an application with proper lifecycle management.
 
+    Repository lifecycle is managed externally by the caller.
+
     Args:
         start_coro: Async function to start the application
         shutdown_coro: Optional async function for shutdown
@@ -186,13 +169,6 @@ async def run_with_lifecycle(
     # Register cleanup tasks
     if shutdown_coro:
         shutdown_manager.register_cleanup_task(shutdown_coro)
-
-    # Add repository cleanup
-    async def cleanup_repository() -> None:
-        repository = get_repository()
-        await repository.close()
-
-    shutdown_manager.register_cleanup_task(cleanup_repository)
 
     # Setup signal handlers
     shutdown_manager.setup_signal_handlers()
