@@ -183,6 +183,28 @@ class RAGConfig(BaseSettings):
     rerank_alpha: float = Field(
         default=0.8, ge=0.0, le=1.0, description="Weight for semantic score in reranking"
     )
+    vector_backend: str = Field(
+        default="sqlite", description="Vector backend: sqlite | qdrant"
+    )
+    qdrant_url: str = Field(default="http://localhost:6333", description="Qdrant base URL")
+    qdrant_api_key: str | None = Field(default=None, description="Qdrant API key")
+    qdrant_collection: str = Field(
+        default="botsalinha_chunks", description="Qdrant collection name"
+    )
+    qdrant_timeout_seconds: float = Field(
+        default=10.0, ge=1.0, le=120.0, description="Qdrant request timeout"
+    )
+
+    @field_validator("vector_backend")
+    @classmethod
+    def validate_vector_backend(cls, value: str) -> str:
+        allowed = {"sqlite", "qdrant"}
+        normalized = value.strip().lower()
+        if normalized not in allowed:
+            raise ValidationError(
+                f"RAG vector_backend inválido: '{value}'. Valores aceitos: sqlite, qdrant"
+            )
+        return normalized
 
 
 class Settings(BaseSettings):

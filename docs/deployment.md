@@ -6,6 +6,7 @@
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
+- (Opcional) Qdrant para backend vetorial dedicado
 
 ### Configuração Inicial
 
@@ -33,7 +34,7 @@
 
    > O provider/modelo ativo é definido no `config.yaml`.
 
-4. **Build e start do bot**
+4. **Build e start do bot + Qdrant**
 
    ```bash
    docker-compose up -d
@@ -163,6 +164,8 @@ docker-compose exec botsalinha python scripts/backup.py restore --restore-from /
 ```bash
 docker-compose ps
 ```
+
+> Se usar backend vetorial dedicado, confirme também o serviço `qdrant` em execução.
 
 ### Uso de recursos
 

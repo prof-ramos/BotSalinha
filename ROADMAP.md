@@ -35,7 +35,7 @@ Para uma visão detalhada das capacidades já implementadas e em desenvolvimento
 - [ ] Dashboard de analytics (volume de uso, tokens, tópicos mais perguntados)
 - [ ] LGPD/compliance: anonimização e exportação/exclusão de dados por usuário
 - [ ] Suporte a modelos adicionais (Claude, Mistral)
-- [ ] Vector DB dedicado (ChromaDB ou Qdrant) quando volume > 100K chunks
+- [x] Vector DB dedicado (Qdrant) disponível como backend opcional
 
 ---
 

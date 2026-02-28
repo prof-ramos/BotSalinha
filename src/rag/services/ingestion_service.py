@@ -11,6 +11,7 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...config.settings import get_settings
 from ...models.rag_models import ChunkORM, DocumentORM
 from ...utils.errors import BotSalinhaError
 from ...utils.log_events import LogEvents
@@ -18,6 +19,7 @@ from ..models import Chunk, Document
 from ..parser.chunker import ChunkExtractor
 from ..parser.docx_parser import DOCXParser
 from ..parser.pdf_parser import PDFParser
+from ..storage import get_vector_store
 from ..storage.vector_store import serialize_embedding
 from ..utils.metadata_extractor import MetadataExtractor
 from .embedding_service import EMBEDDING_DIM, EmbeddingService
@@ -94,7 +96,7 @@ class IngestionService:
         5. Store DocumentORM and ChunkORM in database
 
         Args:
-            file_path: Path to the DOCX file
+            file_path: Path to the input document (.docx or .pdf)
             document_name: Document identifier (e.g., 'CF/88')
 
         Returns:
@@ -208,6 +210,13 @@ class IngestionService:
                 embeddings_count=len(embeddings),
                 event_name="rag_ingestion_progress",
             )
+
+            # Optional Step 4.1: Sync embeddings to dedicated vector DB
+            if get_settings().rag.vector_backend == "qdrant":
+                vector_store = get_vector_store(self._session)
+                await vector_store.add_embeddings(
+                    list(zip(chunks, embeddings, strict=True))
+                )
 
             # Step 5: Update document statistics
             self._update_document_stats(document_orm, chunks)

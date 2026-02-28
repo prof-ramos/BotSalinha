@@ -62,3 +62,6 @@ rag:
   confidence_threshold: 0.70
   hybrid_search_enabled: true
   rerank_alpha: 0.8
+  vector_backend: sqlite
+  qdrant_url: http://localhost:6333
+  qdrant_collection: botsalinha_chunks

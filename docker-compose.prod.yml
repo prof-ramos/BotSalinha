@@ -26,6 +26,8 @@ services:
       - LOG_FILE_ENABLED=true
       - LOG_MAX_BYTES=10485760
       - LOG_BACKUP_COUNT=30
+    depends_on:
+      - qdrant
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
@@ -76,3 +78,13 @@ services:
     depends_on:
       - botsalinha
 
+
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    container_name: qdrant-prod
+    restart: always
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
