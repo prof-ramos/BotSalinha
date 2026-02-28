@@ -12,7 +12,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.errors import ValidationError
@@ -45,6 +45,23 @@ class OpenAIConfig(BaseModel):
     """OpenAI configuration."""
 
     api_key: str | None = Field(None, description="OpenAI API key")
+
+
+class SupabaseConfig(BaseModel):
+    """Supabase configuration."""
+
+    url: str | None = Field(
+        None,
+        description="Supabase project URL",
+        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
+    )
+    key: str | None = Field(
+        None,
+        description="Supabase service role API key or anon key",
+        validation_alias=AliasChoices(
+            "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        ),
+    )
 
 
 class RateLimitConfig(BaseModel):
@@ -146,6 +163,7 @@ class Settings(BaseSettings):
     discord: DiscordConfig = Field(default_factory=DiscordConfig)
     google: GoogleConfig = Field(default_factory=GoogleConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
+    supabase: SupabaseConfig = Field(default_factory=SupabaseConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)

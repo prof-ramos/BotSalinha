@@ -17,6 +17,10 @@ from structlog.contextvars import (
     merge_contextvars,
 )
 
+# Sanitization settings
+_sanitization_enabled = False
+_sanitize_partial_debug = True
+
 
 def configure_logging(
     log_level: str | None = None,
@@ -201,6 +205,89 @@ class RequestContextManager:
             unbind_context(*self.bound_keys)
 
 
+def enable_sanitization(partial_debug: bool = True) -> None:
+    """
+    Habilita sanitização de dados sensíveis nos logs.
+
+    Args:
+        partial_debug: Se True, logs DEBUG mostram mascaramento parcial
+    """
+    global _sanitization_enabled, _sanitize_partial_debug
+    _sanitization_enabled = True
+    _sanitize_partial_debug = partial_debug
+
+
+def disable_sanitization() -> None:
+    """Desabilita sanitização de dados sensíveis nos logs."""
+    global _sanitization_enabled
+    _sanitization_enabled = False
+
+
+def setup_application_logging(
+    log_level: str = "INFO",
+    log_format: str = "json",
+    app_version: str = "unknown",
+    app_env: str = "unknown",
+    debug: bool = False,
+    log_dir: str | None = None,
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 30,
+    level_file: str = "INFO",
+    level_error_file: str = "ERROR",
+    sanitize: bool = True,
+    sanitize_partial_debug: bool = True,
+) -> structlog.stdlib.BoundLogger:
+    """
+    Setup completo de logging com suporte a arquivos e sanitização.
+
+    Esta função deve ser chamada no startup da aplicação, antes de
+    qualquer outra inicialização que possa gerar logs.
+
+    Args:
+        log_level: Nível de log (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_format: Formato (json ou text)
+        app_version: Versão da aplicação
+        app_env: Ambiente (development, production)
+        debug: Modo debug
+        log_dir: Diretório para logs (None para desabilitar file logging)
+        max_bytes: Tamanho máximo do arquivo antes da rotação
+        backup_count: Número máximo de arquivos de backup
+        level_file: Nível mínimo para o arquivo principal
+        level_error_file: Nível para o arquivo de erros
+        sanitize: Habilitar sanitização de dados sensíveis
+        sanitize_partial_debug: Sanitização parcial em logs DEBUG
+
+    Returns:
+        Configured logger instance
+    """
+    # Configurar sanitização
+    if sanitize:
+        enable_sanitization(partial_debug=sanitize_partial_debug)
+
+    # Setup logging básico (stdout/stderr)
+    log = setup_logging(
+        log_level=log_level,
+        log_format=log_format,
+        app_version=app_version,
+        app_env=app_env,
+        debug=debug,
+    )
+
+    # Adicionar file handlers se log_dir fornecido
+    if log_dir:
+        from .log_rotation import configure_file_handlers
+
+        configure_file_handlers(
+            log_dir=log_dir,
+            max_bytes=max_bytes,
+            backup_count=backup_count,
+            level_file=level_file,
+            level_error_file=level_error_file,
+        )
+
+    return log
+
+
 # Convenience export
 __all__ = [
     "configure_logging",
@@ -210,4 +297,7 @@ __all__ = [
     "unbind_context",
     "clear_request_context",
     "RequestContextManager",
+    "enable_sanitization",
+    "disable_sanitization",
+    "setup_application_logging",
 ]

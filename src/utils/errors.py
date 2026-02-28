@@ -234,3 +234,13 @@ class RetryExhaustedError(BotSalinhaError):
         super().__init__(message, details=retry_details)
         self.last_error = last_error
         self.attempts = attempts
+
+
+class RepositoryConfigurationError(ConfigurationError):
+    """
+    Exception raised when repository configuration is invalid.
+
+    This includes missing database URLs, API keys, etc.
+    """
+
+    pass
