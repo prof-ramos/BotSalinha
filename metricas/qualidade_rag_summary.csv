@@ -1,0 +1,7 @@
+metric,value
+confidence_sem_rag_percent,16.7
+confidence_media_percent,16.7
+confidence_baixa_percent,66.7
+avg_similarity_aggregated,0.4661
+avg_chunks_retrieved,3.0
+total_queries,6

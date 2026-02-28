@@ -144,7 +144,7 @@ async def check_quality(
 
 if __name__ == "__main__":
     parser = get_base_parser("Generate RAG quality metrics")
-    parser.add_argument("-q", "--queries", type=int, default=None, help="Number of queries to test")
+    parser.add_argument("-n", "--queries", type=int, default=None, help="Number of queries to test")
     args = parser.parse_args()
     
     output_file = args.output or "metricas/qualidade_rag.csv"

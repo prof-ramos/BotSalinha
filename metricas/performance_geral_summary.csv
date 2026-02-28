@@ -1,0 +1,7 @@
+metric,value
+avg_duration_seconds,6.175
+total_duration_seconds,24.701
+success_rate_percent,100.0
+p95_latency_seconds,9.437
+total_requests,4
+successful_requests,4
