@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+
+_MULTISPACE_RE = re.compile(r"\s+")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
+
 
 def normalize_encoding(text: str) -> str:
     """
@@ -45,4 +51,31 @@ def normalize_encoding(text: str) -> str:
     return text
 
 
-__all__ = ["normalize_encoding"]
+def normalize_query_text(text: str) -> str:
+    """
+    Normaliza texto de consulta para recuperação RAG.
+
+    Aplica NFKC, remove caracteres de controle, normaliza espaços e
+    preserva marcadores jurídicos relevantes (ex.: "art.", "§", "inciso").
+
+    Args:
+        text: Texto bruto de consulta.
+
+    Returns:
+        Texto normalizado para embedding e ranking lexical.
+    """
+    if not text:
+        return ""
+
+    normalized = normalize_encoding(text)
+    normalized = unicodedata.normalize("NFKC", normalized)
+    normalized = _CONTROL_CHARS_RE.sub(" ", normalized)
+    normalized = normalized.replace("º", "o").replace("°", "o")
+    normalized = unicodedata.normalize("NFD", normalized)
+    normalized = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    normalized = normalized.casefold()
+    normalized = _MULTISPACE_RE.sub(" ", normalized).strip()
+    return normalized
+
+
+__all__ = ["normalize_encoding", "normalize_query_text"]

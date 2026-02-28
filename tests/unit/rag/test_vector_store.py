@@ -5,17 +5,36 @@ from __future__ import annotations
 import json
 
 import pytest
-import numpy as np
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
+from src.models.conversation import Base
+from src.models.rag_models import ChunkORM, DocumentORM
+from src.rag.models import Chunk, ChunkMetadata
 from src.rag.storage.vector_store import (
     VectorStore,
     cosine_similarity,
-    serialize_embedding,
     deserialize_embedding,
+    serialize_embedding,
 )
-from src.rag.models import Chunk, ChunkMetadata
-from src.models.rag_models import ChunkORM
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest_asyncio.fixture
+async def db_session() -> AsyncSession:
+    """Create isolated in-memory DB session for vector store unit tests."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
 
 
 @pytest.mark.unit
@@ -155,11 +174,16 @@ class TestVectorStore:
         # For unit test, we'll just verify the method doesn't crash
         chunks_with_embeddings = list(zip(chunks, embeddings, strict=False))
 
-        # This will fail if chunks don't exist, which is expected
+        # This will fail if chunks don't exist, which is expected - catch specific error
         try:
             await vector_store.add_embeddings(chunks_with_embeddings)
-        except Exception:
-            pass  # Expected if chunks not in DB
+        except Exception as exc:
+            if "FOREIGN KEY constraint failed" in str(exc) or "UNIQUE constraint failed" in str(
+                exc
+            ):
+                pass  # Expected: chunks must exist in DB first
+            else:
+                raise
 
     @pytest.mark.asyncio
     async def test_count_chunks(
@@ -194,3 +218,106 @@ class TestVectorStore:
 
         # Should return empty list or very few results
         assert isinstance(results, list)
+
+    @pytest.mark.asyncio
+    async def test_search_filters_not_null(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Test metadata filter with not_null operator."""
+        vector_store = VectorStore(session=db_session)
+
+        doc = DocumentORM(
+            nome="TEST",
+            arquivo_origem="test.docx",
+            chunk_count=2,
+            token_count=20,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        chunk_with_artigo = ChunkORM(
+            id="chunk-artigo",
+            documento_id=doc.id,
+            texto="Art. 5 direitos fundamentais",
+            metadados=json.dumps(
+                {"documento": "CF/88", "artigo": "5", "marca_stf": False, "marca_stj": False}
+            ),
+            token_count=10,
+            embedding=serialize_embedding([0.3, 0.2, 0.1]),
+        )
+        chunk_without_artigo = ChunkORM(
+            id="chunk-sem-artigo",
+            documento_id=doc.id,
+            texto="Disposicoes gerais",
+            metadados=json.dumps({"documento": "CF/88", "marca_stf": False, "marca_stj": False}),
+            token_count=10,
+            embedding=serialize_embedding([0.1, 0.2, 0.3]),
+        )
+        db_session.add_all([chunk_with_artigo, chunk_without_artigo])
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[0.2, 0.2, 0.2],
+            limit=10,
+            min_similarity=0.0,
+            filters={"artigo": "not_null"},
+        )
+
+        assert len(results) == 1
+        assert results[0][0].chunk_id == "chunk-artigo"
+        assert results[0][0].metadados.artigo == "5"
+
+    @pytest.mark.asyncio
+    async def test_search_filters_or_group(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Test OR grouping for metadata filters (e.g., STF OR STJ)."""
+        vector_store = VectorStore(session=db_session)
+
+        doc = DocumentORM(
+            nome="JURIS",
+            arquivo_origem="juris.docx",
+            chunk_count=3,
+            token_count=30,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        chunk_stf = ChunkORM(
+            id="chunk-stf",
+            documento_id=doc.id,
+            texto="Jurisprudencia STF sobre tema X",
+            metadados=json.dumps({"documento": "STF", "marca_stf": True, "marca_stj": False}),
+            token_count=10,
+            embedding=serialize_embedding([0.2, 0.1, 0.3]),
+        )
+        chunk_stj = ChunkORM(
+            id="chunk-stj",
+            documento_id=doc.id,
+            texto="Jurisprudencia STJ sobre tema Y",
+            metadados=json.dumps({"documento": "STJ", "marca_stf": False, "marca_stj": True}),
+            token_count=10,
+            embedding=serialize_embedding([0.2, 0.3, 0.1]),
+        )
+        chunk_none = ChunkORM(
+            id="chunk-none",
+            documento_id=doc.id,
+            texto="Texto sem jurisprudencia",
+            metadados=json.dumps({"documento": "GEN", "marca_stf": False, "marca_stj": False}),
+            token_count=10,
+            embedding=serialize_embedding([0.1, 0.3, 0.2]),
+        )
+        db_session.add_all([chunk_stf, chunk_stj, chunk_none])
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[0.2, 0.2, 0.2],
+            limit=10,
+            min_similarity=0.0,
+            filters={"__or__": [{"marca_stf": True}, {"marca_stj": True}]},
+        )
+
+        result_ids = {chunk.chunk_id for chunk, _ in results}
+        assert result_ids == {"chunk-stf", "chunk-stj"}

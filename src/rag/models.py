@@ -76,6 +76,14 @@ class RAGContext(BaseModel):
     )
     confianca: ConfiancaLevel = Field(..., description="Overall confidence level")
     fontes: list[str] = Field(default_factory=list, description="Formatted source citations")
+    retrieval_meta: dict[str, float | int | bool | str] = Field(
+        default_factory=dict,
+        description="Retrieval telemetry and ranking metadata",
+    )
+    query_normalized: str | None = Field(
+        default=None,
+        description="Normalized user query used during retrieval",
+    )
 
     @model_validator(mode="after")
     def validate_lengths(self) -> "RAGContext":

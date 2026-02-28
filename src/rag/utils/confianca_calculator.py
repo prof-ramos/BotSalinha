@@ -121,6 +121,18 @@ class ConfiancaCalculator:
         }
         return messages.get(level, messages[ConfiancaLevel.SEM_RAG])
 
+    def get_confianca_message(self, level: ConfiancaLevel) -> str:
+        """
+        Backward-compatible alias for legacy callers.
+
+        Args:
+            level: Confidence level
+
+        Returns:
+            User-facing confidence message
+        """
+        return self.get_confidence_message(level)
+
     def should_use_rag(self, level: ConfiancaLevel) -> bool:
         """
         Determine if RAG results should be used based on confidence.

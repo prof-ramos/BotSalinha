@@ -6,6 +6,7 @@
 - [bot.py]: Ponto de entrada principal (CLI `uv run botsalinha run`)
 - [src/core/discord.py]: Comandos Discord, eventos (handler `on_message`), processamento de chat e tratamento de erros
 - [src/core/agent.py]: AgentWrapper Agno, seleção de provider e geração de respostas
+- [prompt/prompt_v4_rag_first.md]: Prompt ativo RAG-first com regras de decisão por `RAG_STATUS`
 - [src/core/cli.py]: Interface CLI baseada em typer/rich para desenvolvedores
 - [src/config/settings.py]: Pydantic Settings (variáveis de ambiente, dotenv)
 - [src/config/yaml_config.py]: Loader de `config.yaml` (provider/modelo/prompt do agente)
@@ -30,6 +31,7 @@
 
 ## Conceitos-Chave
 - **Provider**: Definido dinamicamente em `config.yaml` (`model.provider: openai|google`)
+- **Prompt Ativo**: Definido em `config.yaml` (`prompt.file`)
 - **Credenciais**: API keys gerenciadas em `.env` (`OPENAI_API_KEY`, `GOOGLE_API_KEY`)
 - **Injeção de Dependência**: Usar a factory `create_repository()`, não instanciar singleton globalmente
 - **Estado Híbrido (v2.0)**: Transição arquitetural ativa de singleton para DI
@@ -37,6 +39,7 @@
 - **Observabilidade e Logs**: Uso do `structlog` com decodificação em JSON, rotacionamento em `data/logs/`, tracking distribuído por `correlation_id` (ex: `20250227_143022_botsalinha_a1b2`) e logs sanitizados de PII/Chaves automáticos. Eventos padronizados em `PT-BR`.
 - **Modos de Interação**: Canal exclusivo de IA (config. via `CANAL_IA_ID`) e DMs automáticas via Discord.
 - **MCP (Model Context Protocol)**: Integração com ferramentas locais (arquivos, scripts) expandindo capacidades de contexto do LLM.
+- **Contrato RAG no Prompt**: Quando há augmentação, `src/core/agent.py` injeta bloco delimitado por `BLOCO_RAG_INICIO/FIM` com `RAG_STATUS` e fontes para reduzir alucinação.
 
 ## Padrões de Código
 - Banco de dados (Novo): SEMPRE usar `async with create_repository() as repo:`

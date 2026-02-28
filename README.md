@@ -239,6 +239,25 @@ model:
 
 <!-- markdownlint-enable MD013 -->
 
+### Prompts do Agente
+
+O prompt ativo é configurado em `config.yaml` no campo `prompt.file`.
+
+| Prompt | Formato | Objetivo |
+| --- | --- | --- |
+| `prompt_v1.md` | Markdown | Prompt simples e direto |
+| `prompt_v2.json` | JSON | Few-shot com exemplos estruturados |
+| `prompt_v3.md` | Markdown | Estilo avançado para respostas analíticas |
+| `prompt_v4_rag_first.md` | Markdown | Prioriza contexto RAG com `RAG_STATUS` |
+
+Comandos úteis via CLI:
+
+```bash
+uv run botsalinha prompt list
+uv run botsalinha prompt show
+uv run botsalinha prompt use prompt_v4_rag_first.md
+```
+
 ---
 
 ## 🏗️ Arquitetura

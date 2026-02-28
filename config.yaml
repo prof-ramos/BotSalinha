@@ -18,8 +18,9 @@ model:
 #   prompt_v1.md   — Sistema + Papel (simples, direto)
 #   prompt_v2.json — Few-shot com 2 exemplos + formato estruturado
 #   prompt_v3.md   — Avançado: CoT + Step-back + formato com emojis
+#   prompt_v4_rag_first.md — Prioriza contexto RAG com regras por RAG_STATUS
 prompt:
-  file: prompt_v1.md # Arquivo de prompt ativo
+  file: prompt_v4_rag_first.md # Arquivo de prompt ativo
 
 # Comportamento do agente
 agent:

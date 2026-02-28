@@ -194,7 +194,10 @@ class RAGConfig(BaseSettings):
     enabled: bool = Field(default=True, description="Enable RAG functionality")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of documents to retrieve")
     min_similarity: float = Field(
-        default=0.4, ge=0.0, le=1.0, description="Minimum similarity threshold (ajustado para 0.4 baseado em dados empíricos)"
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity threshold (ajustado para 0.4 baseado em dados empíricos)",
     )
     max_context_tokens: int = Field(
         default=2000, ge=100, le=8000, description="Maximum context tokens"
@@ -205,6 +208,62 @@ class RAGConfig(BaseSettings):
     )
     confidence_threshold: float = Field(
         default=0.70, ge=0.0, le=1.0, description="Confidence threshold"
+    )
+    retrieval_mode: str = Field(
+        default="hybrid_lite",
+        description="Retrieval mode strategy (hybrid_lite|semantic_only)",
+    )
+    rerank_enabled: bool = Field(
+        default=True,
+        description="Enable hybrid reranking after first-stage semantic retrieval",
+    )
+    rerank_alpha: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Weight for semantic score in reranking",
+    )
+    rerank_beta: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Weight for lexical score in reranking",
+    )
+    rerank_gamma: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description="Weight for metadata boost in reranking",
+    )
+    retrieval_candidate_multiplier: int = Field(
+        default=12,
+        ge=1,
+        le=50,
+        description="Multiplier used to create candidate pool size from top_k",
+    )
+    retrieval_candidate_min: int = Field(
+        default=60,
+        ge=1,
+        le=500,
+        description="Minimum number of candidates to rerank",
+    )
+    retrieval_candidate_cap: int = Field(
+        default=240,
+        ge=10,
+        le=2000,
+        description="Maximum number of candidates to rerank",
+    )
+    min_similarity_fallback_delta: float = Field(
+        default=0.08,
+        ge=0.0,
+        le=1.0,
+        description="Fallback decrement applied when too few chunks are found",
+    )
+    min_similarity_floor: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Minimum floor for dynamic similarity fallback",
     )
 
 

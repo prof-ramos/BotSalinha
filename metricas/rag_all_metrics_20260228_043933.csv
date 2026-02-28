@@ -1,0 +1,4 @@
+timestamp,categoria,documento,chunks,tokens,custo_usd,status
+2026-02-28T04:39:39.987667,administrativo,crimes_de_responsabilidade_lei_1079,0,0,0,error: Failed to ingest document crimes_de_responsabilida
+2026-02-28T04:39:45.328448,administrativo,regime_juridico_dos_servidores_civis_da_uniao_lei_8112,0,0,0,error: Failed to ingest document regime_juridico_dos_serv
+2026-02-28T04:40:10.800016,constitucional_direitos_humanos_internacional,cf_de_1988_atualiz_ate_ec_138,0,0,0,error: Failed to ingest document cf_de_1988_atualiz_ate_e

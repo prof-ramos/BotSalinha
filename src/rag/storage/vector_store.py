@@ -7,11 +7,11 @@ from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.rag_models import ChunkORM
-from ...utils.errors import APIError
+from ...utils.errors import APIError, BotSalinhaError
 from ...utils.log_events import LogEvents
 from ..models import Chunk, ChunkMetadata
 
@@ -74,9 +74,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(dot_product / (norm_a * norm_b))
 
 
-def batch_cosine_similarity(
-    query_vector: list[float], embedding_matrix: np.ndarray
-) -> np.ndarray:
+def batch_cosine_similarity(query_vector: list[float], embedding_matrix: np.ndarray) -> np.ndarray:
     """
     Vectorized cosine similarity computation.
 
@@ -139,6 +137,7 @@ class VectorStore:
         "banca",
         "ano",
     }
+    _RESERVED_FILTER_KEYS = {"__or__"}
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -149,9 +148,7 @@ class VectorStore:
         """
         self._session = session
 
-    async def add_embeddings(
-        self, chunks_with_embeddings: list[tuple[Chunk, list[float]]]
-    ) -> None:
+    async def add_embeddings(self, chunks_with_embeddings: list[tuple[Chunk, list[float]]]) -> None:
         """
         Add or update embeddings for chunks.
 
@@ -207,6 +204,7 @@ class VectorStore:
         min_similarity: float = 0.6,
         documento_id: int | None = None,
         filters: dict[str, Any] | None = None,
+        candidate_limit: int | None = None,
     ) -> list[tuple[Chunk, float]]:
         """
         Search for similar chunks using cosine similarity.
@@ -217,6 +215,7 @@ class VectorStore:
             min_similarity: Minimum similarity threshold
             documento_id: Optional filter by document ID
             filters: Optional metadata filters (artigo, tipo, etc.)
+            candidate_limit: Optional max rows fetched before vector scoring
 
         Returns:
             List of (chunk, similarity_score) tuples, sorted by similarity descending
@@ -242,26 +241,14 @@ class VectorStore:
 
             # Apply metadata filters (JSON filtering)
             if filters:
-                for key, value in filters.items():
-                    # SQL INJECTION PROTECTION: Validate key against whitelist
-                    # before using in json_extract() to prevent injection via
-                    # malicious key names (e.g., "'; DROP TABLE chunks; --")
-                    if key not in self._ALLOWED_FILTER_KEYS:
-                        raise ValueError(
-                            f"Invalid filter key '{key}'. "
-                            f"Allowed keys: {sorted(self._ALLOWED_FILTER_KEYS)}"
-                        )
-                    # Use JSON_EXTRACT for SQLite JSON filtering
-                    stmt = stmt.where(
-                        text(f"json_extract(metadados, '$.{key}') = :{key}")
-                    )
-                    stmt = stmt.params(**{key: value})
+                stmt = self._apply_metadata_filters(stmt, filters)
 
             # OPTIMIZATION 1: SQL pre-filtering with candidate limit
             # Fetch limit * CANDIDATE_MULTIPLIER to reduce data transfer
             # while still having enough candidates to find top matches
-            candidate_limit = limit * CANDIDATE_MULTIPLIER
-            stmt = stmt.limit(candidate_limit)
+            effective_candidate_limit = candidate_limit or (limit * CANDIDATE_MULTIPLIER)
+            effective_candidate_limit = max(limit, effective_candidate_limit)
+            stmt = stmt.limit(effective_candidate_limit)
 
             # Execute query to get candidate chunks (limited subset)
             result = await self._session.execute(stmt)
@@ -321,6 +308,7 @@ class VectorStore:
                 LogEvents.RAG_BUSCA_CONCLUIDA,
                 results_count=len(chunks_with_scores),
                 top_score=chunks_with_scores[0][1] if chunks_with_scores else 0,
+                candidate_limit=effective_candidate_limit,
                 event_name="rag_vector_store_search_success",
             )
 
@@ -333,6 +321,69 @@ class VectorStore:
                 query_embedding_dim=len(query_embedding),
             )
             raise APIError(f"Vector search failed: {e}") from e
+
+    def _apply_metadata_filters(self, stmt: Any, filters: dict[str, Any]) -> Any:
+        """
+        Apply validated metadata filters to query statement.
+
+        Supported patterns:
+        - {"artigo": "not_null"}
+        - {"banca": "CESPE"}
+        - {"__or__": [{"marca_stf": True}, {"marca_stj": True}]}
+        """
+        or_filters = filters.get("__or__")
+        if or_filters is not None:
+            if not isinstance(or_filters, list):
+                msg = "Filter '__or__' must be a list of filter dictionaries"
+                log.error(
+                    "invalid_or_filter_type",
+                    filter_type=type(or_filters).__name__,
+                    value=or_filters,
+                )
+                raise BotSalinhaError(msg)
+
+            or_conditions = []
+            for group in or_filters:
+                if not isinstance(group, dict):
+                    msg = "Each '__or__' group must be a dictionary"
+                    log.error(
+                        "invalid_or_group_type",
+                        group_type=type(group).__name__,
+                        group=group,
+                    )
+                    raise BotSalinhaError(msg)
+                group_conditions = [
+                    self._build_filter_condition(key=key, value=value)
+                    for key, value in group.items()
+                ]
+                if group_conditions:
+                    or_conditions.append(and_(*group_conditions))
+
+            if or_conditions:
+                stmt = stmt.where(or_(*or_conditions))
+
+        for key, value in filters.items():
+            if key in self._RESERVED_FILTER_KEYS:
+                continue
+            stmt = stmt.where(self._build_filter_condition(key=key, value=value))
+
+        return stmt
+
+    def _build_filter_condition(self, key: str, value: Any) -> Any:
+        """
+        Build a safe SQLAlchemy condition for JSON metadata filtering.
+        """
+        if key not in self._ALLOWED_FILTER_KEYS:
+            allowed = sorted(self._ALLOWED_FILTER_KEYS)
+            msg = f"Invalid filter key '{key}'. Allowed keys: {allowed}"
+            raise BotSalinhaError(msg)
+
+        json_value = func.json_extract(ChunkORM.metadados, f"$.{key}")
+        if isinstance(value, str) and value == "not_null":
+            return json_value.isnot(None)
+        if isinstance(value, str) and value == "is_null":
+            return json_value.is_(None)
+        return json_value == value
 
     async def get_chunk_by_id(self, chunk_id: str) -> Chunk | None:
         """

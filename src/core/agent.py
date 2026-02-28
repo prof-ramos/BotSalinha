@@ -5,7 +5,6 @@ Wraps the Agno Agent class with proper abstractions and error handling.
 Integrates with RAG (Retrieval-Augmented Generation) for enhanced responses.
 """
 
-import os
 from typing import Any
 
 import structlog
@@ -429,10 +428,8 @@ class AgentWrapper:
 
         # Build RAG augmentation if available
         rag_augmentation = ""
-        if (
+        if rag_context and self._query_service and self._query_service.should_augment_prompt(
             rag_context
-            and self._confianca_calculator
-            and self._confianca_calculator.should_use_rag(rag_context.confianca)
         ):
             rag_augmentation = self._build_rag_augmentation(rag_context)
 
@@ -485,9 +482,23 @@ class AgentWrapper:
             if self._confianca_calculator
             else ""
         )
+        rag_status = rag_context.confianca.value.upper()
 
-        # Build context text
-        lines = [confianca_msg, "", "CONTEXTO JURÍDICO RELEVANTE:"]
+        # Build deterministic RAG block
+        lines = [
+            "=== BLOCO_RAG_INICIO ===",
+            f"RAG_STATUS: {rag_status}",
+        ]
+        if rag_context.query_normalized:
+            lines.append(f"RAG_QUERY_NORMALIZED: {rag_context.query_normalized}")
+        lines.extend(
+            [
+                f"RAG_RESULTADOS: {len(rag_context.chunks_usados)}",
+                f"RAG_SINALIZACAO: {confianca_msg}",
+                "",
+                "CONTEXTO JURÍDICO RELEVANTE:",
+            ]
+        )
 
         for i, (chunk, score) in enumerate(
             zip(rag_context.chunks_usados, rag_context.similaridades, strict=False),
@@ -514,6 +525,7 @@ class AgentWrapper:
             instructions += "\n- Se a informação não estiver no contexto, diga que não encontrou"
 
         lines.append(instructions)
+        lines.append("\n=== BLOCO_RAG_FIM ===")
 
         return "\n".join(lines)
 

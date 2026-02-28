@@ -52,7 +52,7 @@ Orquestra a busca semântica e retorna contexto RAG.
 rag_context = await query_service.query(
     query_text="Quais são os direitos fundamentais?",
     top_k=5,
-    min_similarity=0.6
+    min_similarity=0.4
 )
 ```
 
@@ -74,10 +74,38 @@ Implementa busca vetorial com similaridade de cosseno em SQLite.
 Calcula nível de confiança baseado na similaridade média.
 
 **Níveis:**
-- **ALTA** (≥0.85): Resposta baseada em documentos
-- **MÉDIA** (0.70-0.84): Parcialmente baseada
-- **BAIXA** (0.60-0.69): Informações limitadas
-- **SEM_RAG** (<0.60): Conhecimento geral
+- **ALTA** (≥0.70): Resposta baseada em documentos
+- **MÉDIA** (0.55-0.69): Parcialmente baseada
+- **BAIXA** (0.40-0.54): Informações limitadas
+- **SEM_RAG** (<0.40): Conhecimento geral
+
+## Contrato de Augmentação no Prompt
+
+Quando o `AgentWrapper` decide usar contexto RAG, ele injeta um bloco determinístico no prompt com o seguinte formato:
+
+```text
+=== BLOCO_RAG_INICIO ===
+RAG_STATUS: ALTA|MEDIA|BAIXA|SEM_RAG
+RAG_QUERY_NORMALIZED: ...
+RAG_RESULTADOS: <n>
+RAG_SINALIZACAO: ...
+
+CONTEXTO JURÍDICO RELEVANTE:
+1. [Similaridade: 0.91]
+Fonte: ...
+Texto: ...
+
+INSTRUÇÕES:
+- ...
+=== BLOCO_RAG_FIM ===
+```
+
+### Interpretação de `RAG_STATUS`
+
+- `ALTA`: usar contexto como base principal da resposta e citar fontes.
+- `MEDIA`: usar contexto como base principal, com alerta breve de validação complementar.
+- `BAIXA`: usar contexto como referência parcial e recomendar confirmação em fontes oficiais.
+- `SEM_RAG`: responder com conhecimento geral, explicitando ausência de base específica recuperada.
 
 ## Comandos Discord
 
@@ -133,7 +161,7 @@ O índice RAG foi reconstruído com sucesso.
 # .env
 RAG_ENABLED=true                    # Habilitar/desabilitar RAG
 RAG_TOP_K=5                         # Número de chunks a recuperar
-RAG_MIN_SIMILARITY=0.6              # Similaridade mínima aceitável
+RAG_MIN_SIMILARITY=0.4              # Similaridade mínima aceitável
 RAG_MAX_CONTEXT_TOKENS=2000         # Máximo de tokens no contexto
 RAG_CONFIDENCE_THRESHOLD=0.70       # Limiar para confiança média
 OPENAI_API_KEY=sk-...               # Usada para embeddings
@@ -145,7 +173,7 @@ OPENAI_API_KEY=sk-...               # Usada para embeddings
 rag:
   enabled: true
   top_k: 5
-  min_similarity: 0.6
+  min_similarity: 0.4
   confidence_threshold: 0.70
 ```
 
