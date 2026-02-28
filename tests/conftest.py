@@ -112,26 +112,26 @@ async def db_session(test_engine):
 
 @pytest_asyncio.fixture
 async def conversation_repository(test_engine) -> ConversationRepository:
-    """Create conversation repository for testing."""
-    repo = SQLiteRepository(TEST_DATABASE_URL)
-    await repo.initialize_database()
-    await repo.create_tables()
+    """Create conversation repository for testing.
 
+    Reuses test_engine so that db_session and conversation_repository
+    share the same in-memory SQLite database.
+    """
+    repo = SQLiteRepository(engine=test_engine)
     yield repo
-
-    await repo.close()
+    # Engine lifecycle is managed by the test_engine fixture.
 
 
 @pytest_asyncio.fixture
 async def message_repository(test_engine) -> MessageRepository:
-    """Create message repository for testing."""
-    repo = SQLiteRepository(TEST_DATABASE_URL)
-    await repo.initialize_database()
-    await repo.create_tables()
+    """Create message repository for testing.
 
+    Reuses test_engine so that db_session and message_repository
+    share the same in-memory SQLite database.
+    """
+    repo = SQLiteRepository(engine=test_engine)
     yield repo
-
-    await repo.close()
+    # Engine lifecycle is managed by the test_engine fixture.
 
 
 @pytest.fixture

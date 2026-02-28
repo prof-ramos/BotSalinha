@@ -160,6 +160,46 @@ class AgentWrapper:
             mcp_servers=len(yaml_config.mcp.servers),
         )
 
+    def enable_rag_with_session(self, db_session: AsyncSession) -> None:
+        """
+        Enable RAG services using a database session.
+
+        Call this after the database is ready (e.g. in BotSalinhaBot.setup_hook).
+        Safe to call multiple times; re-initializes if called again with a new session.
+
+        Args:
+            db_session: An open AsyncSession backed by the application database.
+        """
+        if not self.settings.rag.enabled:
+            return
+
+        try:
+            embedding_service = EmbeddingService()
+            self._query_service = QueryService(
+                session=db_session,
+                embedding_service=embedding_service,
+            )
+            self._confianca_calculator = ConfiancaCalculator(
+                alta_threshold=self.settings.rag.confidence_threshold,
+            )
+            self.db_session = db_session
+            self.enable_rag = True
+            log.debug(
+                "rag_enabled_with_session",
+                confidence_threshold=self.settings.rag.confidence_threshold,
+            )
+        except Exception as e:
+            log.warning(
+                "rag_enable_failed",
+                error=str(e),
+            )
+            self.enable_rag = False
+
+    @property
+    def rag_session(self) -> AsyncSession | None:
+        """Database session used by RAG services, or None if RAG is not active."""
+        return self.db_session
+
     async def initialize_mcp(self) -> None:
         """
         Initialize MCP tools if enabled in configuration.

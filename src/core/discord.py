@@ -6,10 +6,14 @@ and integration with the AI agent.
 """
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import discord
 import structlog
 from discord.ext import commands
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config.settings import settings
 from ..config.yaml_config import yaml_config
@@ -32,13 +36,12 @@ class BotSalinhaBot(commands.Bot):
     rate limiting, and AI integration.
     """
 
-    def __init__(self, repository: SQLiteRepository | None = None, db_session=None) -> None:
+    def __init__(self, repository: SQLiteRepository | None = None) -> None:
         """Initialize the bot.
 
         Args:
             repository: Optional repository instance for dependency injection.
                         If not provided, uses the global repository.
-            db_session: Optional database session for RAG queries.
         """
         intents = discord.Intents.default()
         intents.message_content = True
@@ -53,11 +56,11 @@ class BotSalinhaBot(commands.Bot):
 
         # Initialize components with dependency injection
         self.repository = repository or get_repository()
-        self.agent = AgentWrapper(
-            repository=self.repository,
-            db_session=db_session,
-        )
+        # Agent is created without a RAG session; setup_hook enables RAG once the DB is ready.
+        self.agent = AgentWrapper(repository=self.repository)
         self._ready_event = asyncio.Event()
+        # Persistent session opened in setup_hook and closed in close().
+        self._rag_session: "AsyncSession | None" = None
 
         log.info(LogEvents.BOT_DISCORD_INICIALIZADO, prefix=settings.discord.command_prefix)
 
@@ -67,7 +70,18 @@ class BotSalinhaBot(commands.Bot):
         await self.repository.initialize_database()
         await self.repository.create_tables()
 
+        # Open a long-lived session for RAG and wire it into the agent.
+        self._rag_session = self.repository.async_session_maker()
+        self.agent.enable_rag_with_session(self._rag_session)
+
         log.info(LogEvents.BANCO_DADOS_INICIALIZADO)
+
+    async def close(self) -> None:
+        """Shutdown the bot and release the RAG session."""
+        if self._rag_session is not None:
+            await self._rag_session.close()
+            self._rag_session = None
+        await super().close()
 
     async def on_ready(self) -> None:
         """Called when the bot is ready."""
@@ -522,7 +536,7 @@ Desenvolvido com ❤️ usando Agno + OpenAI
     @commands.command(name="fontes")  # type: ignore[type-var]
     async def fontes_command(self, ctx: commands.Context) -> None:
         """List documents indexed in RAG."""
-        if not self.agent._query_service:
+        if not self.agent.enable_rag:
             await ctx.send("ℹ️ RAG não está habilitado neste servidor.")
             return
 
@@ -533,22 +547,20 @@ Desenvolvido com ❤️ usando Agno + OpenAI
 
             from src.models.rag_models import DocumentORM
 
-            # Use db_session from query_service
-            db_session = self.agent._query_service._session
+            async with self.repository.session() as db_session:
+                # Get document count
+                doc_count_stmt = select(func.count(DocumentORM.id))
+                doc_count_result = await db_session.execute(doc_count_stmt)
+                doc_count = doc_count_result.scalar() or 0
 
-            # Get document count
-            doc_count_stmt = select(func.count(DocumentORM.id))
-            doc_count_result = await db_session.execute(doc_count_stmt)
-            doc_count = doc_count_result.scalar() or 0
+                if doc_count == 0:
+                    await ctx.send("ℹ️ Nenhum documento indexado no RAG.")
+                    return
 
-            if doc_count == 0:
-                await ctx.send("ℹ️ Nenhum documento indexado no RAG.")
-                return
-
-            # Get all documents
-            doc_stmt = select(DocumentORM).order_by(DocumentORM.created_at)
-            doc_result = await db_session.execute(doc_stmt)
-            documents = doc_result.scalars().all()
+                # Get all documents
+                doc_stmt = select(DocumentORM).order_by(DocumentORM.created_at)
+                doc_result = await db_session.execute(doc_stmt)
+                documents = doc_result.scalars().all()
 
             embed = discord.Embed(
                 title="📚 Fontes RAG Indexadas",
@@ -588,17 +600,8 @@ Desenvolvido com ❤️ usando Agno + OpenAI
     @commands.is_owner()  # Only bot owner can use this
     async def reindexar_command(self, ctx: commands.Context) -> None:
         """Rebuild the RAG index from scratch (admin only)."""
-        if not self.agent._query_service:
+        if not self.agent.enable_rag:
             await ctx.send("ℹ️ RAG não está habilitado neste servidor.")
-            return
-
-        # Check if ingestion service is available
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        db_session: AsyncSession = self.agent._query_service._session
-
-        if not db_session:
-            await ctx.send("❌ Sessão de banco de dados não disponível.")
             return
 
         await ctx.typing()
@@ -607,20 +610,21 @@ Desenvolvido com ❤️ usando Agno + OpenAI
             from src.rag.services.embedding_service import EmbeddingService
             from src.rag.services.ingestion_service import IngestionService
 
-            # Create ingestion service
-            embedding_service = EmbeddingService()
-            ingestion_service = IngestionService(
-                session=db_session,
-                embedding_service=embedding_service,
-            )
+            async with self.repository.session() as db_session:
+                # Create ingestion service
+                embedding_service = EmbeddingService()
+                ingestion_service = IngestionService(
+                    session=db_session,
+                    embedding_service=embedding_service,
+                )
 
-            # Send initial message
-            start_msg = await ctx.send(
-                "🔄 Iniciando reindexação RAG...\n\n⏳ Isso pode levar alguns segundos."
-            )
+                # Send initial message
+                start_msg = await ctx.send(
+                    "🔄 Iniciando reindexação RAG...\n\n⏳ Isso pode levar alguns segundos."
+                )
 
-            # Reindex
-            result = await ingestion_service.reindex()
+                # Reindex
+                result = await ingestion_service.reindex()
 
             # Build response message
             if result["success"]:
@@ -667,7 +671,7 @@ Desenvolvido com ❤️ usando Agno + OpenAI
 
         Usage: !buscar "termo de busca" [tipo: artigo|jurisprudencia|questao|nota|todos]
         """
-        if not self.agent._query_service:
+        if not self.agent.enable_rag or self.agent._query_service is None:
             await ctx.send("ℹ️ RAG não está habilitado neste servidor.")
             return
 
