@@ -52,6 +52,12 @@ class LogEvents:
     LIMITE_TAXA_LIMPEZA = "limite_taxa_limpeza"
     LIMITE_TAXA_REINICIADO = "limite_taxa_reiniciado"
     LIMITE_TAXA_REINICIADO_TODOS = "limite_taxa_reiniciado_todos"
+    LIMITE_TAXA_GLOBAL_ACIONADO = "limite_taxa_global_acionado"
+    LIMITE_TAXA_BLACKLIST_ADICIONADO = "limite_taxa_blacklist_adicionado"
+    LIMITE_TAXA_BLACKLIST_REMOVIDO = "limite_taxa_blacklist_removido"
+    LIMITE_TAXA_BLACKLIST_ESTENDIDO = "limite_taxa_blacklist_estendido"
+    LIMITE_TAXA_BLACKLIST_EXPIRADO = "limite_taxa_blacklist_expirado"
+    LIMITE_TAXA_PADRAO_SUSPEITO = "limite_taxa_padrao_suspeito"
 
     # API
     API_ERRO_GERAR_RESPOSTA = "api_erro_gerar_resposta"

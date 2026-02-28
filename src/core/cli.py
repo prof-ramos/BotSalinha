@@ -27,8 +27,6 @@ from rich.table import Table
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError, ProgrammingError
 
-import os
-
 from ..config.settings import get_settings, settings
 from ..config.yaml_config import yaml_config
 from ..rag.services.embedding_service import EmbeddingService

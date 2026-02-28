@@ -58,7 +58,7 @@ class TestLogIntegration:
             ("Email: test@example.com", "Email: ***EMAIL***"),
             ("CPF: 123.456.789-01", "CPF: ***CPF***"),
             (
-                "FAKE_DISCORD_TOKEN_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+                "M_FAKE_TOKEN_1234.ABcd.XYZ_1234567890_ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                 "***DISCORD_TOKEN***",
             ),
         ],

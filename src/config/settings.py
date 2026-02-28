@@ -43,7 +43,11 @@ class GoogleConfig(BaseSettings):
         extra="ignore",
     )
 
-    api_key: str | None = Field(None, description="Google API key for Gemini")
+    api_key: str | None = Field(
+        None,
+        description="Google API key for Gemini",
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "GOOGLE__API_KEY"),
+    )
 
 
 class OpenAIConfig(BaseSettings):
@@ -57,7 +61,11 @@ class OpenAIConfig(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    api_key: str | None = Field(None, description="OpenAI API key")
+    api_key: str | None = Field(
+        None,
+        description="OpenAI API key",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "OPENAI__API_KEY"),
+    )
 
 
 class RateLimitConfig(BaseSettings):
@@ -71,6 +79,42 @@ class RateLimitConfig(BaseSettings):
 
     requests: int = Field(default=10, ge=1, le=100, description="Max requests per time window")
     window_seconds: int = Field(default=60, ge=1, le=3600, description="Time window in seconds")
+
+    # Global rate limiting (per server/guild)
+    global_requests: int = Field(
+        default=100, ge=10, le=1000, description="Max global requests per time window"
+    )
+    global_window_seconds: int = Field(
+        default=60, ge=1, le=3600, description="Global time window in seconds"
+    )
+
+    # Abuse detection and blacklist
+    abuse_detection_enabled: bool = Field(
+        default=True, description="Enable abuse detection and auto-blacklist"
+    )
+    abuse_threshold: int = Field(
+        default=5, ge=3, le=20, description="Violations before triggering blacklist"
+    )
+    blacklist_base_duration: int = Field(
+        default=300, ge=60, le=3600, description="Base blacklist duration in seconds"
+    )
+    blacklist_max_duration: int = Field(
+        default=86400, ge=3600, le=604800, description="Max blacklist duration in seconds"
+    )
+    blacklist_exponential_base: float = Field(
+        default=2.0, ge=1.5, le=5.0, description="Exponential backoff base for repeated violations"
+    )
+
+    # Pattern detection
+    pattern_detection_enabled: bool = Field(
+        default=True, description="Enable pattern detection for coordinated abuse"
+    )
+    pattern_window_seconds: int = Field(
+        default=10, ge=5, le=60, description="Time window for pattern detection"
+    )
+    pattern_threshold: int = Field(
+        default=3, ge=2, le=10, description="Min users with same pattern to trigger abuse"
+    )
 
 
 class DatabaseConfig(BaseSettings):
@@ -164,6 +208,29 @@ class RAGConfig(BaseSettings):
     )
 
 
+class SupabaseConfig(BaseSettings):
+    """Supabase configuration."""
+
+    model_config = SettingsConfigDict(
+        env_nested_delimiter="__",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    url: str | None = Field(
+        None,
+        description="Supabase project URL",
+        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
+    )
+    key: str | None = Field(
+        None,
+        description="Supabase service role API key or anon key",
+        validation_alias=AliasChoices(
+            "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        ),
+    )
+
+
 class Settings(BaseSettings):
     """
     Main settings class for BotSalinha.
@@ -205,6 +272,7 @@ class Settings(BaseSettings):
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    supabase: SupabaseConfig = Field(default_factory=SupabaseConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     log: LogConfig = Field(
         default_factory=LogConfig, validation_alias=AliasChoices("BOTSALINHA_LOG", "LOG")
@@ -287,7 +355,7 @@ class Settings(BaseSettings):
 
     @field_validator("debug")
     @classmethod
-    def set_debug_from_env(cls, v: bool | None, info: ValidationInfo) -> bool:  # type: ignore[no-untyped-def]
+    def set_debug_from_env(cls, v: bool | None, info: ValidationInfo) -> bool:
         """Set debug mode based on app_env if not explicitly set."""
         if v is not None:
             return v

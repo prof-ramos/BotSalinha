@@ -1,17 +1,18 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
-language: 'pt-BR'
-
+language: "pt-BR"
 early_access: false
 
 reviews:
-  profile: 'chill'
-
+  profile: "chill"
   request_changes_workflow: false
   high_level_summary: true
-  poem: false
   review_status: true
+  review_details: false
   collapse_walkthrough: false
+  poem: false
+  changed_files_summary: true
+  sequence_diagrams: false
 
   auto_review:
     enabled: true
@@ -20,81 +21,111 @@ reviews:
       - main
       - develop
 
+  path_filters:
+    - "**/*.py"
+    - "**/*.md"
+    - "**/*.yml"
+    - "**/*.yaml"
+    - "!metricas/**/*.csv"
+    - "!metricas/**/*.txt"
+    - "!repomix-output.xml"
+    - "!data/**"
+
   path_instructions:
-    - path: 'src/**/*.py'
+    - path: "src/**/*.py"
       instructions: |
-        Revise o código Python seguindo as melhores práticas para Python 3.12+.
+        Projeto Python 3.12+ com foco em async/await.
         Verifique:
-        - Type hints em todas as funções e métodos
-        - Docstrings no formato Google/PEP 257
-        - Uso de early returns para melhor legibilidade
-        - Código síncrono vs assíncrono (usar async quando apropriado)
-        - Tratamento de erros com exceções customadas
-        - Logs estruturados com structlog
+        - Type hints corretos e coerentes com mypy strict
+        - Tratamento de erro via hierarquia de exceções do projeto
+        - Logging estruturado (structlog) e mensagens acionáveis
+        - Separação de responsabilidades (config/core/storage/rag)
+        - Evitar regressões de comportamento em comandos Discord
 
-    - path: 'tests/**/*.py'
+    - path: "tests/unit/**/*.py"
       instructions: |
-        Revise os testes pytest garantindo:
-        - Uso de fixtures do conftest.py
-        - Mocks para APIs externas (Discord, Gemini)
-        - Testes de happy path e error cases
-        - Nomenclatura descritiva: test_<func>_<scenario>_<expected>
-        - Cobertura adequada de edge cases
+        Priorize qualidade de testes unitários:
+        - Isolamento (sem I/O real)
+        - Mocks explícitos para APIs externas
+        - Nomes de teste descritivos
+        - Cobertura de casos de erro e edge cases
 
-    - path: 'migrations/**/*.py'
+    - path: "tests/integration/**/*.py"
       instructions: |
-        Revise as migrações Alembic verificando:
+        Para testes de integração:
+        - Validar contratos entre camadas (core/storage/rag)
+        - Evitar dependências externas reais
+        - Garantir determinismo e baixa flakiness
+
+    - path: "tests/e2e/**/*.py"
+      instructions: |
+        Em E2E:
+        - Foque regressões de fluxo principal
+        - Valide cenários de erro com mensagens úteis
+        - Minimize acoplamento com estado global
+
+    - path: "tests/load/**/*.py"
+      instructions: |
+        Em testes de carga:
+        - Verifique estabilidade estatística das métricas
+        - Evite asserts frágeis dependentes de latência variável
+        - Garanta clareza nos relatórios de performance
+
+    - path: "migrations/**/*.py"
+      instructions: |
+        Revisar migrações Alembic para:
         - Compatibilidade com SQLite
-        - Reversibilidade das migrações (downgrade)
-        - Nomenclatura consistente
+        - Upgrade/downgrade reversível
+        - Nomenclatura consistente e segura
 
-    - path: 'scripts/**/*.py'
+    - path: "scripts/**/*.py"
       instructions: |
-        Revise scripts utilitários focando em:
+        Em scripts utilitários:
         - Tratamento de erros robusto
-        - Logs informativos para operações
-        - Argparse para argumentos CLI quando necessário
+        - Saídas/logs claros para operação
+        - CLI amigável e previsível
+
+    - path: "docs/**/*.md"
+      instructions: |
+        Em documentação:
+        - Linguagem clara, objetiva e em PT-BR
+        - Consistência com comportamento real do código
+        - Comandos executáveis e atualizados
 
   tools:
     ruff:
       enabled: true
-
+      config_file: "pyproject.toml"
     gitleaks:
       enabled: true
-
     markdownlint:
       enabled: true
-
     shellcheck:
       enabled: true
 
-code_generation:
-  docstrings:
-    language: 'pt-BR'
-    path_instructions:
-      - path: 'src/**/*.py'
-        instructions: |
-          Gere docstrings no formato Google com:
-          - Descrição clara do propósito
-          - Args com tipos e descrições
-          - Returns com tipo e descrição
-          - Raises para exceções lançadas
-          - Exemplos de uso quando relevante
-
 chat:
   auto_reply: true
+  art: false
+
+code_generation:
+  docstrings:
+    language: "pt-BR"
+    path_instructions:
+      - path: "src/**/*.py"
+        instructions: |
+          Gere docstrings em formato Google com:
+          - Descrição objetiva do propósito
+          - Args/Returns com tipos e contexto
+          - Raises quando aplicável
+          - Exemplo curto apenas quando realmente útil
 
 knowledge_base:
   opt_out: false
-
   learnings:
-    scope: 'local'
-
+    scope: "local"
   issues:
-    scope: 'local'
-
+    scope: "local"
   jira:
-    usage: 'disabled'
-
+    usage: "disabled"
   linear:
-    usage: 'disabled'
+    usage: "disabled"

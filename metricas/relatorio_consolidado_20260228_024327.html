@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotSalinha - Relatório de Métricas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        header .timestamp {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+        }
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        .summary-card h3 {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .summary-card.success .value {
+            color: #28a745;
+        }
+        .summary-card.failed .value {
+            color: #dc3545;
+        }
+        .section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+        }
+        .section .description {
+            color: #666;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .chart-container {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .bar-label {
+            min-width: 150px;
+            font-size: 0.9em;
+            color: #555;
+            text-align: right;
+        }
+        .bar-wrapper {
+            flex: 1;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 30px;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        .output-section {
+            margin-top: 20px;
+        }
+        .output-section h4 {
+            color: #555;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        .error-output {
+            background: #721c24;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>BotSalinha</h1>
+            <div style="font-size: 1.3em; margin: 10px 0;">Relatório de Métricas</div>
+            <div class="timestamp">2026-02-28 02:43:27</div>
+        </header>
+
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Total de Testes</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="summary-card success">
+                <h3>Sucesso</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="summary-card failed">
+                <h3>Falhas</h3>
+                <div class="value">0</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Database Access Performance <span class="status-badge success">
+                ✓ Sucesso
+            </span></h2>
+            <p class="description">Database write/read operation latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>operation</th>
+    <th>count</th>
+    <th>total_time_ms</th>
+    <th>avg_time_ms</th>
+  </tr>
+  <tr>
+    <td>Insert Conversation</td>
+    <td>50</td>
+    <td>56.0</td>
+    <td>1.12</td>
+  </tr>
+  <tr>
+    <td>Read Conversations</td>
+    <td>100</td>
+    <td>58.31</td>
+    <td>0.58</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo Médio por Operação (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Insert Conversation</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%">1.12 ms</div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">Read Conversations</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 51.78571428571428%">0.58 ms</div>
+                </div>
+            </div>
+</div></div>        </div>
+        <div class="section">
+            <h2>RAG Component Performance <span class="status-badge success">
+                ✓ Sucesso
+            </span></h2>
+            <p class="description">Embedding generation and vector search latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>text_snippet</th>
+    <th>char_length</th>
+    <th>embedding_time_ms</th>
+    <th>search_time_ms</th>
+    <th>chunks_found</th>
+  </tr>
+  <tr>
+    <td>o que é estágio probatório?</td>
+    <td>27</td>
+    <td>677.42</td>
+    <td>16.04</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>quais os requisitos para ser presidente da repúbli</td>
+    <td>53</td>
+    <td>427.72</td>
+    <td>2.61</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>como funciona a licença maternidade?</td>
+    <td>36</td>
+    <td>478.74</td>
+    <td>9.77</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>princípios da administração pública, impessoalidad</td>
+    <td>65</td>
+    <td>465.24</td>
+    <td>3.36</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>uma frase curta.</td>
+    <td>16</td>
+    <td>476.7</td>
+    <td>10.69</td>
+    <td>0</td>
+  </tr>
+  <tr>
+    <td>um texto muito mais longo para avaliar se o tempo </td>
+    <td>201</td>
+    <td>498.52</td>
+    <td>6.81</td>
+    <td>0</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo de Embedding vs Busca (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">o que é estágio probatório?</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                        Emb: 677.42ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 2.3678072687549823%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                        Search: 16.04ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">quais os requisitos para ser p</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 63.13955891470581%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                        Emb: 427.72ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 0.38528534734728825%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                        Search: 2.61ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">como funciona a licença matern</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 70.67107555135662%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                        Emb: 478.74ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 1.4422367216793126%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                        Search: 9.77ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">princípios da administração pú</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 68.67822030645686%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                        Emb: 465.24ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 0.4959995276194975%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                        Search: 3.36ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">uma frase curta.</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 70.36993298101622%; background: linear-gradient(90deg, #667eea 0%, #667eea 100%);">
+                        Emb: 476.70ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 1.5780461161465562%; background: linear-gradient(90deg, #764ba2 0%, #764ba2 100%);">
+                        Search: 10.69ms
+                    </div>
+                </div>
+            </div>
+</div></div>
+            <div class="output-section">
+                <h4>Stderr:</h4>
+                <pre class="error-output">2026-02-28 02:43:24,507 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 02:43:24,955 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 02:43:25,433 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 02:43:25,913 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 02:43:26,389 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-02-28 02:43:26,901 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+</pre>
+            </div>
+        </div>
+        <div class="section">
+            <h2>RAG Quality Metrics <span class="status-badge failed">
+                ✗ Falha
+            </span></h2>
+            <p class="description">Semantic similarity and confidence distribution</p>
+        </div>
+        <div class="section">
+            <h2>End-to-End Performance <span class="status-badge failed">
+                ✗ Falha
+            </span></h2>
+            <p class="description">Full bot response generation latency including RAG</p>
+        </div>
+    </div>
+</body>
+</html>

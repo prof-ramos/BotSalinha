@@ -1,3 +1,3 @@
 operation,count,total_time_ms,avg_time_ms
-Insert Conversation,50,6372.22,127.44
-Read Conversations,100,61.4,0.61
+Insert Conversation,50,56.0,1.12
+Read Conversations,100,58.31,0.58

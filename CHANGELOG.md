@@ -6,31 +6,25 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Adicionado
 
-- Rodada de fortalecimento de documentação:
-  - `docs/api.md` com referência da interface por comandos Discord
-  - `docs/adr/ADR-001-multi-model-provider.md` para registrar decisão arquitetural
-  - `llms.txt` para indexação AI-friendly
+- Templates de documentação em `docs/templates/`:
+  - `README_TEMPLATE.md`
+  - `API_COMMAND_TEMPLATE.md`
+  - `PYTHON_DOCSTRING_TEMPLATE.md`
+  - `CHANGELOG_TEMPLATE.md`
+  - `ADR_TEMPLATE.md`
+  - `LLMS_TEMPLATE.md`
 
 ### Alterado
 
-- `README.md`:
-  - Adicionado sumário para navegação mais rápida
-  - Adicionados links para referência de API, ADR, changelog e llms.txt
-  - Corrigida renderização da seção de roadmap
-  - Padronizados nomes de variáveis de ambiente
-- `docs/operations.md`:
-  - Adicionada seção de verificação rápida de saúde
-  - Substituídos links placeholders por URLs reais do GitHub
-- `docs/deployment.md`:
-  - Atualizados nomes de variáveis de ambiente para o contrato atual
-  - Adicionados links cruzados para operações e guia do desenvolvedor
-- `docs/DEVELOPER_GUIDE.md`:
-  - Adicionada tabela clara de variáveis de ambiente
-  - Atualizados nomes de variáveis para o formato simplificado (sem prefixo `BOTSALINHA_`)
+- `docs/api.md` reestruturado em formato padronizado por comando Discord.
+- `docs/architecture.md` atualizado para refletir a arquitetura real atual do repositório.
+- `docs/README.md` atualizado com índice de templates de documentação.
+- `.coderabbit.yaml` atualizado com instruções/path filters e ferramentas alinhadas ao projeto.
 
 ## [2.0.0] - 2026-02-26
 
 ### Adicionado
 
-- Suporte multi-model (`openai` + `google`) com OpenAI como padrão
-- Seleção de provider via `config.yaml` e credenciais em `.env`
+- Suporte multi-model (`openai` + `google`) com OpenAI como padrão.
+- Seleção de provider via `config.yaml` e credenciais em `.env`.
+

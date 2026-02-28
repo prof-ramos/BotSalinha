@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import structlog
 
-from ..models import Chunk, ConfiancaLevel
 from ...utils.log_events import LogEvents
-from ..models import RAGContext
+from ..models import Chunk, ConfiancaLevel, RAGContext
 
 log = structlog.get_logger(__name__)
 
@@ -44,9 +41,7 @@ class ConfiancaCalculator:
         self._media_threshold = media_threshold
         self._baixa_threshold = baixa_threshold
 
-    def calculate(
-        self, chunks_with_scores: list[tuple[Chunk, float]]
-    ) -> ConfiancaLevel:
+    def calculate(self, chunks_with_scores: list[tuple[Chunk, float]]) -> ConfiancaLevel:
         """
         Calculate confidence level from retrieved chunks.
 
@@ -66,9 +61,7 @@ class ConfiancaCalculator:
             return ConfiancaLevel.SEM_RAG
 
         # Calculate average similarity
-        avg_similarity = sum(score for _, score in chunks_with_scores) / len(
-            chunks_with_scores
-        )
+        avg_similarity = sum(score for _, score in chunks_with_scores) / len(chunks_with_scores)
 
         # Determine confidence level
         if avg_similarity >= self._alta_threshold:
@@ -105,7 +98,7 @@ class ConfiancaCalculator:
             return ConfiancaLevel.SEM_RAG
 
         # Reconstruct chunks_with_scores from context
-        chunks_with_scores = list(zip(context.chunks_usados, context.similaridades))
+        chunks_with_scores = list(zip(context.chunks_usados, context.similaridades, strict=False))
 
         return self.calculate(chunks_with_scores)
 

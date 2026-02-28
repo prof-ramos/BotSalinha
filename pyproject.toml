@@ -33,6 +33,7 @@ dependencies = [
     "rich>=14.3.3",
     "questionary>=2.1.1",
     "greenlet>=3.3.2",
+    "supabase>=2.25.1",
 ]
 
 [dependency-groups]

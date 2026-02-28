@@ -1,197 +1,163 @@
-# Referência de API
+# Referência de API (Discord)
 
-BotSalinha não expõe API HTTP pública nesta versão. A interface principal é via comandos do Discord.
+BotSalinha não expõe API HTTP pública nesta versão.
+A interface principal é via comandos do Discord e mensagens automáticas.
 
-## Modos de Interação
+## 1. Modos de interação
 
-BotSalinha oferece três modos de interação com os usuários:
+O bot suporta três modos:
 
-1. **Comandos com Prefixo (`!ask`, `!ping`, etc.)** - Modo tradicional
-2. **Canal IA** - Modo automático de canal dedicado
-3. **DM (Direct Message)** - Modo automático de mensagens privadas
+1. Comandos com prefixo (`!ask`, `!ping`, etc.)
+2. Canal IA dedicado (quando `DISCORD__CANAL_IA_ID` está configurado)
+3. DM (mensagem direta)
 
-### Modo Canal IA
+### Configuração do Canal IA
 
-Ao configurar `DISCORD__CANAL_IA_ID`, qualquer mensagem enviada no canal específico dispara uma resposta automática do bot.
+| Variável | Tipo | Default | Descrição |
+|----------|------|---------|-----------|
+| `DISCORD__CANAL_IA_ID` | string \| None | `None` | Canal dedicado para resposta automática |
 
-**Características:**
+## 2. Comportamento comum
 
-- Resposta imediata a qualquer mensagem no canal configurado
-- Mantém histórico de conversa por usuário
-- Aplica rate limiting por usuário/guild
-- Mostra indicador "digitando..." durante processamento
-- Respostas longas são divididas automaticamente em chunks de 2000 caracteres
+- Histórico por conversa (usuário + guild/canal, ou DM)
+- Limite de mensagem de entrada: 10.000 caracteres
+- Respostas longas são divididas em chunks (limite do Discord: 2.000 chars)
+- Typing indicator em operações de processamento
+- Rate limiting por usuário/contexto
 
-### Modo DM (Direct Message)
+### Rate Limiting
 
-Qualquer mensagem direta (DM) para o bot dispara uma resposta automática.
+| Variável | Default | Descrição |
+|----------|---------|-----------|
+| `RATE_LIMIT_REQUESTS` | `10` | Máximo de requisições por janela |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Tamanho da janela em segundos |
 
-**Características:**
-
-- Resposta imediata a mensagens privadas
-- Mantém histórico de conversa isolado por usuário
-- Aplica rate limiting específico para DMs
-- Mostra indicador "digitando..." durante processamento
-- Respostas longas são divididas automaticamente
-
-### Comportamento Simultâneo
-
-Ambos os modos (Canal IA e DM) podem operar simultaneamente:
-
-- Canal IA: Habilitado apenas com configuração explícita
-- DM: Sempre habilitado
-- Comandos com prefixo: Continuam funcionando normalmente em canais
-
-## Configuração de Modos de Interação
-
-| Variável               | Tipo           | Default | Descrição                                         |
-| ---------------------- | -------------- | ------- | ------------------------------------------------- |
-| `DISCORD__CANAL_IA_ID` | string \| None | None    | ID do canal dedicado para interação IA (opcional) |
-
-### Exemplo: Canal IA
-
-Qualquer mensagem enviada no canal configurado gera resposta automática.
-
-**Exemplo:**
-
-```text
-Usuario no canal #chat-ia:
-  "Qual é o prazo de prescrição trabalhista?"
-
-Bot (responde automaticamente):
-  "De acordo com a CLT... [resposta completa]"
-```
-
-### Fluxo DM
-
-Mensagens privadas são processadas automaticamente.
-
-**Exemplo:**
-
-```text
-Usuario em DM:
-  "O que é crime doloso?"
-
-Bot (responde automaticamente):
-  "Crime doloso ocorre quando há intenção..."
-```
-
-## Rate Limiting
-
-Ambos os modos de interação automática respeitam o sistema de rate limiting:
-
-- **Limites:** Máximo de 10 requisições por janela de 60 segundos
-- **Por usuário:** Cada usuário tem seu próprio contador
-- **Por guild:** No Canal IA, limites são aplicados por guild
-- **Em DMs:** Limite é aplicado usando `user_id:dm` como chave
-- **Mensagens de erro:** Exibem tempo estimado para nova tentativa
-
-**Configuração:**
-
-```env
-RATE_LIMIT_REQUESTS=10
-RATE_LIMIT_WINDOW_SECONDS=60
-```
-
-## Diferenças entre Modos
-
-| Característica     | Comandos Prefixo | Canal IA  | DM        |
-| ------------------ | ---------------- | --------- | --------- |
-| Requer prefixo     | ✅               | ❌        | ❌        |
-| Resposta imediata  | ❌               | ✅        | ✅        |
-| Mantém histórico   | ✅               | ✅        | ✅        |
-| Rate limiting      | ✅               | ✅        | ✅        |
-| Typing indicator   | ✅               | ✅        | ✅        |
-| Limites de tamanho | 10k chars        | 10k chars | 10k chars |
-
-## Interface de Comandos Discord
+## 3. Comandos Discord
 
 ### `!ask <pergunta>`
 
-Faz uma pergunta ao assistente sobre direito brasileiro e concursos.
+Faz uma pergunta ao assistente sobre direito brasileiro e concursos públicos.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome       | Tipo   | Obrigatório | Descrição                    |
-| ---------- | ------ | ----------- | ---------------------------- |
-| `pergunta` | string | Sim         | Texto da pergunta do usuário |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| `pergunta` | string | Sim | Pergunta do usuário (até 10.000 caracteres) |
 
-**Resposta:**
+### Respostas
 
-- 200 (mensagem Discord): Resposta gerada pelo provider ativo (`openai` ou `google`)
-- 429 (cooldown Discord): Mensagem de espera quando limite de comando é atingido
-- 500 (mensagem Discord): Mensagem amigável de erro interno
+- 200 (mensagem Discord): resposta gerada pelo provider ativo
+- 429-like (cooldown Discord): aviso para aguardar antes de novo uso
+- 500-like (mensagem Discord): erro amigável de processamento
 
-**Exemplo:**
+### Exemplo
 
 ```text
 !ask O que é habeas corpus?
 ```
 
+### Observações de implementação
+
+- Comando com `commands.cooldown(rate=1, per=60, user)`
+- Salva mensagem do usuário e do assistente no histórico
+- Pode anexar indicadores de confiança/fontes do RAG na resposta
+
 ### `!buscar <termo> [tipo]`
 
-Realiza uma busca vetorial direta no RAG baseada em similaridade semântica e filtros e retorna os chunks sem inferência da IA.
+Executa busca vetorial no RAG e retorna trechos mais similares.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome    | Tipo   | Obrigatório | Descrição                                                                                                   |
-| ------- | ------ | ----------- | ----------------------------------------------------------------------------------------------------------- |
-| `termo` | string | Sim         | O termo a ser buscado nas leis/documentos                                                                   |
-| `tipo`  | string | Não         | Filtro de metadado opcional (ex: `artigo`, `jurisprudencia`, `questao`, `nota`, `todos`). Padrão é `todos`. |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| `termo` | string | Sim | Termo de busca |
+| `tipo` | string | Não | Um de: `artigo`, `jurisprudencia`, `questao`, `nota`, `todos` |
 
-**Resposta:**
+### Respostas
 
-- 200 (mensagem Discord): Lista de trechos encontrados com indicadores visuais e sua pontuação de similaridade.
+- 200 (mensagem Discord): resultados com similaridade e fonte
+- 400-like (mensagem Discord): tipo inválido ou termo vazio
+- 500-like (mensagem Discord): erro na busca
 
-**Exemplo:**
+### Exemplo
 
 ```text
 !buscar "competência originária" artigo
 ```
 
+### Observações de implementação
+
+- Depende de RAG habilitado e query service disponível
+- Usa `query_by_tipo` para filtros semânticos por categoria
+
 ### `!fontes`
 
-Lista os documentos de conhecimento indexados no banco de dados vetorial.
+Lista os documentos jurídicos indexados no RAG.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
-- 200 (embed Discord): Lista com o nome, tamanho de token e quantidade de chunks de cada fonte.
+- 200 (embed Discord): lista de documentos, chunks e tokens
+- 200 (mensagem Discord): RAG desabilitado ou base vazia
+- 500-like (mensagem Discord): erro ao consultar base
+
+### Exemplo
+
+```text
+!fontes
+```
+
+### Observações de implementação
+
+- Consulta `rag_documents` e monta embed com metadados resumidos
 
 ### `!reindexar`
 
-Recria imediatamente todo o índice RAG (limpa tabela e realiza novo parse/embedding de todos os docs) - _Apenas Admin_
+Reindexa todos os documentos RAG (uso administrativo).
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
-- 200 (mensagem Discord): Log de progresso e mensagem de sucesso da Ingestão.
+- 200 (mensagem Discord): status da reindexação
+- 403-like (controle Discord): comando restrito ao owner do bot
+- 500-like (mensagem Discord): erro de ingestão/reindexação
+
+### Exemplo
+
+```text
+!reindexar
+```
+
+### Observações de implementação
+
+- Usa `commands.is_owner()`
+- Recria índice com `IngestionService.reindex()`
 
 ### `!ping`
 
-Verifica a latência atual do bot.
+Retorna latência atual do bot.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
 - 200 (mensagem Discord): `🏓 Pong! <latência>ms`
 
-**Exemplo:**
+### Exemplo
 
 ```text
 !ping
@@ -199,51 +165,72 @@ Verifica a latência atual do bot.
 
 ### `!ajuda` (alias: `!help`)
 
-Exibe os comandos disponíveis e limitações.
+Exibe instruções e lista de comandos disponíveis.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
-- 200 (mensagem Discord): Texto de ajuda
+- 200 (mensagem Discord): texto de ajuda com comandos e limitações
+
+### Exemplo
+
+```text
+!ajuda
+```
 
 ### `!info`
 
-Mostra informações do bot (versão, modelo ativo, número de servidores).
+Exibe informações operacionais do bot (versão, modelo e servidores).
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
-- 200 (embed Discord): Informações operacionais do bot
+- 200 (embed Discord): informações resumidas do bot
+
+### Exemplo
+
+```text
+!info
+```
 
 ### `!limpar` (alias: `!clear`)
 
 Limpa o histórico de conversa do usuário no canal atual.
 
-**Parâmetros:**
+### Parâmetros
 
-| Nome     | Tipo | Obrigatório | Descrição             |
-| -------- | ---- | ----------- | --------------------- |
-| _nenhum_ | -    | -           | Não recebe parâmetros |
+| Nome | Tipo | Obrigatório | Descrição |
+|------|------|-------------|-----------|
+| _nenhum_ | - | - | Não recebe parâmetros |
 
-**Resposta:**
+### Respostas
 
-- 200 (mensagem Discord): Confirmação de histórico limpo
-- 404-like (mensagem Discord): Nenhuma conversa encontrada
+- 200 (mensagem Discord): confirmação de limpeza
+- 200 (mensagem Discord): aviso quando não há conversa para limpar
 
-## Contrato de Configuração de Provider
+### Exemplo
 
-- Provider ativo: `config.yaml` (`model.provider`)
+```text
+!limpar
+```
+
+## 4. Contrato de configuração do provider
+
+- Arquivo: `config.yaml`
+- Campo: `model.provider`
 - Valores aceitos: `openai`, `google`
-- Credenciais: `.env`
-  - `OPENAI_API_KEY`
-  - `GOOGLE_API_KEY`
+
+Credenciais esperadas no `.env`:
+
+- `OPENAI_API_KEY` (quando provider = `openai`)
+- `GOOGLE_API_KEY` (quando provider = `google`)

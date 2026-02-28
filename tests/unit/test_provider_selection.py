@@ -117,7 +117,9 @@ class TestAgentWrapperProviderSelection:
             from src.core.agent import AgentWrapper
 
             AgentWrapper(repository=mock_repo.return_value)
-            mock_openai_chat.assert_called_once_with(id="gpt-4o-mini", temperature=0.7)
+            mock_openai_chat.assert_called_once_with(
+                id="gpt-4o-mini", temperature=0.7, api_key="test-key"
+            )
 
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")
@@ -146,7 +148,9 @@ class TestAgentWrapperProviderSelection:
             from src.core.agent import AgentWrapper
 
             AgentWrapper(repository=mock_repo.return_value)
-            mock_gemini.assert_called_once_with(id="gemini-2.0-flash", temperature=0.7)
+            mock_gemini.assert_called_once_with(
+                id="gemini-2.0-flash", temperature=0.7, api_key="test-key"
+            )
 
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")

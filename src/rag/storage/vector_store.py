@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import structlog
 from typing import Any
 
 import numpy as np
+import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,10 @@ from ...utils.log_events import LogEvents
 from ..models import Chunk, ChunkMetadata
 
 log = structlog.get_logger(__name__)
+
+# Candidate multiplier for SQL pre-filtering
+# We fetch limit * CANDIDATE_MULTIPLIER candidates before computing similarities
+CANDIDATE_MULTIPLIER = 10
 
 
 def serialize_embedding(embedding: list[float]) -> bytes:
@@ -70,6 +74,40 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(dot_product / (norm_a * norm_b))
 
 
+def batch_cosine_similarity(
+    query_vector: list[float], embedding_matrix: np.ndarray
+) -> np.ndarray:
+    """
+    Vectorized cosine similarity computation.
+
+    Args:
+        query_vector: Query vector (list of floats)
+        embedding_matrix: 2D numpy array where each row is an embedding
+
+    Returns:
+        1D numpy array of similarity scores
+    """
+    query_array = np.array(query_vector, dtype=np.float32)
+    # Ensure embedding_matrix is float32
+    embedding_matrix = embedding_matrix.astype(np.float32)
+
+    # Compute dot products: (embedding_matrix @ query_vector)
+    dot_products = np.dot(embedding_matrix, query_array)
+
+    # Compute norms
+    query_norm = np.linalg.norm(query_array)
+    matrix_norms = np.linalg.norm(embedding_matrix, axis=1)
+
+    # Avoid division by zero
+    denominator = query_norm * matrix_norms
+    denominator[denominator == 0] = 1.0
+
+    if query_norm == 0:
+        return np.zeros(len(embedding_matrix), dtype=np.float32)
+
+    return dot_products / denominator
+
+
 class VectorStore:
     """
     Vector store for semantic search using SQLite backend.
@@ -77,6 +115,30 @@ class VectorStore:
     Stores embeddings as BLOB in SQLite and performs cosine similarity
     search in Python using numpy for vectorized operations.
     """
+
+    # Whitelist of allowed metadata filter keys to prevent SQL injection
+    # Only these keys can be used in json_extract() queries
+    _ALLOWED_FILTER_KEYS = {
+        "documento",
+        "titulo",
+        "capitulo",
+        "secao",
+        "artigo",
+        "paragrafo",
+        "inciso",
+        "tipo",
+        "marca_atencao",
+        "marca_stf",
+        "marca_stj",
+        "marca_concurso",
+        "marca_crime",
+        "marca_pena",
+        "marca_hediondo",
+        "marca_acao_penal",
+        "marca_militar",
+        "banca",
+        "ano",
+    }
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -181,30 +243,62 @@ class VectorStore:
             # Apply metadata filters (JSON filtering)
             if filters:
                 for key, value in filters.items():
+                    # SQL INJECTION PROTECTION: Validate key against whitelist
+                    # before using in json_extract() to prevent injection via
+                    # malicious key names (e.g., "'; DROP TABLE chunks; --")
+                    if key not in self._ALLOWED_FILTER_KEYS:
+                        raise ValueError(
+                            f"Invalid filter key '{key}'. "
+                            f"Allowed keys: {sorted(self._ALLOWED_FILTER_KEYS)}"
+                        )
                     # Use JSON_EXTRACT for SQLite JSON filtering
                     stmt = stmt.where(
                         text(f"json_extract(metadados, '$.{key}') = :{key}")
                     )
                     stmt = stmt.params(**{key: value})
 
-            # Execute query to get all candidate chunks
+            # OPTIMIZATION 1: SQL pre-filtering with candidate limit
+            # Fetch limit * CANDIDATE_MULTIPLIER to reduce data transfer
+            # while still having enough candidates to find top matches
+            candidate_limit = limit * CANDIDATE_MULTIPLIER
+            stmt = stmt.limit(candidate_limit)
+
+            # Execute query to get candidate chunks (limited subset)
             result = await self._session.execute(stmt)
             chunk_orms = result.scalars().all()
 
-            # Calculate similarities in Python
-            results: list[tuple[ChunkORM, float]] = []
+            if not chunk_orms:
+                return []
+
+            # OPTIMIZATION 2: Batch processing with vectorized similarity
+            # Collect all embeddings and compute similarities at once using numpy
+            embeddings_list: list[np.ndarray] = []
+            valid_chunk_orms: list[ChunkORM] = []
+
             for chunk_orm in chunk_orms:
                 if chunk_orm.embedding:
-                    chunk_embedding = deserialize_embedding(chunk_orm.embedding)
-                    similarity = cosine_similarity(query_embedding, chunk_embedding)
+                    # Deserialize to numpy array directly (avoid intermediate list)
+                    embedding_array = np.frombuffer(chunk_orm.embedding, dtype=np.float32)
+                    embeddings_list.append(embedding_array)
+                    valid_chunk_orms.append(chunk_orm)
 
-                    if similarity >= min_similarity:
-                        results.append((chunk_orm, similarity))
+            if not embeddings_list:
+                return []
 
-            # Sort by similarity descending
+            # Stack embeddings into a 2D matrix for vectorized computation
+            embedding_matrix = np.vstack(embeddings_list)
+
+            # Vectorized cosine similarity computation
+            similarities = batch_cosine_similarity(query_embedding, embedding_matrix)
+
+            # Filter by min_similarity and collect results with scores
+            results: list[tuple[ChunkORM, float]] = []
+            for idx, similarity in enumerate(similarities):
+                if similarity >= min_similarity:
+                    results.append((valid_chunk_orms[idx], float(similarity)))
+
+            # Sort by similarity descending and apply limit
             results.sort(key=lambda x: x[1], reverse=True)
-
-            # Apply limit
             results = results[:limit]
 
             # Convert to Pydantic models

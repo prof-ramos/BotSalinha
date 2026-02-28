@@ -200,6 +200,16 @@ class ConfigurationError(BotSalinhaError):
         self.config_key = config_key
 
 
+class RepositoryConfigurationError(ConfigurationError):
+    """
+    Exception raised when repository configuration is invalid.
+
+    This includes missing database URLs, API keys, etc.
+    """
+
+    pass
+
+
 class RetryExhaustedError(BotSalinhaError):
     """
     Exception raised when all retry attempts are exhausted.

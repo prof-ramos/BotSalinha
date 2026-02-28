@@ -145,8 +145,7 @@ class TestRateLimitingIntegration:
         from src.core.discord import BotSalinhaBot
 
         # Arrange - Set strict rate limit for testing
-        rate_limiter.requests = 2
-        rate_limiter.window_seconds = 60
+        rate_limiter.reconfigure(requests=2, window_seconds=60)
 
         bot = BotSalinhaBot(repository=conversation_repository)
 

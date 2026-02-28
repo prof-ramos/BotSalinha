@@ -5,6 +5,7 @@ Wraps the Agno Agent class with proper abstractions and error handling.
 Integrates with RAG (Retrieval-Augmented Generation) for enhanced responses.
 """
 
+import os
 from typing import Any
 
 import structlog
@@ -16,11 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config.settings import get_settings
 from ..config.yaml_config import yaml_config
-from ..rag import QueryService, RAGContext, ConfiancaCalculator
+from ..rag import ConfiancaCalculator, QueryService, RAGContext
 from ..rag.services.embedding_service import EmbeddingService
 from ..storage.repository import MessageRepository
 from ..tools.mcp_manager import MCPToolsManager
 from ..utils.errors import APIError, ConfigurationError
+from ..utils.input_sanitizer import sanitize_user_input
 from ..utils.log_events import LogEvents
 from ..utils.retry import AsyncRetryConfig, async_retry
 
@@ -124,7 +126,7 @@ class AgentWrapper:
                     "Defina GOOGLE_API_KEY no .env para usar provider='google'.",
                     config_key="google.api_key",
                 )
-            model = Gemini(id=model_id, temperature=temperature)
+            model = Gemini(id=model_id, temperature=temperature, api_key=api_key)
         else:
             # provider == "openai" (default, enforced by Literal type)
             api_key = self.settings.get_openai_api_key()
@@ -134,7 +136,8 @@ class AgentWrapper:
                     "Defina OPENAI_API_KEY no .env para usar provider='openai'.",
                     config_key="openai.api_key",
                 )
-            model = OpenAIChat(id=model_id, temperature=temperature)
+            # Pass api_key explicitly to avoid reliance on environment variable
+            model = OpenAIChat(id=model_id, temperature=temperature, api_key=api_key)
 
         # Create the Agno agent
         self.agent = Agent(
@@ -321,9 +324,7 @@ class AgentWrapper:
 
         try:
             # Run generation with retry logic
-            response = await self._generate_with_retry(
-                prompt, history, rag_context=rag_context
-            )
+            response = await self._generate_with_retry(prompt, history, rag_context=rag_context)
 
             log.info(
                 LogEvents.AGENTE_RESPOSTA_GERADA,
@@ -414,12 +415,26 @@ class AgentWrapper:
         Returns:
             Full prompt string
         """
+        # Sanitize user input to protect against prompt injection
+        sanitized_prompt = sanitize_user_input(user_prompt)
+
+        # Log if sanitization changed the input significantly
+        if len(sanitized_prompt) < len(user_prompt) * 0.9:
+            log.warning(
+                "input_sanitized",
+                original_length=len(user_prompt),
+                sanitized_length=len(sanitized_prompt),
+                difference=len(user_prompt) - len(sanitized_prompt),
+            )
+
         # Build RAG augmentation if available
         rag_augmentation = ""
-        if rag_context and self._confianca_calculator:
-            # Check if we should use RAG based on confidence
-            if self._confianca_calculator.should_use_rag(rag_context.confianca):
-                rag_augmentation = self._build_rag_augmentation(rag_context)
+        if (
+            rag_context
+            and self._confianca_calculator
+            and self._confianca_calculator.should_use_rag(rag_context.confianca)
+        ):
+            rag_augmentation = self._build_rag_augmentation(rag_context)
 
         # Reserve ~75% of token budget for context (rest for response)
         # Reduce budget if RAG context is large
@@ -429,7 +444,7 @@ class AgentWrapper:
             max_context_chars -= len(rag_augmentation) + 100
 
         header = "=== Histórico da Conversa ==="
-        footer_parts = ["\n=== Nova Mensagem ===", f"Usuário: {user_prompt}"]
+        footer_parts = ["\n=== Nova Mensagem ===", f"Usuário: {sanitized_prompt}"]
 
         # Add RAG augmentation before user prompt if available
         if rag_augmentation:
@@ -465,9 +480,11 @@ class AgentWrapper:
             Formatted text for prompt injection
         """
         # Get confidence message
-        confianca_msg = self._confianca_calculator.get_confianca_message(
-            rag_context.confianca
-        ) if self._confianca_calculator else ""
+        confianca_msg = (
+            self._confianca_calculator.get_confianca_message(rag_context.confianca)
+            if self._confianca_calculator
+            else ""
+        )
 
         # Build context text
         lines = [confianca_msg, "", "CONTEXTO JURÍDICO RELEVANTE:"]

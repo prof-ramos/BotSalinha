@@ -3,8 +3,8 @@
 from .vector_store import (
     VectorStore,
     cosine_similarity,
-    serialize_embedding,
     deserialize_embedding,
+    serialize_embedding,
 )
 
 __all__ = [

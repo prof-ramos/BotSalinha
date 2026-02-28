@@ -125,14 +125,14 @@ class EmbeddingService:
 
         # OpenAI limit: 300000 tokens per request for text-embedding-3-small
         # Use 200000 as safe limit to account for estimation errors
-        MAX_TOKENS_PER_REQUEST = 200000
+        max_tokens_per_request = 200000  # noqa: N806
 
         try:
             # Create embeddings for all valid texts (with batching if needed)
             indices, texts_to_embed = zip(*valid_texts, strict=True)
             embeddings: list[list[float]] = [[0.0] * EMBEDDING_DIM for _ in texts]
 
-            if total_tokens <= MAX_TOKENS_PER_REQUEST:
+            if total_tokens <= max_tokens_per_request:
                 # Single request
                 response = await self._client.embeddings.create(
                     input=list(texts_to_embed),
@@ -147,7 +147,7 @@ class EmbeddingService:
                     "rag_embedding_batch_split",
                     total_tokens=total_tokens,
                     total_texts=len(texts_to_embed),
-                    batch_size_limit=MAX_TOKENS_PER_REQUEST,
+                    batch_size_limit=max_tokens_per_request,
                     event_name="rag_embedding_batch_split",
                 )
 
@@ -160,13 +160,18 @@ class EmbeddingService:
                     text_tokens = self._estimate_tokens(text)
 
                     # Check if adding this text would exceed limit
-                    if current_batch_texts and current_batch_tokens + text_tokens > MAX_TOKENS_PER_REQUEST:
+                    if (
+                        current_batch_texts
+                        and current_batch_tokens + text_tokens > max_tokens_per_request
+                    ):
                         # Process current batch
                         response = await self._client.embeddings.create(
                             input=current_batch_texts,
                             model=self._model,
                         )
-                        for batch_idx, embedding_obj in zip(current_batch_indices, response.data, strict=True):
+                        for batch_idx, embedding_obj in zip(
+                            current_batch_indices, response.data, strict=True
+                        ):
                             embeddings[batch_idx] = embedding_obj.embedding
 
                         # Start new batch
@@ -185,7 +190,9 @@ class EmbeddingService:
                         input=current_batch_texts,
                         model=self._model,
                     )
-                    for batch_idx, embedding_obj in zip(current_batch_indices, response.data, strict=True):
+                    for batch_idx, embedding_obj in zip(
+                        current_batch_indices, response.data, strict=True
+                    ):
                         embeddings[batch_idx] = embedding_obj.embedding
 
             log.info(

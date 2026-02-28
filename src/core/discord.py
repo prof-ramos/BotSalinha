@@ -17,6 +17,11 @@ from ..middleware.rate_limiter import rate_limiter
 from ..storage.sqlite_repository import SQLiteRepository, get_repository
 from ..utils.errors import APIError
 from ..utils.errors import RateLimitError as BotRateLimitError
+from ..utils.input_sanitizer import (
+    sanitize_query_param,
+    validate_tipo_param,
+    validate_user_input,
+)
 from ..utils.log_correlation import bind_discord_context
 from ..utils.log_events import LogEvents
 from .agent import AgentWrapper
@@ -194,16 +199,43 @@ class BotSalinhaBot(commands.Bot):
         guild_id = message.guild.id if message.guild else None
         user_id = message.author.id
 
-        # 1. Validate message length (max 10,000 characters)
-        if len(message.content) > 10_000:
-            await message.channel.send(
-                "❌ Mensagem muito longa. Por favor, use no máximo 10.000 caracteres."
+        # 1. Enhanced input validation with security checks
+        validation = validate_user_input(
+            message.content,
+            max_length=10_000,
+            check_injection=True,
+        )
+
+        if not validation.is_valid:
+            # Log the validation failure
+            log.warning(
+                "input_validation_failed",
+                user_id=str(user_id),
+                guild_id=str(guild_id),
+                reason=validation.reason,
+                details=validation.details,
+                content_length=len(message.content),
             )
+
+            # Send appropriate error message
+            error_messages = {
+                "too_long": "❌ Mensagem muito longa. Por favor, use no máximo 10.000 caracteres.",
+                "control_chars": "❌ Mensagem contém caracteres inválidos. Por favor, remova caracteres especiais.",
+                "zero_width_abuse": "❌ Mensagem contém caracteres invisíveis em excesso. Por favor, envie texto normal.",
+                "special_char_flood": "❌ Mensagem contém excesso de caracteres especiais consecutivos.",
+                "unicode_flood": "❌ Mensagem contém caracteres Unicode incomuns em excesso.",
+                "invisible_flood": "❌ Mensagem contém muitos caracteres invisíveis. Por favor, envie texto legível.",
+                "injection_detected": "❌ Mensagem contém padrões suspeitos. Por favor, reformule sua pergunta.",
+                "empty": "",  # Silent fail for empty messages
+            }
+
+            error_msg = error_messages.get(validation.reason or "ok", "❌ Entrada inválida.")
+            if error_msg:
+                await message.channel.send(error_msg)
             return
 
-        # 2. Validate message is not empty
-        if not message.content.strip():
-            return
+        # 2. Use sanitized content if validation modified it
+        content_to_process = validation.sanitized or message.content
 
         # 3. Apply rate limit (use existing middleware)
         try:
@@ -232,13 +264,13 @@ class BotSalinhaBot(commands.Bot):
                 await self.agent.save_message(
                     conversation_id=conversation.id,
                     role="user",
-                    content=message.content,
+                    content=content_to_process,
                     discord_message_id=str(message.id),
                 )
 
                 # 7. Generate response via AgentWrapper with RAG
                 response, rag_context = await self.agent.generate_response_with_rag(
-                    prompt=message.content,
+                    prompt=content_to_process,
                     conversation_id=conversation.id,
                     user_id=str(user_id),
                     guild_id=str(guild_id) if guild_id else None,
@@ -328,14 +360,39 @@ class BotSalinhaBot(commands.Bot):
             ctx: Command context
             question: User's question
         """
-        # Validate prompt length to prevent DoS and excessive API costs
-        max_prompt_length = 10_000  # 10k characters
-        if len(question) > max_prompt_length:
-            await ctx.send(
-                f"❌ Pergunta muito longa. Máximo: {max_prompt_length:,} caracteres. "
-                f"Sua pergunta tem {len(question):,} caracteres."
+        # Enhanced input validation
+        validation = validate_user_input(
+            question,
+            max_length=10_000,
+            check_injection=True,
+        )
+
+        if not validation.is_valid:
+            log.warning(
+                "ask_command_validation_failed",
+                user_id=str(ctx.author.id),
+                guild_id=str(ctx.guild.id) if ctx.guild else None,
+                reason=validation.reason,
+                details=validation.details,
             )
+
+            error_messages = {
+                "too_long": "❌ Pergunta muito longa. Máximo: 10.000 caracteres.",
+                "control_chars": "❌ Pergunta contém caracteres inválidos.",
+                "zero_width_abuse": "❌ Pergunta contém caracteres invisíveis em excesso.",
+                "special_char_flood": "❌ Pergunta contém excesso de caracteres especiais.",
+                "unicode_flood": "❌ Pergunta contém caracteres Unicode incomuns em excesso.",
+                "invisible_flood": "❌ Pergunta contém muitos caracteres invisíveis.",
+                "injection_detected": "❌ Pergunta contém padrões suspeitos. Por favor, reformule.",
+                "empty": "❌ Pergunta não pode estar vazia.",
+            }
+
+            error_msg = error_messages.get(validation.reason or "ok", "❌ Entrada inválida.")
+            await ctx.send(error_msg)
             return
+
+        # Use sanitized content if validation modified it
+        question_to_process = validation.sanitized or question
 
         # Send typing indicator
         await ctx.typing()
@@ -352,13 +409,13 @@ class BotSalinhaBot(commands.Bot):
             await self.agent.save_message(
                 conversation_id=conversation.id,
                 role="user",
-                content=question,
+                content=question_to_process,
                 discord_message_id=str(ctx.message.id),
             )
 
             # Generate response with RAG
             response, rag_context = await self.agent.generate_response_with_rag(
-                prompt=question,
+                prompt=question_to_process,
                 conversation_id=conversation.id,
                 user_id=str(ctx.author.id),
                 guild_id=str(ctx.guild.id) if ctx.guild else None,
@@ -671,26 +728,54 @@ Desenvolvido com ❤️ usando Agno + OpenAI
             await ctx.send("ℹ️ RAG não está habilitado neste servidor.")
             return
 
-        if not query:
-            await ctx.send("❌ Por favor, forneça um termo para a busca.")
+        # Enhanced validation for tipo parameter (whitelist)
+        if not validate_tipo_param(tipo):
+            await ctx.send(
+                "❌ Tipo inválido. Use um dos seguintes: "
+                "artigo, jurisprudencia, questao, nota, todos"
+            )
             return
 
-        valid_tipos = ["artigo", "jurisprudencia", "questao", "nota", "todos"]
-        if tipo not in valid_tipos:
-            await ctx.send(f"❌ Tipo inválido. Use um dos seguintes: {', '.join(valid_tipos)}")
+        # Enhanced validation for query parameter
+        query_validation = sanitize_query_param(query, max_length=500)
+
+        if not query_validation.is_valid:
+            log.warning(
+                "buscar_command_validation_failed",
+                user_id=str(ctx.author.id),
+                guild_id=str(ctx.guild.id) if ctx.guild else None,
+                reason=query_validation.reason,
+                details=query_validation.details,
+            )
+
+            error_messages = {
+                "too_long": "❌ Query muito longa. Máximo: 500 caracteres.",
+                "control_chars": "❌ Query contém caracteres inválidos.",
+                "zero_width_abuse": "❌ Query contém caracteres invisíveis em excesso.",
+                "special_char_flood": "❌ Query contém excesso de caracteres especiais.",
+                "unicode_flood": "❌ Query contém caracteres Unicode incomuns em excesso.",
+                "invisible_flood": "❌ Query contém muitos caracteres invisíveis.",
+                "empty": "❌ Por favor, forneça um termo para a busca.",
+            }
+
+            error_msg = error_messages.get(query_validation.reason or "ok", "❌ Query inválida.")
+            await ctx.send(error_msg)
             return
+
+        # Use sanitized query if validation modified it
+        query_to_process = query_validation.sanitized or query
 
         await ctx.typing()
 
         try:
             # Execute type-filtered query
             rag_context = await self.agent._query_service.query_by_tipo(
-                query_text=query,
+                query_text=query_to_process,
                 tipo=tipo,
             )
 
             if not rag_context or not rag_context.chunks_usados:
-                await ctx.send(f"❌ Nenhum resultado encontrado para '{query}' do tipo '{tipo}'.")
+                await ctx.send(f"❌ Nenhum resultado encontrado para '{query_to_process}' do tipo '{tipo}'.")
                 return
 
             # Build and send results using augmentation text from QueryService

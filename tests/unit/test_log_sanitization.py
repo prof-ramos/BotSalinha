@@ -43,7 +43,7 @@ class TestSanitizeString:
 
     def test_discord_token(self):
         """Testa sanitização de Discord tokens."""
-        input_str = "Token: FAKE_DISCORD_TOKEN_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        input_str = "Token: M_FAKE_TOKEN_1234.ABcd.XYZ_1234567890_ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         result = sanitize_string(input_str)
         assert "***DISCORD_TOKEN***" in result
         # Token original não deve aparecer

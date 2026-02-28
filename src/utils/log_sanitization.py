@@ -84,7 +84,7 @@ def sanitize_string(value: str, partial: bool = False) -> str:
 
 def _sanitize_list(items: list[Any], partial: bool = False) -> list[Any]:
     """Sanitiza recursivamente itens em uma lista, incluindo listas aninhadas."""
-    result = []
+    result: list[Any] = []
     for item in items:
         if isinstance(item, str):
             result.append(sanitize_string(item, partial=partial))
