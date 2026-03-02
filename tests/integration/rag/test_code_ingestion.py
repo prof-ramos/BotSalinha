@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.rag_models import ChunkORM, DocumentORM
 from src.rag import CodeIngestionService, QueryService
 from src.rag.models import Chunk, ChunkMetadata, Document
+from src.rag.parser.code_chunker import CodeChunkExtractor
 from src.rag.parser.xml_parser import RepomixXMLParser
 from src.rag.services.embedding_service import EMBEDDING_DIM
 from src.rag.storage.rag_repository import RagRepository
@@ -344,7 +345,7 @@ class TestCodeIngestionEndToEnd:
             },
         ]
 
-        chunks = ingestion_service._extract_chunks_from_files(
+        chunks = await ingestion_service._extract_chunks_from_files(
             parsed_files=parsed_files,
             document_name="position-test",
             documento_id=1,
@@ -353,6 +354,93 @@ class TestCodeIngestionEndToEnd:
         assert len(chunks) == 2
         assert chunks[0].posicao_documento == 0.0
         assert chunks[1].posicao_documento == 1.0
+
+    @pytest.mark.asyncio
+    async def test_large_file_is_split_with_function_and_class_metadata(
+        self,
+        db_session: AsyncSession,
+        mock_embedding_service: MockEmbeddingService,
+    ) -> None:
+        """Should split large code files into multiple chunks with line/function/class metadata."""
+        ingestion_service = CodeIngestionService(
+            session=db_session,
+            embedding_service=mock_embedding_service,
+        )
+        ingestion_service._code_chunker = CodeChunkExtractor(
+            config={"max_tokens": 80, "overlap_tokens": 0, "min_chunk_size": 20}
+        )
+
+        large_file_text = """
+class BigService:
+    def run(self):
+        return "ok"
+
+def helper_0():
+    return 0
+
+def helper_1():
+    return 1
+
+def helper_2():
+    return 2
+
+def helper_3():
+    return 3
+
+def helper_4():
+    return 4
+
+def helper_5():
+    return 5
+
+def helper_6():
+    return 6
+
+def helper_7():
+    return 7
+
+def helper_8():
+    return 8
+
+def helper_9():
+    return 9
+""".strip()
+
+        parsed_files = [
+            {
+                "file_path": "src/core/large_module.py",
+                "language": "python",
+                "text": large_file_text,
+                "line_start": 1,
+                "line_end": len(large_file_text.splitlines()),
+            }
+        ]
+
+        chunks = await ingestion_service._extract_chunks_from_files(
+            parsed_files=parsed_files,
+            document_name="large-file-test",
+            documento_id=1,
+        )
+
+        assert len(chunks) > 1
+
+        extracted_functions: set[str] = set()
+        extracted_classes: set[str] = set()
+
+        for chunk in chunks:
+            metadata = chunk.metadados.model_dump()
+            assert metadata.get("file_path") == "src/core/large_module.py"
+            assert metadata.get("language") == "python"
+            assert metadata.get("module") == "large_module"
+            assert isinstance(metadata.get("line_start"), int)
+            assert isinstance(metadata.get("line_end"), int)
+            assert metadata["line_start"] <= metadata["line_end"]
+
+            extracted_functions.update(metadata.get("functions", []))
+            extracted_classes.update(metadata.get("classes", []))
+
+        assert "helper_0" in extracted_functions
+        assert "BigService" in extracted_classes
 
 
 @pytest.mark.integration

@@ -1,0 +1,180 @@
+# Plan: Melhorias RAG Jurídico (BotSalinha)
+
+**Generated**: 2026-03-02
+
+## Overview
+Fortalecer o RAG jurídico para aumentar precisão de recuperação, reduzir alucinação, melhorar robustez de ingestão de documentos legais (especialmente DOCX sem estilos de heading) e criar avaliação contínua separando qualidade de retrieval da geração.
+
+Base de análise:
+- `repomix-output.xml` (visão consolidada do repositório)
+- Documento exemplo real: `docs/plans/RAG/regime_juridico_dos_servidores_civis_da_uniao_lei_8112.docx`
+
+Achados críticos que guiam o plano:
+- DOCX jurídico exemplo sem headings detectáveis (`style=Normal` em 1084 parágrafos).
+- `CodeIngestionService` ainda em estratégia “um chunk por arquivo”.
+- `VectorStore` limita candidatos no SQL antes da similaridade vetorial final.
+- Inconsistência de tokenização (`tiktoken` em chunker vs heurística `len(text)//4` em embeddings).
+- Hash de documento baseado em nome/caminho, não conteúdo real.
+
+## Prerequisites
+- `uv` e `.venv` ativos
+- OpenAI API key para embeddings
+- SQLite com suporte a FTS5 (ou fallback controlado)
+- Fixtures de avaliação jurídica (Q/A com gabarito de artigo/parágrafo/inciso)
+
+## Dependency Graph
+
+```text
+T1 ──┬── T4 ──┬── T7 ──┐
+     │        │        ├── T10 ── T11
+     │        └── T8 ──┘
+T2 ────── T5 ──────────┘
+T6 ─────────────────────┘
+T3 ─────────────────────┘
+T9 ─────────────────────┘
+```
+
+## Tasks
+
+### T1: Baseline de Qualidade de Retrieval
+- **depends_on**: []
+- **location**: `tests/integration/rag/`, `metricas/`, `scripts/analizar_qualidade_rag.py`, `scripts/gerar_relatorio_rag.py`
+- **description**: Criar baseline offline de retrieval com métricas `Recall@k`, `MRR`, `nDCG` e taxa de citação correta (artigo/parágrafo/inciso), separando retrieval de geração.
+- **validation**: Script gera relatório versionado com métricas por tipo de consulta (`artigo`, `jurisprudencia`, `concurso`, `geral`) e salva snapshot comparável.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T2: Parser DOCX Jurídico Orientado à Estrutura Legal
+- **depends_on**: []
+- **location**: `src/rag/parser/docx_parser.py`, `src/rag/utils/metadata_extractor.py`, `tests/unit/rag/`
+- **description**: Evoluir parser para detectar estrutura legal mesmo sem headings (ex.: `Art.`, `§`, `Inciso`, `Capítulo`, `Título`) e gerar marcações estruturais explícitas no parsing.
+- **validation**: Testes unitários usando amostras da Lei 8.112 validando extração consistente de `artigo/paragrafo/inciso` e blocos estruturais sem depender de estilos Word, cobrindo edge cases (`Art. 1º/1o`, incisos romanos, parágrafos multiline, revogações/notas, tabelas/rodapés).
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T3: Governança de Configuração e Rollout Seguro
+- **depends_on**: []
+- **location**: `src/config/settings.py`, `config.yaml.example`, `docs/features/rag.md`
+- **description**: Definir feature flags e parâmetros para rollout progressivo (novas estratégias de chunking/retrieval/rerank) com fallback rápido para modo estável atual.
+- **validation**: Flags documentadas, defaults seguros, inicialização sem quebra em ambiente sem novas opções e smoke test com flags on/off (incluindo migração aplicada + flag desativada).
+- **status**: Completed (2026-03-02)
+- **log**:
+  - Adicionadas feature flags de rollout seguro em `RAGConfig` para chunking/retrieval/rerank com defaults conservadores (`enable_experimental_* = false`).
+  - Incluídas validações de valores suportados e propriedades `effective_*` para fallback rápido ao modo estável quando flags experimentais estão desligadas.
+  - Documentação atualizada com variáveis `BOTSALINHA_RAG__*`, tabela de flags e smoke test on/off cobrindo cenário de "migração aplicada + flag off".
+- **files edited/created**:
+  - `src/config/settings.py`
+  - `config.yaml.example`
+  - `docs/features/rag.md`
+
+### T4: Retrieval Stage-1 Híbrido (Léxico + Semântico)
+- **depends_on**: [T1]
+- **location**: `src/rag/storage/vector_store.py`, `src/models/rag_models.py`, `migrations/versions/`, `tests/unit/rag/test_vector_store.py`
+- **description**: Reestruturar recuperação inicial para evitar corte cego de candidatos; introduzir busca híbrida com pré-filtro lexical (FTS5/BM25) + vetorial e união de candidatos antes do rerank, com detecção explícita de capability do banco.
+- **validation**: `Recall@k` melhora versus baseline; teste garante que candidatos semanticamente relevantes não sejam descartados por ordem física de tabela; integração cobre cenários com e sem FTS5 (fallback funcional).
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T5: Chunking Semântico para Documentos Jurídicos
+- **depends_on**: [T2]
+- **location**: `src/rag/parser/chunker.py`, `src/rag/models.py`, `tests/unit/rag/test_chunker*.py`
+- **description**: Implementar chunking por fronteiras semânticas e legais (caput/incisos/parágrafos), com overlap contextual e preservação de hierarquia normativa.
+- **validation**: Testes garantem que chunks não quebram no meio de incisos/§; distribuição de tamanhos estável e cobertura de contexto superior ao baseline.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T6: Chunking de Código Real por Fronteiras de Função/Classe
+- **depends_on**: []
+- **location**: `src/rag/services/code_ingestion_service.py`, `src/rag/parser/code_chunker.py`, `tests/integration/rag/test_code_ingestion.py`
+- **description**: Integrar de fato `CodeChunkExtractor` no serviço de ingestão para abandonar modo “um arquivo = um chunk” e melhorar granularidade de consultas técnicas.
+- **validation**: Arquivos grandes geram múltiplos chunks com metadados de linha/função; precisão em consultas por função/classe aumenta.
+- **status**: Completed (2026-03-02)
+- **log**:
+  - Integrado `CodeChunkExtractor` no `CodeIngestionService` (remoção do fluxo “1 arquivo = 1 chunk”).
+  - `CodeIngestionService._extract_chunks_from_files` agora usa extração assíncrona centralizada e mantém recomputação de posição global dos chunks.
+  - `CodeChunkExtractor` evoluído para quebrar preferencialmente em fronteiras de `def/class` (e equivalentes comuns), além do limite de tokens.
+  - Teste de integração adicionado para validar split de arquivo grande em múltiplos chunks com metadados de `line_start/line_end`, `functions` e `classes`.
+- **files edited/created**:
+  - `src/rag/services/code_ingestion_service.py`
+  - `src/rag/parser/code_chunker.py`
+  - `tests/integration/rag/test_code_ingestion.py`
+
+### T7: Reranking e Calibração por Intenção de Consulta
+- **depends_on**: [T4, T5]
+- **location**: `src/rag/utils/retrieval_ranker.py`, `src/rag/services/query_service.py`, `tests/unit/rag/test_query_service.py`
+- **description**: Refinar pesos do rerank por tipo de consulta e normalizar `retrieval_meta` como estrutura tipada (sem serialização em string), habilitando tuning orientado a dados com compatibilidade retroativa (dual-read/dual-write temporário).
+- **validation**: Melhor `MRR` por intenção, metadados estruturados em logs/debug e compatibilidade mantida durante janela de depreciação.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T8: Montagem de Contexto e Orçamento de Tokens
+- **depends_on**: [T4]
+- **location**: `src/rag/services/query_service.py`, `src/rag/services/embedding_service.py`, `src/rag/utils/confianca_calculator.py`
+- **description**: Unificar contagem de tokens (remover heurística `len/4`), controlar budget de contexto por relevância marginal e reduzir redundância entre chunks próximos, com estratégia explícita por provider/modelo (OpenAI/Gemini).
+- **validation**: Contexto final respeita limite de tokens com menor perda de evidência relevante; logs mostram budget e motivo de corte; testes parametrizados por provider/modelo.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T9: Refresh Incremental de Embeddings por Conteúdo
+- **depends_on**: []
+- **location**: `src/rag/services/ingestion_service.py`, `src/rag/services/code_ingestion_service.py`, `src/models/rag_models.py`, `migrations/versions/`
+- **description**: Trocar deduplicação por hash de caminho/nome para hash de conteúdo real (documento/chunk), com migração + backfill de legado (`hash` nulo/antigo), atualização incremental e reindex seletivo idempotente.
+- **validation**: Alterar conteúdo sem alterar path dispara re-embed apenas dos chunks afetados; sem duplicação incorreta; backfill mantém unicidade e reindex repetido não cria divergência.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T10: Avaliação Integrada (Retrieval + Resposta Final)
+- **depends_on**: [T1, T7, T8, T9]
+- **location**: `tests/e2e/test_rag_search.py`, `tests/integration/rag/test_recall.py`, `metricas/`
+- **description**: Criar suíte de avaliação completa com métricas de retrieval e de resposta fundamentada (citação correta, cobertura normativa, taxa de “sem base”).
+- **validation**: Pipeline CI produz relatório comparando baseline e candidato; critérios mínimos de aprovação definidos com SLOs (`P95` latência, custo por consulta e taxa de timeout/erro).
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+### T11: Operação, Comandos de Administração e Runbooks
+- **depends_on**: [T10]
+- **location**: `src/core/discord.py`, `scripts/ingest_all_rag.py`, `docs/features/rag.md`, `docs/backup_restore.md`
+- **description**: Consolidar comandos de operação (`!fontes`, `!reindexar`, reindex incremental), observabilidade e runbooks de recuperação para produção.
+- **validation**: Comandos funcionam em ambiente de teste e documentação operacional cobre cenários de falha e rollback.
+- **status**: Not Completed
+- **log**:
+- **files edited/created**:
+
+## Parallel Execution Groups
+
+| Wave | Tasks | Can Start When |
+|------|-------|----------------|
+| 1 | T1, T2, T3, T6, T9 | Immediately |
+| 2 | T4, T5 | T4 após T1; T5 após T2 |
+| 3 | T7, T8 | T4 + T5 (T7) / T4 (T8) |
+| 4 | T10 | T1 + T7 + T8 + T9 complete |
+| 5 | T11 | T10 complete |
+
+## Testing Strategy
+- Unit: parser, metadata extraction, chunking, token counting, ranking components.
+- Integration: ingestão DOCX + query com filtros + comparação baseline.
+- E2E: fluxo Discord com contexto RAG e fontes.
+- Offline eval: benchmark fixo com Lei 8.112 e documentos já indexados.
+
+## Risks & Mitigations
+- **Risco**: FTS5 indisponível no ambiente SQLite.
+  - **Mitigação**: fallback para índice léxico simplificado e flag de capability.
+- **Risco**: aumento de latência com pipeline híbrido + rerank.
+  - **Mitigação**: candidate caps dinâmicos por tipo de query e cache de embeddings/query.
+- **Risco**: regressão na qualidade por mudança agressiva de chunking.
+  - **Mitigação**: rollout por feature flag + A/B offline com baseline congelado.
+- **Risco**: custo maior de embeddings.
+  - **Mitigação**: incremental refresh por hash de conteúdo + batching com orçamento de tokens.
+
+## Assumptions
+- O foco principal é RAG jurídico em DOCX normativo (não apenas codebase RAG).
+- `repomix-output.xml` é artefato de análise, não fonte oficial única de ingestão de produção.
+- O documento Lei 8.112 é representativo de outros documentos jurídicos do projeto.

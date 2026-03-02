@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
@@ -105,7 +106,7 @@ class CodeChunkExtractor(ChunkExtractor):
             line_start = file_data.get("line_start", 1)
             line_end = file_data.get("line_end", 1)
 
-            if not text:
+            if not text or not text.strip():
                 log.debug("rag_code_chunker_empty_file", file_path=file_path)
                 continue
 
@@ -288,11 +289,20 @@ class CodeChunkExtractor(ChunkExtractor):
         current_tokens = 0
         current_line_start = file_data.get("line_start", 1)
 
-        for _line_idx, line in enumerate(lines):
+        for line in lines:
             line_tokens = self._estimate_tokens(line)
+            is_boundary = self._is_code_boundary(line=line, language=language)
 
-            # Check if we should break
-            if current_tokens + line_tokens > self._max_tokens and current_chunk_lines:
+            should_break_by_boundary = (
+                is_boundary
+                and current_chunk_lines
+                and current_tokens >= self._min_chunk_size
+            )
+            should_break_by_size = current_tokens + line_tokens > self._max_tokens and bool(
+                current_chunk_lines
+            )
+
+            if should_break_by_boundary or should_break_by_size:
                 # Create chunk from accumulated lines
                 chunk_text = "\n".join(current_chunk_lines)
                 line_end = current_line_start + len(current_chunk_lines) - 1
@@ -349,6 +359,24 @@ class CodeChunkExtractor(ChunkExtractor):
         )
 
         return chunks
+
+    @staticmethod
+    def _is_code_boundary(line: str, language: str) -> bool:
+        """Detect common function/class declaration boundaries for code chunk splitting."""
+        stripped = line.strip()
+        if not stripped:
+            return False
+
+        if language == "python":
+            return bool(re.match(r"^(async\s+def|def|class)\s+\w+", stripped))
+
+        # Generic fallback that also helps JS/TS-like syntaxes.
+        return bool(
+            re.match(
+                r"^(export\s+)?(async\s+)?(function|class)\s+\w+|^\w+\s*=\s*(async\s*)?\(",
+                stripped,
+            )
+        )
 
     def _create_overlap_lines(self, previous_lines: list[str]) -> list[str]:
         """

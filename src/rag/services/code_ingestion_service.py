@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.rag_models import ChunkORM, DocumentORM
 from ...utils.log_events import LogEvents
-from ..models import Chunk, ChunkMetadata
+from ..models import Chunk
+from ..parser.code_chunker import CodeChunkExtractor
 from ..parser.xml_parser import RepomixXMLParser
 from ..utils.code_metadata_extractor import CodeMetadataExtractor
 from .embedding_service import EmbeddingService
@@ -74,10 +75,7 @@ class CodeIngestionService(IngestionService):
 
         # Initialize code-specific extractors
         self._code_metadata_extractor = CodeMetadataExtractor()
-
-        # CodeChunkExtractor will be initialized when available
-        # For now, we'll handle chunking inline
-        self._code_chunker = None  # type: ignore
+        self._code_chunker = CodeChunkExtractor()
 
         log.debug(
             "rag_code_ingestion_service_initialized",
@@ -169,7 +167,7 @@ class CodeIngestionService(IngestionService):
             )
 
             # Step 3: Extract chunks from all files
-            chunks = self._extract_chunks_from_files(
+            chunks = await self._extract_chunks_from_files(
                 parsed_files=parsed_files,
                 document_name=document_name,
                 documento_id=document_orm.id,
@@ -270,7 +268,7 @@ class CodeIngestionService(IngestionService):
                 msg, details={"xml_file_path": xml_file_path, "document_name": document_name}
             ) from e
 
-    def _extract_chunks_from_files(
+    async def _extract_chunks_from_files(
         self,
         parsed_files: list[dict[str, Any]],
         document_name: str,
@@ -292,76 +290,23 @@ class CodeIngestionService(IngestionService):
         Returns:
             List of Chunk objects
         """
-        chunks: list[Chunk] = []
-        chunk_sequence = 0
-
-        for file_data in parsed_files:
-            try:
-                file_path = file_data.get("file_path", "")
-                text = file_data.get("text", "")
-                language = file_data.get("language", "unknown")
-
-                if not text or not text.strip():
-                    log.warning(
-                        "rag_code_ingestion_empty_file",
-                        file_path=file_path,
-                        event_name="rag_code_ingestion_empty_file",
-                    )
-                    continue
-
-                # Extract metadata using CodeMetadataExtractor
-                context = {"file_path": file_path}
-                code_metadata = self._code_metadata_extractor.extract_code_metadata(
-                    text=text,
-                    context=context,
-                )
-
-                # Create chunk metadata
-                chunk_metadata = ChunkMetadata(
-                    documento=document_name,
-                    titulo=file_path,
-                    tipo="code",
-                    # Add code-specific fields to metadata
-                    **code_metadata,
-                )
-
-                # Estimate token count
-                token_count = self._estimate_tokens(text)
-
-                # Generate unique chunk_id
-                chunk_id = self._generate_code_chunk_id(document_name, file_path, chunk_sequence)
-
-                # Create chunk
-                chunk = Chunk(
-                    chunk_id=chunk_id,
-                    documento_id=documento_id,
-                    texto=text,
-                    metadados=chunk_metadata,
-                    token_count=token_count,
-                    posicao_documento=0.0,
-                )
-
-                chunks.append(chunk)
-                chunk_sequence += 1
-
-                log.debug(
-                    "rag_code_chunk_created",
-                    chunk_id=chunk_id,
-                    file_path=file_path,
-                    language=language,
-                    token_count=token_count,
-                )
-
-            except Exception as e:
-                # Continue processing other files on error
-                log.error(
-                    "rag_code_ingestion_file_error",
-                    error=str(e),
-                    file_path=file_data.get("file_path", "unknown"),
-                    exception_type=type(e).__name__,
-                    event_name="rag_code_ingestion_file_error",
-                )
-                continue
+        try:
+            chunks = await self._code_chunker.extract_code_chunks(
+                parsed_files=parsed_files,
+                metadata_extractor=self._code_metadata_extractor,
+                document_name=document_name,
+                documento_id=documento_id,
+            )
+        except Exception as e:  # pragma: no cover - defensive guard
+            msg = f"Failed to extract code chunks for {document_name}: {e}"
+            log.error(
+                "rag_code_ingestion_error",
+                error=msg,
+                document=document_name,
+                exception_type=type(e).__name__,
+                event_name="rag_code_ingestion_error",
+            )
+            raise IngestionError(msg) from e
 
         self._recompute_chunk_positions(chunks)
         return chunks
