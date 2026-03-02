@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from typing import Any
 
 import structlog
@@ -14,7 +15,11 @@ from ..models import RAGContext
 from ..storage.vector_store import VectorStore
 from ..utils.confianca_calculator import ConfiancaCalculator
 from ..utils.normalizer import normalize_query_text
-from ..utils.retrieval_ranker import detect_query_type, rerank_hybrid_lite
+from ..utils.retrieval_ranker import (
+    detect_query_type,
+    rerank_hybrid_lite,
+    resolve_rerank_weights,
+)
 from .embedding_service import EmbeddingService
 
 log = structlog.get_logger(__name__)
@@ -178,14 +183,21 @@ class QueryService:
                 retrieval_mode == "hybrid_lite" and rerank_enabled and bool(chunks_with_scores)
             )
             rerank_components: dict[str, dict[str, float]] = {}
+            rerank_weights = None
 
             if rerank_applied:
-                reranked = rerank_hybrid_lite(
-                    query_text=normalized_query,
-                    chunks_with_scores=chunks_with_scores,
+                rerank_weights = resolve_rerank_weights(
+                    query_type=query_type,
                     alpha=self._settings.rag.rerank_alpha,
                     beta=self._settings.rag.rerank_beta,
                     gamma=self._settings.rag.rerank_gamma,
+                )
+                reranked = rerank_hybrid_lite(
+                    query_text=normalized_query,
+                    chunks_with_scores=chunks_with_scores,
+                    alpha=rerank_weights.alpha,
+                    beta=rerank_weights.beta,
+                    gamma=rerank_weights.gamma,
                 )
                 chunks_with_scores = [
                     (chunk, score_map.get(chunk.chunk_id, breakdown.semantic_score))
@@ -239,8 +251,16 @@ class QueryService:
                 "context_chunks_skipped_redundant": int(context_budget_meta["skipped_redundant"]),
                 "context_chunks_skipped_marginal": int(context_budget_meta["skipped_marginal"]),
             }
+            if rerank_applied and rerank_weights is not None:
+                retrieval_meta.update(
+                    {
+                        "rerank_weight_semantic": float(rerank_weights.alpha),
+                        "rerank_weight_lexical": float(rerank_weights.beta),
+                        "rerank_weight_metadata": float(rerank_weights.gamma),
+                    }
+                )
             if debug and rerank_components:
-                retrieval_meta["rerank_components"] = str(rerank_components)
+                retrieval_meta.update(self._build_rerank_debug_meta(rerank_components))
 
             context = RAGContext(
                 chunks_usados=chunks,
@@ -274,6 +294,7 @@ class QueryService:
                 context_chunks_skipped_budget=context_budget_meta["skipped_budget"],
                 context_chunks_skipped_redundant=context_budget_meta["skipped_redundant"],
                 context_chunks_skipped_marginal=context_budget_meta["skipped_marginal"],
+                rerank_components_count=self._read_rerank_components_count(retrieval_meta),
                 sources_count=len(fontes),
                 event_name="rag_query_service_success",
             )
@@ -405,6 +426,51 @@ class QueryService:
         )
 
         return await self.query(query_text, top_k=effective_top_k, filters=filters or {})
+
+    @staticmethod
+    def _build_rerank_debug_meta(rerank_components: dict[str, dict[str, float]]) -> dict[str, Any]:
+        """
+        Build debug metadata with temporary dual-write compatibility.
+
+        New format uses typed flat fields (`rerank_v2_*`); legacy keeps serialized
+        `rerank_components` string until deprecation window closes.
+        """
+        meta: dict[str, Any] = {
+            "rerank_components_schema_version": 2,
+            "rerank_components_count": len(rerank_components),
+        }
+
+        for rank, (chunk_id, breakdown) in enumerate(rerank_components.items(), start=1):
+            prefix = f"rerank_v2_{rank}"
+            meta[f"{prefix}_chunk_id"] = chunk_id
+            meta[f"{prefix}_semantic_score"] = float(breakdown.get("semantic_score", 0.0))
+            meta[f"{prefix}_lexical_score"] = float(breakdown.get("lexical_score", 0.0))
+            meta[f"{prefix}_metadata_boost"] = float(breakdown.get("metadata_boost", 0.0))
+            meta[f"{prefix}_final_score"] = float(breakdown.get("final_score", 0.0))
+
+        # Legacy field kept temporarily for dual-write compatibility.
+        meta["rerank_components"] = str(rerank_components)
+        return meta
+
+    @staticmethod
+    def _read_rerank_components_count(retrieval_meta: dict[str, Any]) -> int:
+        """
+        Dual-read count from v2 structured fields and legacy serialized payload.
+        """
+        typed_count = retrieval_meta.get("rerank_components_count")
+        if isinstance(typed_count, int):
+            return typed_count
+
+        legacy = retrieval_meta.get("rerank_components")
+        if not isinstance(legacy, str) or not legacy:
+            return 0
+
+        try:
+            parsed = ast.literal_eval(legacy)
+        except (SyntaxError, ValueError):
+            return 0
+
+        return len(parsed) if isinstance(parsed, dict) else 0
 
     def should_augment_prompt(self, context: RAGContext) -> bool:
         """

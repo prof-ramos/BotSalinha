@@ -109,6 +109,10 @@ async def test_query_service_applies_hybrid_rerank(monkeypatch: pytest.MonkeyPat
 
     assert context.chunks_usados[0].chunk_id == "b"
     assert context.retrieval_meta.get("rerank_applied") is True
+    assert context.retrieval_meta.get("query_type_detected") == "artigo"
+    assert context.retrieval_meta["rerank_weight_metadata"] > context.retrieval_meta[
+        "rerank_weight_lexical"
+    ]
     assert context.query_normalized == "art. 5 direitos fundamentais"
 
 
@@ -180,6 +184,38 @@ async def test_query_service_applies_similarity_fallback(monkeypatch: pytest.Mon
     assert vector_store.calls[1]["min_similarity"] == pytest.approx(0.32, abs=1e-6)
     assert context.retrieval_meta.get("fallback_applied") is True
     assert context.retrieval_meta.get("effective_min_similarity") == pytest.approx(0.32, abs=1e-6)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_query_service_dual_write_debug_rerank_meta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Debug retrieval_meta should dual-write structured v2 and legacy rerank payloads."""
+    monkeypatch.setattr("src.rag.services.query_service.get_settings", _fake_settings)
+
+    candidates = [
+        (_chunk("a", "disposicoes gerais administrativas"), 0.82),
+        (_chunk("b", "garantias e direitos fundamentais", artigo="5"), 0.72),
+    ]
+    vector_store = _FakeVectorStore(candidates=candidates)
+    service = QueryService(
+        session=SimpleNamespace(),
+        embedding_service=_FakeEmbeddingService(),
+        vector_store=vector_store,
+    )
+
+    context = await service.query("Art. 5 direitos fundamentais", top_k=2, debug=True)
+
+    assert context.retrieval_meta["rerank_components_schema_version"] == 2
+    assert context.retrieval_meta["rerank_components_count"] == 2
+    assert context.retrieval_meta["rerank_v2_1_chunk_id"] == "b"
+    assert isinstance(context.retrieval_meta["rerank_v2_1_final_score"], float)
+    assert "rerank_components" in context.retrieval_meta
+    assert (
+        QueryService._read_rerank_components_count(context.retrieval_meta)
+        == context.retrieval_meta["rerank_components_count"]
+    )
 
 
 @pytest.mark.unit

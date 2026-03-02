@@ -53,6 +53,15 @@ class RerankScore:
     final_score: float
 
 
+@dataclass(slots=True)
+class RerankWeights:
+    """Effective rerank weights after intent calibration."""
+
+    alpha: float
+    beta: float
+    gamma: float
+
+
 def tokenize_ptbr(text: str) -> list[str]:
     """
     Tokenize text for lexical matching in Portuguese legal queries.
@@ -136,6 +145,42 @@ def rerank_hybrid_lite(
     return reranked
 
 
+def resolve_rerank_weights(
+    *,
+    query_type: str,
+    alpha: float,
+    beta: float,
+    gamma: float,
+) -> RerankWeights:
+    """
+    Calibrate rerank weights by query intent and normalize to sum=1.
+    """
+    multipliers = {
+        "artigo": (0.90, 0.80, 1.80),
+        "jurisprudencia": (0.95, 0.75, 1.45),
+        "concurso": (0.85, 1.35, 1.10),
+        "geral": (1.00, 1.00, 1.00),
+    }
+    semantic_multiplier, lexical_multiplier, metadata_multiplier = multipliers.get(
+        query_type,
+        multipliers["geral"],
+    )
+
+    calibrated_alpha = max(float(alpha) * semantic_multiplier, 0.0)
+    calibrated_beta = max(float(beta) * lexical_multiplier, 0.0)
+    calibrated_gamma = max(float(gamma) * metadata_multiplier, 0.0)
+
+    total = calibrated_alpha + calibrated_beta + calibrated_gamma
+    if total <= 0:
+        return RerankWeights(alpha=0.70, beta=0.20, gamma=0.10)
+
+    return RerankWeights(
+        alpha=calibrated_alpha / total,
+        beta=calibrated_beta / total,
+        gamma=calibrated_gamma / total,
+    )
+
+
 def _lexical_score(query_tokens: list[str], chunk_text: str) -> float:
     """
     Compute a lightweight lexical score in [0, 1].
@@ -206,4 +251,11 @@ def _normalize_ref(ref: str | None) -> str:
     return "".join(ch for ch in normalized if ch.isalnum())
 
 
-__all__ = ["RerankScore", "detect_query_type", "rerank_hybrid_lite", "tokenize_ptbr"]
+__all__ = [
+    "RerankScore",
+    "RerankWeights",
+    "detect_query_type",
+    "rerank_hybrid_lite",
+    "resolve_rerank_weights",
+    "tokenize_ptbr",
+]

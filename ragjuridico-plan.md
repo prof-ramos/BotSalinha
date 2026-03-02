@@ -134,11 +134,17 @@ T9 ─────────────────────┘
 - **location**: `src/rag/utils/retrieval_ranker.py`, `src/rag/services/query_service.py`, `tests/unit/rag/test_query_service.py`
 - **description**: Refinar pesos do rerank por tipo de consulta e normalizar `retrieval_meta` como estrutura tipada (sem serialização em string), habilitando tuning orientado a dados com compatibilidade retroativa (dual-read/dual-write temporário).
 - **validation**: Melhor `MRR` por intenção, metadados estruturados em logs/debug e compatibilidade mantida durante janela de depreciação.
-- **status**: Blocked (2026-03-02)
+- **status**: Completed (2026-03-02)
 - **log**:
-  - Task iniciada via super-swarm, porém interrompida durante saturação de descritores (`Too many open files (os error 24)`), sem pacote final validado.
+  - Calibração de pesos de rerank por intenção (`artigo`, `jurisprudencia`, `concurso`, `geral`) implementada com normalização para soma 1.0.
+  - `QueryService` passou a aplicar pesos calibrados por intenção e expor os pesos efetivos em `retrieval_meta`.
+  - `retrieval_meta` de debug migrado para formato estruturado tipado (`rerank_v2_*`) com dual-write temporário do campo legado serializado (`rerank_components`).
+  - Compatibilidade dual-read adicionada para contagem de componentes de rerank em logs, priorizando v2 e caindo para legado quando necessário.
+  - Testes unitários atualizados para cobrir intenção/weights e dual-write/dual-read de metadados de rerank.
 - **files edited/created**:
-  - N/A (sem entrega consolidada)
+  - `src/rag/utils/retrieval_ranker.py`
+  - `src/rag/services/query_service.py`
+  - `tests/unit/rag/test_query_service.py`
 
 ### T8: Montagem de Contexto e Orçamento de Tokens
 - **depends_on**: [T4]
