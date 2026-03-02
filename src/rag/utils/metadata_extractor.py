@@ -13,9 +13,13 @@ log = structlog.get_logger(__name__)
 
 
 # Regex patterns for Brazilian legal documents
-ARTIGO_PATTERN = r"Art\.?\s+(\d+)[º°]?"
-PARAGRAFO_PATTERN = r"(?:§|par[aá]grafo)\s*([úu]nico|\d+)[º°]?"
-INCISO_PATTERN = r"\b([IVXLCDM]+)\b"
+ARTIGO_PATTERN = r"\bArt\.?\s*([0-9]+(?:-[A-Za-z])?)(?:\s*[º°o])?\b"
+PARAGRAFO_PATTERN = (
+    r"(?:§+\s*([0-9]+|[Uu][Nn][ÍI]?[Cc][Oo])(?:\s*[º°o])?"
+    r"|par[aá]grafo\s+([úu]nico|\d+)(?:\s*[º°o])?)"
+)
+INCISO_PATTERN = r"(?:^|\n)\s*(?:inciso\s+)?([IVXLCDM]{1,15})\s*(?:[-–—.)]|$)"
+ROMAN_NUMERAL_PATTERN = r"^M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$"
 
 # Attention markers for important content
 MARCA_ATENCAO = r"#Atenção:"
@@ -51,7 +55,8 @@ class MetadataExtractor:
         """Initialize the metadata extractor."""
         self._artigo_re = re.compile(ARTIGO_PATTERN, re.IGNORECASE)
         self._paragrafo_re = re.compile(PARAGRAFO_PATTERN, re.IGNORECASE)
-        self._inciso_re = re.compile(INCISO_PATTERN)
+        self._inciso_re = re.compile(INCISO_PATTERN, re.IGNORECASE | re.MULTILINE)
+        self._roman_re = re.compile(ROMAN_NUMERAL_PATTERN, re.IGNORECASE)
         self._atencao_re = re.compile(MARCA_ATENCAO, re.IGNORECASE)
         self._stf_re = re.compile(MARCA_STF, re.IGNORECASE)
         self._stj_re = re.compile(MARCA_STJ, re.IGNORECASE)
@@ -151,7 +156,10 @@ class MetadataExtractor:
             Article number as string, or None if not found
         """
         match = self._artigo_re.search(text)
-        return match.group(1) if match else None
+        if not match:
+            return None
+
+        return self._normalize_artigo_value(match.group(1))
 
     def _extract_paragrafo(self, text: str) -> str | None:
         """
@@ -164,7 +172,18 @@ class MetadataExtractor:
             Paragraph number as string, or None if not found
         """
         match = self._paragrafo_re.search(text)
-        return match.group(1) if match else None
+        if not match:
+            return None
+
+        value = match.group(1) or match.group(2)
+        if not value:
+            return None
+
+        value_lower = value.lower()
+        if "unico" in value_lower or "único" in value_lower:
+            return "único"
+
+        return value
 
     def _extract_inciso(self, text: str) -> str | None:
         """
@@ -176,44 +195,19 @@ class MetadataExtractor:
         Returns:
             Inciso as string (Roman numeral), or None if not found
         """
-        # Look for Roman numerals in typical positions
-        # e.g., "I -", "I)", "I." or just "I" at start of line
-        lines = text.split("\n")
-        for line in lines:
-            stripped = line.strip()
-            # Match patterns like "I -", "I)", "I.", or "I" followed by space
-            match = self._inciso_re.match(stripped)
-            if match:
-                roman = match.group(1).upper()
-                # Validate it's a Roman numeral using a simple converter logic
-                try:
-
-                    def roman_to_int(s: str) -> int:
-                        roman_values = {
-                            "I": 1,
-                            "V": 5,
-                            "X": 10,
-                            "L": 50,
-                            "C": 100,
-                            "D": 500,
-                            "M": 1000,
-                        }
-                        total = 0
-                        prev_value = 0
-                        for char in reversed(s):
-                            value = roman_values[char]
-                            if value < prev_value:
-                                total -= value
-                            else:
-                                total += value
-                            prev_value = value
-                        return total
-
-                    if roman_to_int(roman) > 0:
-                        return roman
-                except KeyError:
-                    pass
+        for match in self._inciso_re.finditer(text):
+            roman = match.group(1).upper()
+            if self._roman_re.match(roman):
+                return roman
         return None
+
+    @staticmethod
+    def _normalize_artigo_value(value: str) -> str:
+        """Normalize article number preserving forms like 10-A."""
+        normalized = value.strip()
+        if re.match(r"^\d+[oO]$", normalized):
+            return normalized[:-1]
+        return normalized
 
     def _extract_marcadores(
         self, text: str

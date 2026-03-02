@@ -10,6 +10,10 @@ from typing import Any
 import structlog
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 from src.rag.utils.normalizer import normalize_encoding
 
@@ -23,6 +27,35 @@ class DOCXParser:
     Extracts structured text with style information, headings,
     and formatting details from DOCX files.
     """
+
+    _LEGAL_TITLE_PATTERNS: tuple[tuple[str, re.Pattern[str], int], ...] = (
+        ("titulo", re.compile(r"^\s*T[ÍI]TULO\s+([IVXLCDM]+|\d+)\b", re.IGNORECASE), 1),
+        ("capitulo", re.compile(r"^\s*CAP[ÍI]TULO\s+([IVXLCDM]+|\d+)\b", re.IGNORECASE), 2),
+        ("secao", re.compile(r"^\s*SE[CÇ][ÃA]O\s+([IVXLCDM]+|\d+)\b", re.IGNORECASE), 3),
+        (
+            "subsecao",
+            re.compile(r"^\s*SUBSE[CÇ][ÃA]O\s+([IVXLCDM]+|\d+)\b", re.IGNORECASE),
+            4,
+        ),
+    )
+    _LEGAL_ARTIGO_RE = re.compile(r"^\s*Art\.?\s*([0-9]+(?:-[A-Za-z])?)(?:\s*[º°o])?\b", re.IGNORECASE)
+    _LEGAL_PARAGRAFO_RE = re.compile(
+        r"^\s*(?:§+\s*([0-9]+|[Uu][Nn][ÍI]?[Cc][Oo])(?:\s*[º°o])?"
+        r"|Par[áa]grafo\s+([ÚUu]nico|\d+)(?:\s*[º°o])?)\b",
+        re.IGNORECASE,
+    )
+    _LEGAL_INCISO_RE = re.compile(
+        r"^\s*(?:Inciso\s+)?([IVXLCDM]{1,15})\s*(?:[-–—.)]|$)",
+        re.IGNORECASE,
+    )
+    _LEGAL_REVOGACAO_RE = re.compile(
+        r"\b(revogad[oa]|vetad[oa]|reda[cç][ãa]o\s+dada\s+pela)\b",
+        re.IGNORECASE,
+    )
+    _LEGAL_NOTA_RE = re.compile(
+        r"^\s*(nota(?:\s+de\s+rodap[eé])?|observa[cç][ãa]o|coment[aá]rio|n\.?\s*b\.?)\s*[:\-]",
+        re.IGNORECASE,
+    )
 
     def __init__(self, file_path: str | Path) -> None:
         """
@@ -79,9 +112,32 @@ class DOCXParser:
         try:
             doc = Document(str(self._file_path))
             paragraphs_data: list[dict[str, Any]] = []
+            previous_legal_kind: str | None = None
+            previous_text: str = ""
 
-            for para_idx, paragraph in enumerate(doc.paragraphs, start=1):
-                para_data = self._parse_paragraph(paragraph, para_idx)
+            for para_idx, (paragraph, source) in enumerate(self._iter_body_blocks(doc), start=1):
+                para_data = self._parse_paragraph(
+                    paragraph=paragraph,
+                    para_idx=para_idx,
+                    source=source,
+                    previous_legal_kind=previous_legal_kind,
+                    previous_text=previous_text,
+                )
+                paragraphs_data.append(para_data)
+
+                legal_kind = para_data.get("legal_structure_kind")
+                if legal_kind:
+                    previous_legal_kind = legal_kind
+                previous_text = para_data.get("text", "")
+
+            for footer_idx, paragraph in enumerate(self._iter_footer_paragraphs(doc), start=1):
+                para_data = self._parse_paragraph(
+                    paragraph=paragraph,
+                    para_idx=len(paragraphs_data) + 1,
+                    source=f"footer:{footer_idx}",
+                    previous_legal_kind=previous_legal_kind,
+                    previous_text=previous_text,
+                )
                 paragraphs_data.append(para_data)
 
             log.info(
@@ -101,7 +157,50 @@ class DOCXParser:
             )
             raise
 
-    def _parse_paragraph(self, paragraph: Any, para_idx: int) -> dict[str, Any]:
+    def _iter_body_blocks(self, doc: Document) -> list[tuple[Paragraph, str]]:
+        """Iterate body paragraphs including table cell paragraphs in document order."""
+        blocks: list[tuple[Paragraph, str]] = []
+
+        for child in doc.element.body.iterchildren():
+            if isinstance(child, CT_P):
+                blocks.append((Paragraph(child, doc), "body"))
+                continue
+
+            if isinstance(child, CT_Tbl):
+                table = Table(child, doc)
+                for row_idx, row in enumerate(table.rows):
+                    for col_idx, cell in enumerate(row.cells):
+                        for paragraph in cell.paragraphs:
+                            blocks.append((paragraph, f"table:r{row_idx}c{col_idx}"))
+
+        return blocks
+
+    def _iter_footer_paragraphs(self, doc: Document) -> list[Paragraph]:
+        """Collect footer paragraphs (rodapé) across sections."""
+        footer_paragraphs: list[Paragraph] = []
+        seen: set[tuple[str, str]] = set()
+
+        for section in doc.sections:
+            for paragraph in section.footer.paragraphs:
+                normalized = normalize_encoding(paragraph.text.strip())
+                if not normalized:
+                    continue
+                key = (normalized, paragraph.style.name if paragraph.style else "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                footer_paragraphs.append(paragraph)
+
+        return footer_paragraphs
+
+    def _parse_paragraph(
+        self,
+        paragraph: Any,
+        para_idx: int,
+        source: str,
+        previous_legal_kind: str | None,
+        previous_text: str,
+    ) -> dict[str, Any]:
         """
         Parse a single paragraph and extract its properties.
 
@@ -116,6 +215,16 @@ class DOCXParser:
         style_name = paragraph.style.name if paragraph.style else None
 
         is_heading, heading_level = self._get_heading_level(style_name)
+        legal_structure = self._extract_legal_structure(text)
+        legal_flags = {
+            "is_revogacao": bool(self._LEGAL_REVOGACAO_RE.search(text)),
+            "is_nota": bool(self._LEGAL_NOTA_RE.search(text)),
+        }
+
+        legal_heading_level = legal_structure.get("heading_level") if legal_structure else None
+        if not is_heading and legal_heading_level is not None:
+            is_heading = True
+            heading_level = legal_heading_level
 
         # Extract runs for detailed formatting
         runs = self._extract_runs(paragraph)
@@ -123,6 +232,12 @@ class DOCXParser:
         # Determine if paragraph is bold/italic (if any run is)
         is_bold = any(run.get("is_bold", False) for run in runs)
         is_italic = any(run.get("is_italic", False) for run in runs)
+        continuation_of = self._detect_continuation(
+            text=text,
+            previous_legal_kind=previous_legal_kind,
+            previous_text=previous_text,
+            current_legal_kind=legal_structure.get("kind") if legal_structure else None,
+        )
 
         return {
             "text": text,
@@ -132,7 +247,75 @@ class DOCXParser:
             "is_bold": is_bold,
             "is_italic": is_italic,
             "runs": runs,
+            "source": source,
+            "paragraph_index": para_idx,
+            "legal_structure_kind": legal_structure.get("kind") if legal_structure else None,
+            "legal_structure_value": legal_structure.get("value") if legal_structure else None,
+            "is_legal_heading": legal_heading_level is not None,
+            "legal_continuation_of": continuation_of,
+            "legal_flags": legal_flags,
         }
+
+    def _extract_legal_structure(self, text: str) -> dict[str, Any] | None:
+        """Detect legal block markers in plain text paragraphs."""
+        if not text:
+            return None
+
+        for kind, pattern, level in self._LEGAL_TITLE_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                return {"kind": kind, "value": match.group(1), "heading_level": level}
+
+        artigo_match = self._LEGAL_ARTIGO_RE.search(text)
+        if artigo_match:
+            return {
+                "kind": "artigo",
+                "value": self._normalize_artigo_value(artigo_match.group(1)),
+                "heading_level": None,
+            }
+
+        paragrafo_match = self._LEGAL_PARAGRAFO_RE.search(text)
+        if paragrafo_match:
+            value = paragrafo_match.group(1) or paragrafo_match.group(2)
+            return {"kind": "paragrafo", "value": value, "heading_level": None}
+
+        inciso_match = self._LEGAL_INCISO_RE.search(text)
+        if inciso_match:
+            return {"kind": "inciso", "value": inciso_match.group(1).upper(), "heading_level": None}
+
+        if self._LEGAL_NOTA_RE.search(text):
+            return {"kind": "nota", "value": None, "heading_level": None}
+
+        if self._LEGAL_REVOGACAO_RE.search(text):
+            return {"kind": "revogacao", "value": None, "heading_level": None}
+
+        return None
+
+    @staticmethod
+    def _normalize_artigo_value(value: str) -> str:
+        """Normalize article number preserving forms like 10-A."""
+        normalized = value.strip()
+        if re.match(r"^\d+[oO]$", normalized):
+            return normalized[:-1]
+        return normalized
+
+    @staticmethod
+    def _detect_continuation(
+        text: str,
+        previous_legal_kind: str | None,
+        previous_text: str,
+        current_legal_kind: str | None,
+    ) -> str | None:
+        """Mark likely multiline continuation for legal paragraphs/incisos."""
+        if not text or current_legal_kind is not None or previous_legal_kind is None:
+            return None
+
+        if previous_legal_kind not in {"paragrafo", "inciso", "artigo"}:
+            return None
+
+        continuation_starts = text[:1].islower()
+        previous_opens_clause = previous_text.rstrip().endswith((",", ";", ":"))
+        return previous_legal_kind if (continuation_starts or previous_opens_clause) else None
 
     def _extract_runs(self, paragraph: Any) -> list[dict[str, Any]]:
         """

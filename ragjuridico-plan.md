@@ -50,9 +50,18 @@ T9 ─────────────────────┘
 - **location**: `src/rag/parser/docx_parser.py`, `src/rag/utils/metadata_extractor.py`, `tests/unit/rag/`
 - **description**: Evoluir parser para detectar estrutura legal mesmo sem headings (ex.: `Art.`, `§`, `Inciso`, `Capítulo`, `Título`) e gerar marcações estruturais explícitas no parsing.
 - **validation**: Testes unitários usando amostras da Lei 8.112 validando extração consistente de `artigo/paragrafo/inciso` e blocos estruturais sem depender de estilos Word, cobrindo edge cases (`Art. 1º/1o`, incisos romanos, parágrafos multiline, revogações/notas, tabelas/rodapés).
-- **status**: Not Completed
+- **status**: Completed (2026-03-02)
 - **log**:
+  - Parser DOCX evoluído para detectar estrutura legal sem depender de estilos Word (`TÍTULO`, `CAPÍTULO`, `SEÇÃO`, `SUBSEÇÃO`, `Art.`, `§`, `Inciso`).
+  - Inclusão de parágrafos de tabelas e rodapés no parsing, com marcação de origem (`body/table/footer`).
+  - Inclusão de flags para notas e revogações e heurística de continuação multiline para blocos legais.
+  - `MetadataExtractor` ajustado para `Art. 1º/1o`, parágrafo único e incisos romanos em formatos jurídicos comuns.
+  - Testes unitários adicionados cobrindo edge cases da Lei 8.112 (incisos romanos, parágrafos multiline, revogações/notas, tabelas/rodapés).
 - **files edited/created**:
+  - `src/rag/parser/docx_parser.py`
+  - `src/rag/utils/metadata_extractor.py`
+  - `tests/unit/rag/test_docx_parser.py`
+  - `tests/unit/rag/test_metadata_extractor.py`
 
 ### T3: Governança de Configuração e Rollout Seguro
 - **depends_on**: []
@@ -74,18 +83,33 @@ T9 ─────────────────────┘
 - **location**: `src/rag/storage/vector_store.py`, `src/models/rag_models.py`, `migrations/versions/`, `tests/unit/rag/test_vector_store.py`
 - **description**: Reestruturar recuperação inicial para evitar corte cego de candidatos; introduzir busca híbrida com pré-filtro lexical (FTS5/BM25) + vetorial e união de candidatos antes do rerank, com detecção explícita de capability do banco.
 - **validation**: `Recall@k` melhora versus baseline; teste garante que candidatos semanticamente relevantes não sejam descartados por ordem física de tabela; integração cobre cenários com e sem FTS5 (fallback funcional).
-- **status**: Not Completed
+- **status**: Completed
 - **log**:
+  - 2026-03-02: Implementado stage-1 híbrido em `VectorStore` com união de candidatos semânticos + léxicos, removendo corte cego por ordem física.
+  - 2026-03-02: Adicionada detecção explícita de capability FTS5 e fallback lexical com `LIKE` quando FTS não está disponível.
+  - 2026-03-02: Criada migração para índice FTS5 (`rag_chunks_fts`) com triggers de sincronização.
+  - 2026-03-02: Testes unitários cobrindo cenários com FTS5, sem FTS5 e proteção contra perda por ordem física.
 - **files edited/created**:
+  - `src/rag/storage/vector_store.py`
+  - `src/models/rag_models.py`
+  - `migrations/versions/20260302_1400_add_rag_chunks_fts5_index.py`
+  - `tests/unit/rag/test_vector_store.py`
 
 ### T5: Chunking Semântico para Documentos Jurídicos
 - **depends_on**: [T2]
 - **location**: `src/rag/parser/chunker.py`, `src/rag/models.py`, `tests/unit/rag/test_chunker*.py`
 - **description**: Implementar chunking por fronteiras semânticas e legais (caput/incisos/parágrafos), com overlap contextual e preservação de hierarquia normativa.
 - **validation**: Testes garantem que chunks não quebram no meio de incisos/§; distribuição de tamanhos estável e cobertura de contexto superior ao baseline.
-- **status**: Not Completed
+- **status**: Completed (2026-03-02)
 - **log**:
+  - Refatorado `ChunkExtractor` para agrupar por blocos semânticos jurídicos (artigo/parágrafo/inciso), evitando quebra no meio de `§` e incisos com continuação.
+  - Overlap passou a preservar fronteira de bloco e manter ao menos um parágrafo de contexto entre chunks adjacentes.
+  - Enriquecido metadata com `hierarquia_normativa` e fallback de contexto legal (`artigo/paragrafo/inciso`) quando ausente no texto do chunk.
+  - Criada suíte `tests/unit/rag/test_chunker_semantic.py` cobrindo integridade de fronteira legal, overlap/hierarquia e comparação de cobertura/contexto versus baseline.
 - **files edited/created**:
+  - `src/rag/parser/chunker.py`
+  - `src/rag/models.py`
+  - `tests/unit/rag/test_chunker_semantic.py`
 
 ### T6: Chunking de Código Real por Fronteiras de Função/Classe
 - **depends_on**: []
