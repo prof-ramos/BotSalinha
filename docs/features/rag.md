@@ -177,15 +177,40 @@ O índice RAG foi reconstruído com sucesso.
 
 ```bash
 # .env
-RAG_ENABLED=true                    # Habilitar/desabilitar RAG
-RAG_TOP_K=5                         # Número de chunks a recuperar
-RAG_MIN_SIMILARITY=0.4              # Similaridade mínima aceitável
-RAG_MAX_CONTEXT_TOKENS=2000         # Máximo de tokens no contexto
-RAG_CONFIDENCE_THRESHOLD=0.70       # Limiar para confiança média
-OPENAI_API_KEY=sk-...               # Usada para embeddings
+BOTSALINHA_RAG__ENABLED=true                        # Habilitar/desabilitar RAG
+BOTSALINHA_RAG__TOP_K=5                             # Número de chunks a recuperar
+BOTSALINHA_RAG__MIN_SIMILARITY=0.4                  # Similaridade mínima aceitável
+BOTSALINHA_RAG__MAX_CONTEXT_TOKENS=2000             # Máximo de tokens no contexto
+BOTSALINHA_RAG__CONFIDENCE_THRESHOLD=0.70           # Limiar para confiança média
+BOTSALINHA_RAG__RETRIEVAL_MODE=hybrid_lite          # Modo estável atual
+BOTSALINHA_RAG__RERANK_ENABLED=true                 # Rerank estável atual
+OPENAI_API_KEY=sk-...                               # Usada para embeddings
 ```
 
-### Configuração YAML (`config.yaml`)
+### Flags de Rollout Seguro (T3)
+
+As flags abaixo permitem ativar estratégias novas de forma progressiva, com fallback imediato para o modo estável sem depender de rollback de código:
+
+```bash
+# Chunking (default seguro = off)
+BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_CHUNKING=false
+BOTSALINHA_RAG__EXPERIMENTAL_CHUNKING_MODE=semantic_legal_v1
+
+# Retrieval (default seguro = off)
+BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_RETRIEVAL=false
+BOTSALINHA_RAG__EXPERIMENTAL_RETRIEVAL_MODE=hybrid_lite_v2
+
+# Rerank (default seguro = off)
+BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_RERANK=false
+BOTSALINHA_RAG__RERANK_PROFILE=stable_v1
+BOTSALINHA_RAG__EXPERIMENTAL_RERANK_PROFILE=intent_aware_v1
+```
+
+Fallback rápido:
+- `*_ENABLE_EXPERIMENTAL_* = false` força retorno ao comportamento estável.
+- Modos experimentais podem permanecer configurados; com flag desligada, não entram em produção.
+
+### Configuração YAML (`config.yaml`) - Referência Operacional
 
 ```yaml
 rag:
@@ -193,6 +218,67 @@ rag:
   top_k: 5
   min_similarity: 0.4
   confidence_threshold: 0.70
+  retrieval_mode: hybrid_lite
+  rerank_enabled: true
+  enable_experimental_chunking: false
+  experimental_chunking_mode: semantic_legal_v1
+  enable_experimental_retrieval: false
+  experimental_retrieval_mode: hybrid_lite_v2
+  enable_experimental_rerank: false
+  rerank_profile: stable_v1
+  experimental_rerank_profile: intent_aware_v1
+```
+
+### Smoke Test de Flags (on/off + fallback com migração aplicada)
+
+```bash
+uv run python - <<'PY'
+from src.config.settings import Settings
+
+# Cenário A: defaults seguros (tudo off)
+s = Settings(_env_file=None)
+assert s.rag.enable_experimental_chunking is False
+assert s.rag.enable_experimental_retrieval is False
+assert s.rag.enable_experimental_rerank is False
+assert s.rag.effective_chunking_mode == "fixed_tokens_v1"
+assert s.rag.effective_retrieval_mode == "hybrid_lite"
+assert s.rag.effective_rerank_profile == "stable_v1"
+
+# Cenário B: flags ON (rollout progressivo)
+s_on = Settings(
+    _env_file=None,
+    rag={
+        "enable_experimental_chunking": True,
+        "enable_experimental_retrieval": True,
+        "enable_experimental_rerank": True,
+        "experimental_chunking_mode": "semantic_legal_v1",
+        "experimental_retrieval_mode": "hybrid_lite_v2",
+        "experimental_rerank_profile": "intent_aware_v1",
+    },
+)
+assert s_on.rag.effective_chunking_mode == "semantic_legal_v1"
+assert s_on.rag.effective_retrieval_mode == "hybrid_lite_v2"
+assert s_on.rag.effective_rerank_profile == "intent_aware_v1"
+
+# Cenário C: "migração aplicada + flag OFF"
+# (novos campos/modos presentes, mas rollout desligado)
+s_off = Settings(
+    _env_file=None,
+    rag={
+        "enable_experimental_chunking": False,
+        "enable_experimental_retrieval": False,
+        "enable_experimental_rerank": False,
+        "experimental_chunking_mode": "semantic_legal_v1",
+        "experimental_retrieval_mode": "hybrid_fts_v1",
+        "experimental_rerank_profile": "intent_aware_v1",
+    },
+)
+assert s_off.rag.effective_chunking_mode == "fixed_tokens_v1"
+assert s_off.rag.effective_retrieval_mode == "hybrid_lite"
+assert s_off.rag.effective_rerank_profile == "stable_v1"
+
+print("SMOKE_RAG_FLAGS_OK")
+PY
 ```
 
 ## Estratégia de Chunking

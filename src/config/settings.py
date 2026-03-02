@@ -11,7 +11,7 @@ This module uses environment variables with validation, following best practices
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import (
     AliasChoices,
@@ -103,6 +103,11 @@ class RetryConfig(BaseModel):
 class RAGConfig(BaseModel):
     """RAG (Retrieval-Augmented Generation) configuration."""
 
+    _ALLOWED_RETRIEVAL_MODES: ClassVar[set[str]] = {"hybrid_lite", "semantic_only"}
+    _ALLOWED_CHUNKING_MODES: ClassVar[set[str]] = {"fixed_tokens_v1", "semantic_legal_v1"}
+    _ALLOWED_EXPERIMENTAL_RETRIEVAL_MODES: ClassVar[set[str]] = {"hybrid_lite_v2", "hybrid_fts_v1"}
+    _ALLOWED_RERANK_PROFILES: ClassVar[set[str]] = {"stable_v1", "intent_aware_v1"}
+
     enabled: bool = Field(default=True, description="Enable RAG functionality")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of documents to retrieve")
     min_similarity: float = Field(
@@ -141,6 +146,31 @@ class RAGConfig(BaseModel):
     retrieval_candidate_multiplier: int = Field(default=12, description="Candidate multiplier")
     retrieval_candidate_min: int = Field(default=60, description="Minimum candidates")
     retrieval_candidate_cap: int = Field(default=240, description="Maximum candidates")
+    enable_experimental_chunking: bool = Field(
+        default=False,
+        description="Enable progressive rollout of experimental legal chunking",
+    )
+    experimental_chunking_mode: str = Field(
+        default="semantic_legal_v1",
+        description="Chunking mode used when experimental chunking rollout is enabled",
+    )
+    enable_experimental_retrieval: bool = Field(
+        default=False,
+        description="Enable progressive rollout of experimental retrieval mode",
+    )
+    experimental_retrieval_mode: str = Field(
+        default="hybrid_lite_v2",
+        description="Retrieval mode used when experimental retrieval rollout is enabled",
+    )
+    enable_experimental_rerank: bool = Field(
+        default=False,
+        description="Enable progressive rollout of experimental rerank profile",
+    )
+    rerank_profile: str = Field(default="stable_v1", description="Stable rerank profile")
+    experimental_rerank_profile: str = Field(
+        default="intent_aware_v1",
+        description="Rerank profile used when experimental rerank rollout is enabled",
+    )
     # Code-specific RAG settings
     code_chunk_max_tokens: int = Field(
         default=300, ge=50, le=1000, description="Max tokens per code chunk"
@@ -170,6 +200,83 @@ class RAGConfig(BaseModel):
                 details={"code_chunk_max_tokens": self.code_chunk_max_tokens},
             )
         return self
+
+    @field_validator("retrieval_mode")
+    @classmethod
+    def validate_retrieval_mode(cls, value: str) -> str:
+        """Validate stable retrieval mode."""
+        normalized = value.strip().lower()
+        if normalized not in cls._ALLOWED_RETRIEVAL_MODES:
+            raise ValidationError(
+                "RAG config inválida: retrieval_mode fora do conjunto suportado.",
+                field="rag.retrieval_mode",
+                value=value,
+                details={"allowed": sorted(cls._ALLOWED_RETRIEVAL_MODES)},
+            )
+        return normalized
+
+    @field_validator("experimental_chunking_mode")
+    @classmethod
+    def validate_experimental_chunking_mode(cls, value: str) -> str:
+        """Validate experimental chunking mode."""
+        normalized = value.strip().lower()
+        if normalized not in cls._ALLOWED_CHUNKING_MODES:
+            raise ValidationError(
+                "RAG config inválida: experimental_chunking_mode fora do conjunto suportado.",
+                field="rag.experimental_chunking_mode",
+                value=value,
+                details={"allowed": sorted(cls._ALLOWED_CHUNKING_MODES)},
+            )
+        return normalized
+
+    @field_validator("experimental_retrieval_mode")
+    @classmethod
+    def validate_experimental_retrieval_mode(cls, value: str) -> str:
+        """Validate experimental retrieval mode."""
+        normalized = value.strip().lower()
+        if normalized not in cls._ALLOWED_EXPERIMENTAL_RETRIEVAL_MODES:
+            raise ValidationError(
+                "RAG config inválida: experimental_retrieval_mode fora do conjunto suportado.",
+                field="rag.experimental_retrieval_mode",
+                value=value,
+                details={"allowed": sorted(cls._ALLOWED_EXPERIMENTAL_RETRIEVAL_MODES)},
+            )
+        return normalized
+
+    @field_validator("rerank_profile", "experimental_rerank_profile")
+    @classmethod
+    def validate_rerank_profile(cls, value: str) -> str:
+        """Validate rerank profile names."""
+        normalized = value.strip().lower()
+        if normalized not in cls._ALLOWED_RERANK_PROFILES:
+            raise ValidationError(
+                "RAG config inválida: profile de rerank fora do conjunto suportado.",
+                field="rag.rerank_profile",
+                value=value,
+                details={"allowed": sorted(cls._ALLOWED_RERANK_PROFILES)},
+            )
+        return normalized
+
+    @property
+    def effective_chunking_mode(self) -> str:
+        """Resolve chunking mode with safe fallback when rollout is disabled."""
+        if self.enable_experimental_chunking:
+            return self.experimental_chunking_mode
+        return "fixed_tokens_v1"
+
+    @property
+    def effective_retrieval_mode(self) -> str:
+        """Resolve retrieval mode with safe fallback when rollout is disabled."""
+        if self.enable_experimental_retrieval:
+            return self.experimental_retrieval_mode
+        return self.retrieval_mode
+
+    @property
+    def effective_rerank_profile(self) -> str:
+        """Resolve rerank profile with safe fallback when rollout is disabled."""
+        if self.enable_experimental_rerank:
+            return self.experimental_rerank_profile
+        return self.rerank_profile
 
 
 class Settings(BaseSettings):

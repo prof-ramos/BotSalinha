@@ -22,3 +22,24 @@ agent:
   markdown: true                # Respostas em Markdown
   add_datetime: true            # Incluir data/hora no contexto
   debug_mode: false             # Modo debug do agente
+
+# ------------------------------------------------
+# RAG - Feature Flags (rollout seguro)
+# ------------------------------------------------
+# Observação:
+# - A configuração efetiva do RAG é feita por variáveis de ambiente
+#   BOTSALINHA_RAG__* (Settings/Pydantic).
+# - Este bloco serve como referência operacional para o rollout.
+rag:
+  retrieval_mode: hybrid_lite                   # Modo estável atual
+  rerank_enabled: true                          # Rerank estável ligado por padrão
+
+  enable_experimental_chunking: false           # Rollout progressivo (default seguro)
+  experimental_chunking_mode: semantic_legal_v1 # Só entra se flag acima = true
+
+  enable_experimental_retrieval: false          # Rollout progressivo (default seguro)
+  experimental_retrieval_mode: hybrid_lite_v2   # Só entra se flag acima = true
+
+  enable_experimental_rerank: false             # Rollout progressivo (default seguro)
+  rerank_profile: stable_v1                     # Perfil estável
+  experimental_rerank_profile: intent_aware_v1  # Só entra se flag acima = true
