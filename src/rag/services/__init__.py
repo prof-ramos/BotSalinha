@@ -5,6 +5,7 @@ from .code_ingestion_service import CodeIngestionResult, CodeIngestionService, D
 from .embedding_service import EMBEDDING_DIM, EmbeddingService
 from .ingestion_service import IngestionError, IngestionService
 from .query_service import QueryService
+from .semantic_cache import CacheStats, CachedResponse, SemanticCache
 
 __all__ = [
     "EmbeddingService",
@@ -17,4 +18,7 @@ __all__ = [
     "CodeIngestionService",
     "CodeIngestionResult",
     "DocumentResult",
+    "CachedResponse",
+    "CacheStats",
+    "SemanticCache",
 ]

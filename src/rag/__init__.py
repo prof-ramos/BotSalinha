@@ -5,6 +5,7 @@ from .parser import DOCXParser
 from .services import (
     EMBEDDING_DIM,
     CachedEmbeddingService,
+    CacheStats,
     CodeIngestionResult,
     CodeIngestionService,
     DocumentResult,
@@ -13,6 +14,7 @@ from .services import (
     IngestionService,
     LRUCache,
     QueryService,
+    SemanticCache,
 )
 from .storage import VectorStore, cosine_similarity
 from .utils import ConfiancaCalculator, MetadataExtractor
@@ -34,6 +36,8 @@ __all__ = [
     "CachedEmbeddingService",
     "LRUCache",
     "QueryService",
+    "SemanticCache",
+    "CacheStats",
     "CodeIngestionService",
     "CodeIngestionResult",
     "DocumentResult",

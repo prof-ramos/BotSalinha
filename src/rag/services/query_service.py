@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import time
 from typing import Any
 
 import structlog
@@ -138,10 +139,16 @@ class QueryService:
                 event_name="rag_query_service_query",
             )
 
+            # Start total timing
+            total_start = time.perf_counter()
+
             # Step 1: Generate embedding for query
+            embed_start = time.perf_counter()
             query_embedding = await self._embedding_service.embed_text(normalized_query)
+            embedding_duration_ms = (time.perf_counter() - embed_start) * 1000
 
             # Step 2: Search vector store (first-stage retrieval)
+            search_start = time.perf_counter()
             chunks_with_scores = await self._vector_store.search(
                 query_embedding=query_embedding,
                 limit=candidate_pool_size,
@@ -149,6 +156,7 @@ class QueryService:
                 documento_id=documento_id,
                 filters=filters,
             )
+            vector_search_duration_ms = (time.perf_counter() - search_start) * 1000
 
             fallback_applied = False
             effective_min_similarity = min_similarity
@@ -185,6 +193,7 @@ class QueryService:
             rerank_components: dict[str, dict[str, float]] = {}
             rerank_weights = None
 
+            rerank_start = time.perf_counter()
             if rerank_applied:
                 rerank_weights = resolve_rerank_weights(
                     query_type=query_type,
@@ -213,6 +222,8 @@ class QueryService:
                     for chunk, breakdown in reranked[:top_k]
                 }
 
+            rerank_duration_ms = (time.perf_counter() - rerank_start) * 1000
+
             chunks_with_scores, context_budget_meta = self._select_context_chunks(
                 chunks_with_scores=chunks_with_scores,
                 top_k=top_k,
@@ -228,8 +239,15 @@ class QueryService:
             chunks = [chunk for chunk, _ in chunks_with_scores]
             similaridades = [score for _, score in chunks_with_scores]
 
-            # Step 6: Build RAG context
+            # Calculate total query duration
+            total_query_duration_ms = (time.perf_counter() - total_start) * 1000
+
+            # Step 6: Build RAG context with timing metadata
             retrieval_meta = {
+                "embedding_duration_ms": round(embedding_duration_ms, 2),
+                "vector_search_duration_ms": round(vector_search_duration_ms, 2),
+                "rerank_duration_ms": round(rerank_duration_ms, 2),
+                "total_query_duration_ms": round(total_query_duration_ms, 2),
                 "candidate_count": len(score_map),
                 "post_filter_count": len(chunks),
                 "avg_similarity": sum(similaridades) / len(similaridades) if similaridades else 0.0,
@@ -296,6 +314,10 @@ class QueryService:
                 context_chunks_skipped_marginal=context_budget_meta["skipped_marginal"],
                 rerank_components_count=self._read_rerank_components_count(retrieval_meta),
                 sources_count=len(fontes),
+                embedding_duration_ms=round(embedding_duration_ms, 2),
+                vector_search_duration_ms=round(vector_search_duration_ms, 2),
+                rerank_duration_ms=round(rerank_duration_ms, 2),
+                total_query_duration_ms=round(total_query_duration_ms, 2),
                 event_name="rag_query_service_success",
             )
 

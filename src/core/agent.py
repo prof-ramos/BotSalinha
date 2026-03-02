@@ -5,6 +5,7 @@ Wraps the Agno Agent class with proper abstractions and error handling.
 Integrates with RAG (Retrieval-Augmented Generation) for enhanced responses.
 """
 
+import time
 from typing import Any
 
 import structlog
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config.settings import get_settings
 from ..config.yaml_config import yaml_config
-from ..rag import ConfiancaCalculator, QueryService, RAGContext
+from ..rag import ConfiancaCalculator, QueryService, RAGContext, SemanticCache
 from ..rag.services.embedding_service import EmbeddingService
 from ..storage.repository import MessageRepository
 from ..tools.mcp_manager import MCPToolsManager
@@ -41,6 +42,7 @@ class AgentWrapper:
         repository: MessageRepository,
         db_session: AsyncSession | None = None,
         enable_rag: bool | None = None,
+        semantic_cache: SemanticCache | None = None,
     ) -> None:
         """
         Initialize the agent wrapper.
@@ -49,6 +51,7 @@ class AgentWrapper:
             repository: Message repository for context persistence (REQUIRED)
             db_session: Database session for RAG queries (optional)
             enable_rag: Force enable/disable RAG (defaults to settings)
+            semantic_cache: Semantic cache for RAG responses (optional)
 
         Raises:
             ValueError: If repository is None
@@ -60,11 +63,21 @@ class AgentWrapper:
         self.repository = repository
         self.db_session = db_session
 
+        # Store semantic cache
+        self._semantic_cache = semantic_cache
+
         # Determine if RAG should be enabled
         if enable_rag is None:
             self.enable_rag = self.settings.rag.enabled
         else:
             self.enable_rag = enable_rag
+
+        # Determine if semantic cache should be used
+        # Allow cache if provided and enabled (US-003 will add RAGCacheConfig)
+        self._use_semantic_cache = (
+            self._semantic_cache is not None
+            and self.enable_rag
+        )
 
         # Initialize RAG services if enabled and db_session provided
         self._query_service: QueryService | None = None
@@ -212,12 +225,13 @@ class AgentWrapper:
 
         try:
             # Run generation with retry logic
-            response = await self._generate_with_retry(sanitized_prompt, history)
+            response, llm_generation_ms = await self._generate_with_retry(sanitized_prompt, history)
 
             log.info(
                 "response_generated",
                 conversation_id=conversation_id,
                 response_length=len(response),
+                llm_generation_duration_ms=round(llm_generation_ms, 2),
             )
 
             return response
@@ -255,6 +269,8 @@ class AgentWrapper:
             APIError: If the API call fails
             RetryExhaustedError: If all retries are exhausted
         """
+        e2e_start = time.perf_counter()
+
         # Load conversation history
         history = await self.repository.get_conversation_history(
             conversation_id,
@@ -272,12 +288,42 @@ class AgentWrapper:
             history_count=len(history),
             prompt_length=len(sanitized_prompt),
             rag_enabled=self.enable_rag,
+            semantic_cache_enabled=self._use_semantic_cache,
         )
 
-        # Initialize RAG context
-        rag_context: RAGContext | None = None
+        # Check semantic cache first (before RAG query)
+        cache_key = None
+        if self._use_semantic_cache and self._semantic_cache:
+            cache_key = self._semantic_cache.generate_key(
+                query=sanitized_prompt,
+                top_k=self.settings.rag.top_k,
+                min_similarity=self.settings.rag.min_similarity,
+                retrieval_mode=self.settings.rag.effective_retrieval_mode,
+                rerank_profile=self.settings.rag.effective_rerank_profile,
+                chunking_mode=self.settings.rag.effective_chunking_mode,
+            )
+            cached = await self._semantic_cache.get(cache_key)
+            if cached:
+                log.info(
+                    "rag_cache_hit",
+                    conversation_id=conversation_id,
+                    cache_key=cache_key[:16] + "...",  # Truncated for logging
+                    cached_response_length=len(cached.llm_response),
+                )
+                # Reconstruct RAGContext from cached data
+                cached_rag_context = RAGContext(**cached.rag_context_dict)
+                return cached.llm_response, cached_rag_context
+            else:
+                log.info(
+                    "rag_cache_miss",
+                    conversation_id=conversation_id,
+                    cache_key=cache_key[:16] + "...",
+                )
 
-        # Perform RAG search if enabled
+        # Perform RAG search if enabled (cache miss or no cache)
+        rag_context: RAGContext | None = None
+        rag_query_ms = 0.0
+
         if self.enable_rag and self._query_service:
             try:
                 rag_context = await self._query_service.query(
@@ -285,6 +331,9 @@ class AgentWrapper:
                     top_k=self.settings.rag.top_k,
                     min_similarity=self.settings.rag.min_similarity,
                 )
+                # Extract RAG query timing from metadata
+                rag_query_ms = float(rag_context.retrieval_meta.get("total_query_duration_ms", 0))
+
                 log.info(
                     LogEvents.RAG_BUSCA_CONCLUIDA,
                     chunks_count=len(rag_context.chunks_usados),
@@ -301,16 +350,35 @@ class AgentWrapper:
 
         try:
             # Run generation with retry logic
-            response = await self._generate_with_retry(
+            response, llm_generation_ms = await self._generate_with_retry(
                 sanitized_prompt, history, rag_context=rag_context
             )
 
+            # Calculate total E2E latency
+            total_e2e_ms = (time.perf_counter() - e2e_start) * 1000
+
             log.info(
-                "response_generated_with_rag",
+                "response_completed_with_rag",
                 conversation_id=conversation_id,
                 response_length=len(response),
                 rag_confidence=rag_context.confianca.value if rag_context else None,
+                rag_query_ms=round(rag_query_ms, 2),
+                llm_generation_ms=round(llm_generation_ms, 2),
+                total_e2e_ms=round(total_e2e_ms, 2),
             )
+
+            # Store in semantic cache if enabled and RAG was successful
+            if self._use_semantic_cache and cache_key and self._semantic_cache and rag_context:
+                await self._semantic_cache.set(
+                    cache_key,
+                    rag_context=rag_context,
+                    llm_response=response,
+                )
+                log.debug(
+                    "rag_cache_set",
+                    conversation_id=conversation_id,
+                    cache_key=cache_key[:16] + "...",
+                )
 
             return response, rag_context
 
@@ -329,7 +397,7 @@ class AgentWrapper:
         prompt: str,
         history: list[dict[str, Any]],
         rag_context: RAGContext | None = None,
-    ) -> str:
+    ) -> tuple[str, float]:
         """
         Generate response with retry logic.
 
@@ -339,11 +407,12 @@ class AgentWrapper:
             rag_context: Optional RAG context for augmentation
 
         Returns:
-            Generated response
+            Tuple of (generated_response, llm_generation_duration_ms)
 
         Raises:
             RetryExhaustedError: If all retries fail
         """
+        generation_start = time.perf_counter()
 
         async def _do_generate() -> str:
             # Build full prompt with history and RAG context
@@ -360,7 +429,17 @@ class AgentWrapper:
 
         # Use retry config created in __init__
         # Type ignore: async_retry type signature doesn't properly support async functions
-        return await async_retry(_do_generate, self._retry_config, operation_name="ai_generate")  # type: ignore[arg-type]
+        response_content = await async_retry(_do_generate, self._retry_config, operation_name="ai_generate")  # type: ignore[arg-type]
+
+        llm_generation_duration_ms = (time.perf_counter() - generation_start) * 1000
+
+        log.info(
+            "llm_generation_completed",
+            llm_generation_duration_ms=round(llm_generation_duration_ms, 2),
+            response_length=len(response_content),
+        )
+
+        return response_content, llm_generation_duration_ms
 
     def _build_prompt(
         self,

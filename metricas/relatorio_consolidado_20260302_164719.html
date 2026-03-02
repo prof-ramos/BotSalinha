@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotSalinha - Tribunal de Métricas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../static/report.css">
+</head>
+<body>
+    <div class="container">
+        <div class="timestamp">PROCESSO Nº 2026.03.02.1647</div>
+        <header>
+            <h1>Tribunal de<br>Métricas</h1>
+            <p>Relatório de Auditoria BotSalinha</p>
+        </header>
+
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Escopo</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="summary-card success">
+                <h3>Deferidos</h3>
+                <div class="value">2</div>
+            </div>
+            <div class="summary-card failed">
+                <h3>Indeferidos</h3>
+                <div class="value">0</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <h2>Database Access Performance</h2>
+                <span class="status-badge success">
+                    ✓ Sucesso
+                </span>
+            </div>
+            <p class="description">Database write/read operation latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>operation</th>
+    <th>count</th>
+    <th>total_time_ms</th>
+    <th>avg_time_ms</th>
+  </tr>
+  <tr>
+    <td>Insert Conversation</td>
+    <td>50</td>
+    <td>59.73</td>
+    <td>1.19</td>
+  </tr>
+  <tr>
+    <td>Read Conversations</td>
+    <td>100</td>
+    <td>54.58</td>
+    <td>0.55</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo Médio por Operação (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">Insert Conversation</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%">1.19 ms</div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">Read Conversations</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 46.21848739495799%">0.55 ms</div>
+                </div>
+            </div>
+</div></div>        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>RAG Component Performance</h2>
+                <span class="status-badge success">
+                    ✓ Sucesso
+                </span>
+            </div>
+            <p class="description">Embedding generation and vector search latency</p>
+<h3>Resultados</h3>
+<table>
+  <tr>
+    <th>text_snippet</th>
+    <th>char_length</th>
+    <th>embedding_time_ms</th>
+    <th>search_time_ms</th>
+    <th>chunks_found</th>
+  </tr>
+  <tr>
+    <td>o que é estágio probatório?</td>
+    <td>27</td>
+    <td>1437.15</td>
+    <td>635.39</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>quais os requisitos para ser presidente da repúbli</td>
+    <td>53</td>
+    <td>865.63</td>
+    <td>120.17</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>como funciona a licença maternidade?</td>
+    <td>36</td>
+    <td>1344.33</td>
+    <td>194.29</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>princípios da administração pública, impessoalidad</td>
+    <td>65</td>
+    <td>434.25</td>
+    <td>229.02</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>uma frase curta.</td>
+    <td>16</td>
+    <td>396.73</td>
+    <td>202.42</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td>um texto muito mais longo para avaliar se o tempo </td>
+    <td>201</td>
+    <td>443.95</td>
+    <td>141.08</td>
+    <td>2</td>
+  </tr>
+</table>
+<div class="chart-container"><h4>Tempo de Embedding vs Busca (ms)</h4><div class="bar-chart">
+            <div class="bar-row">
+                <div class="bar-label">o que é estágio probatório?</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 100.0%; background: var(--primary-light);">
+                        Emb: 1437.15ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 44.2118080924051%; background: var(--primary);">
+                        Search: 635.39ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">quais os requisitos para ser p</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 60.23240441150889%; background: var(--primary-light);">
+                        Emb: 865.63ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 8.3616880631806%; background: var(--primary);">
+                        Search: 120.17ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">como funciona a licença matern</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 93.54138398914517%; background: var(--primary-light);">
+                        Emb: 1344.33ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 13.519117698222175%; background: var(--primary);">
+                        Search: 194.29ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">princípios da administração pú</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 30.216052604112303%; background: var(--primary-light);">
+                        Emb: 434.25ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 15.935706084959817%; background: var(--primary);">
+                        Search: 229.02ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="bar-row">
+                <div class="bar-label">uma frase curta.</div>
+                <div class="bar-wrapper">
+                    <div class="bar-fill" style="width: 27.605329993389695%; background: var(--primary-light);">
+                        Emb: 396.73ms
+                    </div>
+                </div>
+                <div class="bar-wrapper" style="flex: 0.6;">
+                    <div class="bar-fill" style="width: 14.084820651984831%; background: var(--primary);">
+                        Search: 202.42ms
+                    </div>
+                </div>
+            </div>
+</div></div>
+            <div class="output-section">
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--danger);">Logs de Erro:</h4>
+                <pre class="error-output">2026-03-02 16:47:14,320 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-03-02 16:47:15,819 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-03-02 16:47:17,286 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-03-02 16:47:17,916 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-03-02 16:47:18,542 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+2026-03-02 16:47:19,188 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings &quot;HTTP/1.1 200 OK&quot;
+</pre>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>RAG Quality Metrics</h2>
+                <span class="status-badge failed">
+                    ✗ Falha
+                </span>
+            </div>
+            <p class="description">Semantic similarity and confidence distribution</p>
+        </div>
+        <div class="section">
+            <div class="section-header">
+                <h2>End-to-End Performance</h2>
+                <span class="status-badge failed">
+                    ✗ Falha
+                </span>
+            </div>
+            <p class="description">Full bot response generation latency including RAG</p>
+        </div>
+    </div>
+</body>
+</html>

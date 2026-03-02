@@ -82,8 +82,27 @@ class RetryConfig(BaseModel):
     )
 
 
+class RAGCacheConfig(BaseModel):
+    """Semantic cache configuration for RAG queries."""
+
+    enabled: bool = Field(default=True, description="Enable semantic cache")
+    max_memory_mb: int = Field(default=50, ge=10, le=500, description="Max memory for cache (MB)")
+    ttl_seconds: int = Field(default=86400, ge=300, le=604800, description="Cache TTL (seconds)")
+    persist_to_db: bool = Field(default=False, description="Persist cache to database")
+
+
 class RAGConfig(BaseModel):
-    """RAG (Retrieval-Augmented Generation) configuration."""
+    """
+    RAG (Retrieval-Augmented Generation) configuration.
+
+    Rollout plan for semantic cache (Fase 1.3):
+    - Day 1: staging 10%
+    - Day 2: staging 100%, measure hit_rate
+    - Day 3: production 5% (shadow mode - logs only)
+    - Day 4: production 25% if hit_rate >= 20%
+    - Day 5+: production 100% if stable
+    - Rollback: BOTSALINHA_RAG__CACHE__ENABLED=false
+    """
 
     _ALLOWED_RETRIEVAL_MODES: ClassVar[set[str]] = {"hybrid_lite", "semantic_only"}
     _ALLOWED_CHUNKING_MODES: ClassVar[set[str]] = {"fixed_tokens_v1", "semantic_legal_v1"}
@@ -129,7 +148,7 @@ class RAGConfig(BaseModel):
     retrieval_candidate_min: int = Field(default=60, description="Minimum candidates")
     retrieval_candidate_cap: int = Field(default=240, description="Maximum candidates")
     enable_experimental_chunking: bool = Field(
-        default=False,
+        default=True,
         description="Enable progressive rollout of experimental legal chunking",
     )
     experimental_chunking_mode: str = Field(
@@ -165,6 +184,14 @@ class RAGConfig(BaseModel):
     )
     code_include_line_numbers: bool = Field(
         default=True, description="Include line numbers in metadata"
+    )
+    # Cache configuration
+    cache: RAGCacheConfig = Field(
+        default_factory=RAGCacheConfig, description="Semantic cache configuration"
+    )
+    # Feature flag para rollout gradual
+    enable_experimental_cache: bool = Field(
+        default=False, description="Enable progressive rollout of semantic cache"
     )
 
     @model_validator(mode="after")
