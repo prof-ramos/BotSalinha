@@ -268,7 +268,9 @@ def mock_gemini_api():
 
     mock_response = "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
 
-    with patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)):
+    with patch(
+        "src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)
+    ):
         yield
 
 
@@ -470,9 +472,7 @@ async def prod_db_session(prod_db_engine):
 
     Provides read-only access to the real RAG data.
     """
-    async_session_maker = sessionmaker(
-        prod_db_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_maker = sessionmaker(prod_db_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session_maker() as session:
         yield session
@@ -489,8 +489,10 @@ async def prod_rag_query_service(prod_db_session, monkeypatch):
     Uses real API keys from environment (not test keys) for embeddings.
     """
     import os
+
     from dotenv import load_dotenv
 
+    from src.config.settings import get_settings
     from src.rag import QueryService
     from src.rag.services.embedding_service import EmbeddingService
 
@@ -498,7 +500,11 @@ async def prod_rag_query_service(prod_db_session, monkeypatch):
     load_dotenv()
 
     # Get real API key from environment
-    real_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI__API_KEY") or os.getenv("BOTSALINHA_OPENAI__API_KEY")
+    real_api_key = (
+        os.getenv("OPENAI_API_KEY")
+        or os.getenv("OPENAI__API_KEY")
+        or os.getenv("BOTSALINHA_OPENAI__API_KEY")
+    )
     if not real_api_key:
         pytest.skip("OpenAI API key not configured for e2e RAG tests")
     if real_api_key.startswith("test_"):
@@ -508,7 +514,6 @@ async def prod_rag_query_service(prod_db_session, monkeypatch):
     monkeypatch.setenv("BOTSALINHA_OPENAI__API_KEY", real_api_key)
 
     # Clear settings cache to pick up real API key
-    from src.config.settings import get_settings
     get_settings.cache_clear()
 
     embedding_service = EmbeddingService()
@@ -521,3 +526,101 @@ async def prod_rag_query_service(prod_db_session, monkeypatch):
 
     # Restore settings cache
     get_settings.cache_clear()
+
+
+# ===== Fixtures for Fast Path Testing =====
+# These fixtures support semantic cache and latency benchmarking
+
+
+@pytest_asyncio.fixture
+async def fast_path_cache():
+    """
+    SemanticCache configurado para testes de Fast Path.
+
+    Provides a memory-limited cache with 1MB max size and 1 hour TTL.
+    """
+    from src.rag import SemanticCache
+
+    cache = SemanticCache(max_memory_mb=1, default_ttl_seconds=3600)
+    yield cache
+
+
+@pytest_asyncio.fixture
+async def agent_with_fast_path(fast_path_cache, prod_db_session, monkeypatch):
+    """
+    AgentWrapper configurado para testes de Fast Path.
+
+    Yields a tuple of (agent, cache) for testing cache hit/miss scenarios.
+    Uses production database session for RAG queries.
+    """
+    from src.core.agent import AgentWrapper
+    from src.storage.factory import create_repository
+
+    async with create_repository() as repo:
+        agent = AgentWrapper(
+            repository=repo,
+            db_session=prod_db_session,
+            enable_rag=True,
+            semantic_cache=fast_path_cache,
+        )
+        yield agent, fast_path_cache
+
+
+@pytest.fixture
+def latency_benchmark():
+    """
+    Helper para medições de latência em testes.
+
+    Provides start/end timing methods for performance measurements.
+
+    Example:
+        bench = latency_benchmark()
+        bench.start("operation")
+        # ... do work ...
+        latency_ms = bench.end("operation")
+    """
+    import time
+
+    class LatencyBenchmark:
+        def __init__(self):
+            self.starts = {}
+
+        def start(self, name: str):
+            """Start timing an operation."""
+            self.starts[name] = time.perf_counter()
+
+        def end(self, name: str) -> float:
+            """End timing and return latency in milliseconds."""
+            return (time.perf_counter() - self.starts[name]) * 1000
+
+    return LatencyBenchmark()
+
+
+@pytest.fixture
+def mock_history_tracker(monkeypatch):
+    """
+    Mock que rastreia chamadas a get_conversation_history.
+
+    Tracks call count and arguments for verifying history caching behavior.
+
+    Example:
+        tracker = mock_history_tracker()
+        # ... run test ...
+        assert tracker.call_count == 1
+    """
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    tracker = SimpleNamespace(call_count=0, calls=[])
+
+    original_history = AsyncMock(return_value=[])
+
+    def track_history(*args, **kwargs):
+        tracker.call_count += 1
+        tracker.calls.append((args, kwargs))
+        return original_history(*args, **kwargs)
+
+    # The actual patching will be done in the test using this tracker
+    tracker.track_history = track_history
+
+    yield tracker
