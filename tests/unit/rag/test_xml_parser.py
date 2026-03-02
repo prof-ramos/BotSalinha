@@ -222,7 +222,8 @@ class TestRepomixXMLParserLanguageDetection:
 class TestRepomixXMLParserExtractFileElement:
     """Tests for _extract_file_element method (tested via parse)."""
 
-    def test_extract_file_element_with_all_fields(self, tmp_path) -> None:
+    @pytest.mark.asyncio
+    async def test_extract_file_element_with_all_fields(self, tmp_path) -> None:
         """Should extract all fields from file element."""
         xml_content = '''<?xml version="1.0"?>
 <output>
@@ -234,7 +235,7 @@ class TestRepomixXMLParserExtractFileElement:
         xml_file.write_text(xml_content)
 
         parser = RepomixXMLParser(xml_file)
-        result = parser.parse()
+        result = await parser.parse()
 
         assert len(result) == 1
         file_data = result[0]
@@ -247,7 +248,8 @@ class TestRepomixXMLParserExtractFileElement:
         assert file_data["language"] == "python"
         assert "class Agent:" in file_data["text"]
 
-    def test_extract_multiple_files(self, tmp_path) -> None:
+    @pytest.mark.asyncio
+    async def test_extract_multiple_files(self, tmp_path) -> None:
         """Should extract multiple file elements correctly."""
         xml_content = '''<?xml version="1.0"?>
 <output>
@@ -259,7 +261,7 @@ class TestRepomixXMLParserExtractFileElement:
         xml_file.write_text(xml_content)
 
         parser = RepomixXMLParser(xml_file)
-        result = parser.parse()
+        result = await parser.parse()
 
         assert len(result) == 3
         assert result[0]["file_path"] == "a.py"
@@ -269,7 +271,8 @@ class TestRepomixXMLParserExtractFileElement:
         assert result[1]["text"] == "content B"
         assert result[2]["text"] == "content C"
 
-    def test_text_stripping(self, tmp_path) -> None:
+    @pytest.mark.asyncio
+    async def test_text_stripping(self, tmp_path) -> None:
         """Should strip whitespace from text content."""
         xml_content = '''<?xml version="1.0"?>
 <output>
@@ -281,7 +284,7 @@ class TestRepomixXMLParserExtractFileElement:
         xml_file.write_text(xml_content)
 
         parser = RepomixXMLParser(xml_file)
-        result = parser.parse()
+        result = await parser.parse()
 
         # Text should be stripped
         assert result[0]["text"] == "indented content"

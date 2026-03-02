@@ -9,6 +9,7 @@ from uuid import uuid4
 import structlog
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
+from sqlalchemy.exc import DatabaseError as SQLAlchemyDatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.rag_models import ChunkORM, DocumentORM
@@ -254,8 +255,8 @@ class CodeIngestionService(IngestionService):
             await self._session.rollback()
             raise
 
-        except Exception as e:
-            # Wrap other exceptions
+        except (ValueError, OSError, KeyError, SQLAlchemyDatabaseError) as e:
+            # Wrap specific exceptions
             await self._session.rollback()
             msg = f"Failed to ingest codebase {document_name}: {e}"
             log.error(

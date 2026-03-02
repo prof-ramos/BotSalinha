@@ -270,7 +270,16 @@ class RagRepository:
                     for orm in orms:
                         # Apply filters if provided
                         if filters:
-                            metadata = json.loads(orm.metadados)
+                            try:
+                                metadata = json.loads(orm.metadados)
+                            except json.JSONDecodeError as e:
+                                logger.warning(
+                                    "rag_repo_search_invalid_metadata",
+                                    chunk_id=orm.id,
+                                    metadados=orm.metadados,
+                                    error=str(e),
+                                )
+                                continue
                             if not all(metadata.get(k) == v for k, v in filters.items()):
                                 continue
 

@@ -71,8 +71,9 @@ class MockEmbeddingService:
         """Generate consistent fake embedding based on text hash."""
         self._call_count += 1
         # Generate consistent pseudo-random embedding based on text content
-        np.random.seed(hash(text) % (2**32))
-        return self._rng.random(EMBEDDING_DIM).tolist()
+        text_seed = hash(text) % (2**32)
+        text_rng = np.random.default_rng(text_seed)
+        return text_rng.random(EMBEDDING_DIM).tolist()
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate batch of fake embeddings."""
@@ -298,7 +299,7 @@ class TestCodeIngestionEndToEnd:
             document_name="test-codebase-dedupe",
         )
 
-        from sqlalchemy import select
+        from sqlalchemy import delete, select
 
         doc_stmt = select(DocumentORM).where(DocumentORM.nome == "test-codebase-dedupe")
         doc_result = await db_session.execute(doc_stmt)
@@ -307,6 +308,11 @@ class TestCodeIngestionEndToEnd:
         assert len(documents) == 1
         assert first.document.id == second.document.id
         assert first.document.content_hash == second.document.content_hash
+
+        # Cleanup: delete test document to prevent pollution
+        delete_stmt = delete(DocumentORM).where(DocumentORM.nome == "test-codebase-dedupe")
+        await db_session.execute(delete_stmt)
+        await db_session.commit()
 
     @pytest.mark.asyncio
     async def test_chunk_positions_use_actual_created_chunks(

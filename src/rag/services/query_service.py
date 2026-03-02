@@ -359,14 +359,16 @@ class QueryService:
         Returns:
             RAGContext with code-specific filtering applied
         """
-        filters: dict[str, Any] = {}
+        filters: dict[str, Any] | None = None
 
-        if language:
-            filters["language"] = language
-        if layer:
-            filters["layer"] = layer
-        if module:
-            filters["module"] = module
+        if language or layer or module:
+            filters = {}
+            if language:
+                filters["language"] = language
+            if layer:
+                filters["layer"] = layer
+            if module:
+                filters["module"] = module
 
         effective_top_k = top_k or self._settings.rag.top_k
 
@@ -379,7 +381,7 @@ class QueryService:
             event_name="rag_query_service_query_code",
         )
 
-        return await self.query(query_text, top_k=effective_top_k, filters=filters)
+        return await self.query(query_text, top_k=effective_top_k, filters=filters or {})
 
     def should_augment_prompt(self, context: RAGContext) -> bool:
         """

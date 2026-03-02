@@ -50,6 +50,7 @@ def upgrade() -> None:
             )
         )
     elif dialect_name in {"postgres", "postgresql"}:
+        # Note: Requires SUPERUSER or CREATE privilege on database
         # Criar extensão pgcrypto se não existir
         bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         bind.execute(
