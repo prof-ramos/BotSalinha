@@ -271,27 +271,11 @@ class AgentWrapper:
         """
         e2e_start = time.perf_counter()
 
-        # Load conversation history
-        history = await self.repository.get_conversation_history(
-            conversation_id,
-            max_runs=self.settings.history_runs,
-        )
-
-        # Sanitize user input
+        # Sanitize user input FIRST (before any other operation)
         sanitized_prompt = sanitize_user_input(prompt)
 
-        log.info(
-            "generating_response_with_rag",
-            conversation_id=conversation_id,
-            user_id=str(user_id),
-            guild_id=str(guild_id) if guild_id else None,
-            history_count=len(history),
-            prompt_length=len(sanitized_prompt),
-            rag_enabled=self.enable_rag,
-            semantic_cache_enabled=self._use_semantic_cache,
-        )
-
-        # Check semantic cache first (before RAG query)
+        # FAST PATH: Check semantic cache BEFORE loading history
+        # This avoids expensive DB call on cache hits
         cache_key = None
         if self._use_semantic_cache and self._semantic_cache:
             cache_key = self._semantic_cache.generate_key(
@@ -305,7 +289,7 @@ class AgentWrapper:
             cached = await self._semantic_cache.get(cache_key)
             if cached:
                 log.info(
-                    "rag_cache_hit",
+                    "rag_cache_hit_fast_path",
                     conversation_id=conversation_id,
                     cache_key=cache_key[:16] + "...",  # Truncated for logging
                     cached_response_length=len(cached.llm_response),
@@ -313,12 +297,24 @@ class AgentWrapper:
                 # Reconstruct RAGContext from cached data
                 cached_rag_context = RAGContext(**cached.rag_context_dict)
                 return cached.llm_response, cached_rag_context
-            else:
-                log.info(
-                    "rag_cache_miss",
-                    conversation_id=conversation_id,
-                    cache_key=cache_key[:16] + "...",
-                )
+
+        # SLOW PATH: Load conversation history (only on cache miss)
+        history = await self.repository.get_conversation_history(
+            conversation_id,
+            max_runs=self.settings.history_runs,
+        )
+
+        log.info(
+            "generating_response_with_rag",
+            conversation_id=conversation_id,
+            user_id=str(user_id),
+            guild_id=str(guild_id) if guild_id else None,
+            history_count=len(history),
+            prompt_length=len(sanitized_prompt),
+            rag_enabled=self.enable_rag,
+            semantic_cache_enabled=self._use_semantic_cache,
+            cache_miss=bool(cache_key),
+        )
 
         # Perform RAG search if enabled (cache miss or no cache)
         rag_context: RAGContext | None = None
