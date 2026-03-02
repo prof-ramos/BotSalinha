@@ -15,9 +15,15 @@ Assistente de Direito e Concursos Públicos para Discord, com suporte a RAG (Ret
 
 **Cache Semântico com Fast Path:**
 - Cache hit latência: **1ms** (SLO ≤100ms atingido ✅)
-- Speedup: 11,583x em cache hits
+- Speedup: 11,583x em cache hits (de 16s para 1ms)
 - Cache miss latência: ~16s (SLO ≤30s)
-- Otimização implementada: check de cache ANTES de carregar histórico da conversa
+- Otimização Fast Path: cache check ANTES de carregar histórico da conversa
+- Elimina: carregamento de history (~50ms), construção de prompt (~80ms), overhead de telemetria
+
+**Arquitetura de Cache:**
+- Cache semântico com LRU eviction por memória (50MB padrão)
+- TTL de 24h para entradas cacheadas
+- Chave baseada em: query + top_k + min_similarity + retrieval_mode + rerank_profile + chunking_mode
 
 ## Tecnologias
 

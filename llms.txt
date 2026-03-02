@@ -5,7 +5,7 @@
 ## Arquivos Centrais
 - [bot.py]: Ponto de entrada principal (CLI `uv run botsalinha run`)
 - [src/core/discord.py]: Comandos Discord, eventos (handler `on_message`), processamento de chat e tratamento de erros
-- [src/core/agent.py]: AgentWrapper Agno, seleção de provider e geração de respostas
+- [src/core/agent.py]: AgentWrapper Agno, seleção de provider e geração de respostas (Fast Path: cache check antes de history load, 1ms latency em cache hits)
 - [prompt/prompt_v4_rag_first.md]: Prompt ativo RAG-first com regras de decisão por `RAG_STATUS`
 - [src/core/cli.py]: Interface CLI baseada em typer/rich para desenvolvedores
 - [src/config/settings.py]: Pydantic Settings (variáveis de ambiente, dotenv)
