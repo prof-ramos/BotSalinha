@@ -18,20 +18,6 @@ from src.rag import ConfiancaCalculator, QueryService, VectorStore
 from src.rag.models import Chunk, ChunkMetadata
 
 
-class _FakeEmbeddingService:
-    async def embed_text(self, _text: str) -> list[float]:
-        return [0.1, 0.2, 0.3]
-
-
-@pytest.fixture
-def rag_query_service(db_session: AsyncSession) -> QueryService:
-    """Fixture local para consultas e2e sem dependência de API externa."""
-    return QueryService(
-        session=db_session,
-        embedding_service=_FakeEmbeddingService(),
-    )
-
-
 @pytest.mark.e2e
 @pytest.mark.rag
 @pytest.mark.database
@@ -52,15 +38,15 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_simple_search_returns_results(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test that a simple search returns relevant chunks."""
         # Check if documents are indexed
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
@@ -69,7 +55,7 @@ class TestRAGSearchE2E:
         # Initialize service
 
         # Perform search
-        context = await rag_query_service.query(
+        context = await prod_rag_query_service.query(
             query_text="direitos fundamentais constituição",
             top_k=3,
         )
@@ -90,15 +76,15 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_search_with_filters(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test search with document filter."""
         from sqlalchemy import select
 
         # Get a document ID
         doc_stmt = select(DocumentORM).limit(1)
-        doc_result = await db_session.execute(doc_stmt)
+        doc_result = await prod_db_session.execute(doc_stmt)
         document = doc_result.scalar_one_or_none()
 
         if not document:
@@ -106,7 +92,7 @@ class TestRAGSearchE2E:
 
 
         # Search with document filter
-        context = await rag_query_service.query(
+        context = await prod_rag_query_service.query(
             query_text="servidor",
             top_k=5,
             documento_id=document.id,
@@ -119,13 +105,13 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_search_no_results(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test search with query that should return no results."""
 
         # Query about unrelated topic
-        context = await rag_query_service.query(
+        context = await prod_rag_query_service.query(
             query_text="fórmula química da água",
             top_k=5,
         )
@@ -136,14 +122,14 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_search_latency(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test that search completes within acceptable latency."""
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
@@ -160,33 +146,33 @@ class TestRAGSearchE2E:
         latencies: list[float] = []
         for query in queries:
             start_time = time.time()
-            await rag_query_service.query(query_text=query, top_k=5)
+            await prod_rag_query_service.query(query_text=query, top_k=5)
             latency = time.time() - start_time
             latencies.append(latency)
 
         avg_latency = sum(latencies) / len(latencies)
 
-        # Assert average latency < 500ms
-        assert avg_latency < 0.5, f"Average latency {avg_latency*1000:.1f}ms exceeds 500ms"
+        # Assert average latency < 800ms (alinhado com SLO max_p95_latency_s)
+        assert avg_latency < 0.8, f"Average latency {avg_latency*1000:.1f}ms exceeds 800ms SLO"
 
     @pytest.mark.asyncio
     async def test_response_structure(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test that RAG context has proper structure."""
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
             pytest.skip("No indexed chunks found")
 
 
-        context = await rag_query_service.query(
+        context = await prod_rag_query_service.query(
             query_text="constituição federal",
             top_k=3,
         )
@@ -213,14 +199,14 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_confidence_levels(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test confidence calculation for different queries."""
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
@@ -229,14 +215,14 @@ class TestRAGSearchE2E:
         calculator = ConfiancaCalculator()
 
         # High confidence query (specific legal term)
-        high_context = await rag_query_service.query(
+        high_context = await prod_rag_query_service.query(
             query_text="artigo 5 constituição federal direitos",
             top_k=5,
         )
         high_confidence = calculator.calculate_from_context(high_context)
 
         # Low confidence query (unrelated topic)
-        low_context = await rag_query_service.query(
+        low_context = await prod_rag_query_service.query(
             query_text="receita de bolo de chocolate",
             top_k=5,
         )
@@ -251,21 +237,21 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_vector_store_retrieval(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test VectorStore direct retrieval."""
         from sqlalchemy import select
 
         # Get a chunk with embedding
         chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
-        chunk_result = await db_session.execute(chunk_stmt)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
         chunk_orm = chunk_result.scalar_one_or_none()
 
         if not chunk_orm:
             pytest.skip("No chunks with embeddings found")
 
-        vector_store = VectorStore(session=db_session)
+        vector_store = VectorStore(session=prod_db_session)
 
         # Retrieve by ID
         chunk = await vector_store.get_chunk_by_id(chunk_orm.id)
@@ -281,14 +267,14 @@ class TestRAGSearchE2E:
     @pytest.mark.asyncio
     async def test_query_by_tipo(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test QueryService query_by_tipo method."""
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
@@ -296,45 +282,45 @@ class TestRAGSearchE2E:
 
 
         # Query by "artigo" type
-        context = await rag_query_service.query_by_tipo(
+        context = await prod_rag_query_service.query_by_tipo(
             query_text="servidor",
             tipo="artigo",
             top_k=3,
         )
 
         # Should return results
-        assert isinstance(context, type(await rag_query_service.query("servidor", top_k=3)))
+        assert isinstance(context, type(await prod_rag_query_service.query("servidor", top_k=3)))
 
     @pytest.mark.asyncio
     async def test_prompt_augmentation(
         self,
-        rag_query_service: QueryService,
-        db_session: AsyncSession,
+        prod_rag_query_service: QueryService,
+        prod_db_session: AsyncSession,
     ) -> None:
         """Test prompt augmentation with RAG context."""
         from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
-        chunk_result = await db_session.execute(chunk_count_stmt)
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
         chunk_count = chunk_result.scalar() or 0
 
         if chunk_count == 0:
             pytest.skip("No indexed chunks found")
 
 
-        context = await rag_query_service.query(
+        context = await prod_rag_query_service.query(
             query_text="direitos fundamentais",
             top_k=2,
         )
 
         # Check if should augment
-        should_augment = rag_query_service.should_augment_prompt(context)
+        should_augment = prod_rag_query_service.should_augment_prompt(context)
 
         if context.chunks_usados:
             assert should_augment == (context.confianca.value != "sem_rag")
 
         # Get augmentation text
-        aug_text = rag_query_service.get_augmentation_text(context)
+        aug_text = prod_rag_query_service.get_augmentation_text(context)
 
         # Should contain context if chunks found
         if context.chunks_usados:

@@ -25,8 +25,9 @@ from src.models.message import MessageCreate, MessageRole
 from src.storage.repository import ConversationRepository, MessageRepository
 from src.storage.sqlite_repository import SQLiteRepository
 
-# Test database URL
+# Test database URLs
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+PROD_DATABASE_URL = "sqlite+aiosqlite:///data/botsalinha.db"  # Banco de produção para e2e
 
 # Initialize Faker for Brazilian Portuguese test data
 fake = Faker("pt_BR")
@@ -432,3 +433,91 @@ async def bot_wrapper(conversation_repository, mock_gemini_api):
     wrapper = DiscordBotWrapper(repository=conversation_repository)
     yield wrapper
     await wrapper.cleanup()
+
+
+# ===== Fixtures for E2E Testing with Production Database =====
+# These fixtures use the real database (data/botsalinha.db) for RAG testing
+
+
+@pytest_asyncio.fixture
+async def prod_db_engine():
+    """
+    Create database engine for production database (e2e only).
+
+    This fixture uses the real database file for end-to-end RAG testing.
+    It does NOT modify the database - read-only operations.
+    """
+    from pathlib import Path
+
+    db_path = Path("data/botsalinha.db")
+    if not db_path.exists():
+        pytest.skip(f"Production database not found at {db_path}")
+
+    engine = create_async_engine(
+        PROD_DATABASE_URL,
+        echo=False,
+    )
+
+    yield engine
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def prod_db_session(prod_db_engine):
+    """
+    Create database session for production database (e2e only).
+
+    Provides read-only access to the real RAG data.
+    """
+    async_session_maker = sessionmaker(
+        prod_db_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async with async_session_maker() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def prod_rag_query_service(prod_db_session, monkeypatch):
+    """
+    Create RAG QueryService with production database (e2e only).
+
+    This fixture provides a QueryService connected to the real database
+    with 4637 indexed chunks from 16 legal documents.
+
+    Uses real API keys from environment (not test keys) for embeddings.
+    """
+    import os
+    from dotenv import load_dotenv
+
+    from src.rag import QueryService
+    from src.rag.services.embedding_service import EmbeddingService
+
+    # Load .env file to get real API keys
+    load_dotenv()
+
+    # Get real API key from environment
+    real_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI__API_KEY") or os.getenv("BOTSALINHA_OPENAI__API_KEY")
+    if not real_api_key:
+        pytest.skip("OpenAI API key not configured for e2e RAG tests")
+    if real_api_key.startswith("test_"):
+        pytest.skip("Test API key detected - real OpenAI API key required for e2e RAG tests")
+
+    # Use real API key (override test_settings)
+    monkeypatch.setenv("BOTSALINHA_OPENAI__API_KEY", real_api_key)
+
+    # Clear settings cache to pick up real API key
+    from src.config.settings import get_settings
+    get_settings.cache_clear()
+
+    embedding_service = EmbeddingService()
+    query_service = QueryService(
+        session=prod_db_session,
+        embedding_service=embedding_service,
+    )
+
+    yield query_service
+
+    # Restore settings cache
+    get_settings.cache_clear()
