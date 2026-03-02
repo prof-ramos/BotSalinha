@@ -18,6 +18,20 @@ from src.rag import ConfiancaCalculator, QueryService, VectorStore
 from src.rag.models import Chunk, ChunkMetadata
 
 
+class _FakeEmbeddingService:
+    async def embed_text(self, _text: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+
+@pytest.fixture
+def rag_query_service(db_session: AsyncSession) -> QueryService:
+    """Fixture local para consultas e2e sem dependência de API externa."""
+    return QueryService(
+        session=db_session,
+        embedding_service=_FakeEmbeddingService(),
+    )
+
+
 @pytest.mark.e2e
 @pytest.mark.rag
 @pytest.mark.database

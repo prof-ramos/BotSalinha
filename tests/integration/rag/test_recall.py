@@ -22,6 +22,20 @@ from src.rag import QueryService
 from src.rag.services.embedding_service import EmbeddingService
 
 
+class _FakeEmbeddingService:
+    async def embed_text(self, _text: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+
+@pytest.fixture
+def rag_query_service(db_session: AsyncSession) -> QueryService:
+    """Fixture local para consultas simples sem depender de API externa."""
+    return QueryService(
+        session=db_session,
+        embedding_service=_FakeEmbeddingService(),
+    )
+
+
 @pytest.mark.integration
 @pytest.mark.rag
 @pytest.mark.database

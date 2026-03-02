@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.rag.utils.confianca_calculator import ConfiancaCalculator
 from src.rag.models import Chunk, ChunkMetadata, ConfiancaLevel
+from src.rag.utils.confianca_calculator import ConfiancaCalculator
 
 
 @pytest.mark.unit
@@ -13,7 +13,7 @@ class TestConfiancaCalculator:
     """Test confidence calculation logic."""
 
     def test_calculate_high_confidence(self) -> None:
-        """Test high confidence calculation (>= 0.85)."""
+        """Test high confidence calculation (>= 0.70)."""
         calculator = ConfiancaCalculator()
 
         # Create high-similarity results
@@ -32,25 +32,7 @@ class TestConfiancaCalculator:
         assert confidence == ConfiancaLevel.ALTA
 
     def test_calculate_medium_confidence(self) -> None:
-        """Test medium confidence calculation (0.70 - 0.84)."""
-        calculator = ConfiancaCalculator()
-
-        chunk = Chunk(
-            chunk_id="test-1",
-            documento_id=1,
-            texto="Test",
-            metadados=ChunkMetadata(documento="TEST"),
-            token_count=10,
-            posicao_documento=0.1,
-        )
-        chunks_with_scores = [(chunk, 0.75), (chunk, 0.72), (chunk, 0.70)]
-
-        confidence = calculator.calculate(chunks_with_scores)
-
-        assert confidence == ConfiancaLevel.MEDIA
-
-    def test_calculate_low_confidence(self) -> None:
-        """Test low confidence calculation (0.60 - 0.69)."""
+        """Test medium confidence calculation (0.55 - 0.69)."""
         calculator = ConfiancaCalculator()
 
         chunk = Chunk(
@@ -65,10 +47,10 @@ class TestConfiancaCalculator:
 
         confidence = calculator.calculate(chunks_with_scores)
 
-        assert confidence == ConfiancaLevel.BAIXA
+        assert confidence == ConfiancaLevel.MEDIA
 
-    def test_calculate_no_rag_confidence(self) -> None:
-        """Test SEM_RAG confidence (< 0.60)."""
+    def test_calculate_low_confidence(self) -> None:
+        """Test low confidence calculation (0.40 - 0.54)."""
         calculator = ConfiancaCalculator()
 
         chunk = Chunk(
@@ -79,7 +61,25 @@ class TestConfiancaCalculator:
             token_count=10,
             posicao_documento=0.1,
         )
-        chunks_with_scores = [(chunk, 0.55), (chunk, 0.50), (chunk, 0.40)]
+        chunks_with_scores = [(chunk, 0.50), (chunk, 0.48), (chunk, 0.45)]
+
+        confidence = calculator.calculate(chunks_with_scores)
+
+        assert confidence == ConfiancaLevel.BAIXA
+
+    def test_calculate_no_rag_confidence(self) -> None:
+        """Test SEM_RAG confidence (< 0.40)."""
+        calculator = ConfiancaCalculator()
+
+        chunk = Chunk(
+            chunk_id="test-1",
+            documento_id=1,
+            texto="Test",
+            metadados=ChunkMetadata(documento="TEST"),
+            token_count=10,
+            posicao_documento=0.1,
+        )
+        chunks_with_scores = [(chunk, 0.35), (chunk, 0.30), (chunk, 0.20)]
 
         confidence = calculator.calculate(chunks_with_scores)
 
@@ -200,10 +200,10 @@ class TestConfiancaCalculator:
             posicao_documento=0.1,
         )
 
-        # Mix of high and low scores (average ~0.70)
-        chunks_with_scores = [(chunk, 0.90), (chunk, 0.50), (chunk, 0.70)]
-        # Average = (0.90 + 0.50 + 0.70) / 3 = 0.70
+        # Mix of high and low scores (average ~0.60)
+        chunks_with_scores = [(chunk, 0.90), (chunk, 0.40), (chunk, 0.50)]
+        # Average = (0.90 + 0.40 + 0.50) / 3 = 0.60
         confidence = calculator.calculate(chunks_with_scores)
 
-        # Should be MEDIA (exactly at threshold)
+        # Should be MEDIA (>= 0.55 and < 0.70)
         assert confidence == ConfiancaLevel.MEDIA
