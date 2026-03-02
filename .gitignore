@@ -90,3 +90,7 @@ repomix-output.xml
 # Coverage reports
 coverage.xml
 coverage.xml
+
+# AGENTS.md - only keep root copy
+**/AGENTS.md
+!/AGENTS.md

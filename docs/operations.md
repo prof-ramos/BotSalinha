@@ -12,6 +12,131 @@
 | `!info` | Show bot information | `!info` |
 | `!limpar` | Clear conversation history | `!limpar` |
 
+## RAG Operations
+
+### CLI Commands
+
+**Run bot in Discord mode (default):**
+```bash
+uv run botsalinha
+# or: uv run bot.py
+```
+
+**Run bot in interactive CLI mode (for testing):**
+```bash
+uv run bot.py --chat
+```
+
+### RAG Document Ingestion
+
+**Ingest single RAG document (DOCX):**
+```bash
+uv run python scripts/ingest_rag.py
+```
+- Reads from `docs/plans/RAG/` directory
+- Ingests all `.docx` files found
+- Requires `OPENAI_API_KEY` environment variable
+
+**Ingest codebase into RAG (from repomix XML):**
+```bash
+# Generate XML with repomix first
+npx repomix --output repomix-output.xml src/
+
+# Ingest the codebase
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml
+
+# Replace existing document instead of creating duplicate
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --replace
+
+# Dry run (parse without ingesting)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+```
+
+**Ingest all legislation documents:**
+```bash
+uv run python scripts/ingest_all_rag.py
+```
+- Scans configured legislation directory
+- Ingests all DOCX files recursively
+- Generates metrics CSV in `metricas/` directory
+- Skips already-ingested documents (by hash)
+
+**Ingest specific legislation (e.g., Penal Code):**
+```bash
+uv run python scripts/ingest_penal.py
+```
+
+### RAG Reindex and Management
+
+**List all RAG documents:**
+```python
+# In Python shell
+import asyncio
+from src.rag.storage.rag_repository import RagRepository
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async def list_docs():
+    engine = create_async_engine("sqlite+aiosqlite:///data/botsalinha.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = RagRepository(session_factory)
+
+    docs = await repo.list_documents()
+    for doc in docs:
+        print(f"{doc.id}: {doc.nome} ({doc.chunk_count} chunks, {doc.token_count} tokens)")
+
+    await engine.dispose()
+
+asyncio.run(list_docs())
+```
+
+**Delete specific RAG document:**
+```python
+# In Python shell
+import asyncio
+from src.rag.storage.rag_repository import RagRepository
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async def delete_doc():
+    engine = create_async_engine("sqlite+aiosqlite:///data/botsalinha.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = RagRepository(session_factory)
+
+    # Delete by document ID
+    success = await repo.delete_document(document_id=1)
+    print(f"Deleted: {success}")
+
+    await engine.dispose()
+
+asyncio.run(delete_doc())
+```
+
+**Replace existing document (reindex):**
+```bash
+# For codebase documents
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "my-document" --replace
+```
+
+**Clear all RAG data (database reset):**
+```bash
+# WARNING: This deletes all RAG documents and embeddings
+# Stop the bot first
+docker-compose down
+
+# Remove database file (backup first!)
+cp data/botsalinha.db backups/botsalinha_before_clear_$(date +%Y%m%d_%H%M%S).db
+rm data/botsalinha.db
+
+# Restart bot (will create fresh database)
+docker-compose up -d
+```
+
+### RAG Query Testing
+
+**Test RAG query directly:**
+```bash
+uv run python scripts/test_rag_query.py
+```
+
 ## Daily Operations
 
 ### Monitoring
@@ -32,6 +157,32 @@ print(rate_limiter.get_stats())
 **Check database size:**
 ```bash
 ls -lh data/botsalinha.db
+```
+
+**Check RAG document count:**
+```python
+# In Python shell
+import asyncio
+from src.rag.storage.rag_repository import RagRepository
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async def rag_stats():
+    engine = create_async_engine("sqlite+aiosqlite:///data/botsalinha.db")
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = RagRepository(session_factory)
+
+    docs = await repo.list_documents()
+    total_chunks = sum(d.chunk_count for d in docs)
+    total_tokens = sum(d.token_count for d in docs)
+
+    print(f"RAG Documents: {len(docs)}")
+    print(f"Total Chunks: {total_chunks:,}")
+    print(f"Total Tokens: {total_tokens:,}")
+    print(f"Est. Cost: ${total_tokens * 0.02 / 1_000_000:.2f} USD")
+
+    await engine.dispose()
+
+asyncio.run(rag_stats())
 ```
 
 ### Maintenance
@@ -177,6 +328,83 @@ docker-compose exec botsalinha env | grep RATE_LIMIT
 2. Restart: `docker-compose up -d`
 3. Reset user limits if needed
 
+### RAG Issues
+
+**Symptoms:** RAG queries returning no results or errors
+
+**Diagnosis:**
+```bash
+# Check if RAG documents exist
+docker-compose exec botsalinha python -c "
+import asyncio
+from src.rag.storage.rag_repository import RagRepository
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async def check():
+    engine = create_async_engine('sqlite+aiosqlite:///data/botsalinha.db')
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = RagRepository(session_factory)
+    docs = await repo.list_documents()
+    print(f'RAG documents: {len(docs)}')
+    for d in docs[:5]:
+        print(f'  - {d.nome}: {d.chunk_count} chunks')
+    await engine.dispose()
+
+asyncio.run(check())
+"
+
+# Check for embedding errors in logs
+docker-compose logs | grep -i embedding
+docker-compose logs | grep -i "openai"
+```
+
+**Solutions:**
+1. **No documents found**: Run ingestion script
+   ```bash
+   docker-compose exec botsalinha python scripts/ingest_rag.py
+   ```
+
+2. **OpenAI API key issues**: Verify `OPENAI_API_KEY` in `.env`
+   ```bash
+   docker-compose exec botsalinha env | grep OPENAI
+   # Should show: OPENAI_API_KEY=sk-...
+   ```
+
+3. **Embedding generation failures**: Check logs for rate limiting
+   ```bash
+   docker-compose logs | grep -i "rate.*limit"
+   # Consider reducing batch size or adding delays between requests
+   ```
+
+4. **Stale embeddings**: Reindex specific document
+   ```bash
+   docker-compose exec botsalinha python scripts/ingest_codebase_rag.py repomix-output.xml --replace
+   ```
+
+5. **Database corruption**: Clear and reindex
+   ```bash
+   # Backup first
+   docker-compose exec botsalinha cp data/botsalinha.db backups/before_reindex.db
+   # Delete and reingest
+   docker-compose exec botsalinha python -c "
+import asyncio
+from src.rag.storage.rag_repository import RagRepository
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async def clear():
+    engine = create_async_engine('sqlite+aiosqlite:///data/botsalinha.db')
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = RagRepository(session_factory)
+    docs = await repo.list_documents()
+    for doc in docs:
+        await repo.delete_document(doc.id)
+    print(f'Deleted {len(docs)} documents')
+    await engine.dispose()
+
+asyncio.run(clear())
+"
+   ```
+
 ## Health Checks
 
 ### Automated Health Check
@@ -212,6 +440,10 @@ docker-compose logs | grep "bot_ready"
 | Database size | Size of SQLite file | > 1GB |
 | Error rate | Errors in logs / total requests | > 5% |
 | Active users | Users with conversations in 24h | - |
+| RAG documents | Number of indexed documents | - |
+| RAG chunks | Total chunks indexed | - |
+| RAG tokens | Total tokens in embeddings | - |
+| Embedding cost | Estimated OpenAI API cost for embeddings | Monitor trend |
 
 ## Escalation Procedures
 

@@ -1,9 +1,8 @@
 # 🛠️ Features
 
-Este documento cataloga as funcionalidades do BotSalinha com base no estado real do código
-observado no `repomix-output.xml`.
+Este documento cataloga as funcionalidades do BotSalinha com base no estado real do código.
 
-Atualizado em: 2026-02-28
+Atualizado em: 2026-03-01
 
 ## 📊 Matriz de Funcionalidades
 
@@ -15,9 +14,9 @@ Atualizado em: 2026-02-28
 | Histórico contextual persistente (SQLite) | ✅ Estável | Memória | `src/storage/sqlite_repository.py` |
 | Rate limiting (token bucket) | ✅ Estável | Segurança | `src/middleware/rate_limiter.py` |
 | RAG de consulta com confiança e fontes | ✅ Estável | IA/RAG | `src/rag/services/query_service.py` |
-| Comandos RAG (`!buscar`, `!fontes`, `!reindexar`) | ✅ Estável | IA/RAG | `src/core/discord.py` |
 | Ingestão de DOCX para RAG | ✅ Estável | IA/RAG | `src/rag/services/ingestion_service.py` |
-| CLI de operação/dev (config, db, logs, mcp, ingest, run) | 🛠️ Beta | Tooling | `src/core/cli.py` |
+| Ingestão de codebase para RAG (via script) | ✅ Estável | IA/RAG | `scripts/ingest_codebase_rag.py` |
+| CLI de operação/dev (prompt, config, db, logs, mcp, backup, ingest, chat, run) | 🛠️ Beta | Tooling | `src/core/cli.py` |
 | Integração MCP (ferramentas externas) | ⚙️ Opcional | Extensibilidade | `src/tools/mcp_manager.py`, `config.yaml` |
 | Testes de carga RAG e métricas | 🧪 Experimental | Qualidade | `tests/load/` |
 
@@ -25,8 +24,7 @@ Atualizado em: 2026-02-28
 
 ### 1) Comandos Discord e interação automática
 
-- Comandos implementados: `!ask`, `!ping`, `!ajuda`/`!help`, `!limpar`/`!clear`, `!info`,
-  `!fontes`, `!reindexar`, `!buscar`.
+- Comandos implementados: `!ask`, `!ping`, `!ajuda`/`!help`, `!limpar`/`!clear`, `!info`.
 - Modo automático em Canal IA dedicado e em DMs.
 - Limite de tamanho para entrada de usuário (10.000 caracteres).
 - Respostas longas são fragmentadas para respeitar limite do Discord.
@@ -82,13 +80,19 @@ uv run pytest tests/integration/rag/test_recall.py -v
 
 - Pipeline implementado: DOCXParser -> MetadataExtractor -> ChunkExtractor ->
   EmbeddingService -> SQLite (`rag_documents`, `rag_chunks`).
-- Comando de reindexação disponível para owner do bot (`!reindexar`).
+- **Ingestão de codebase**: Script `scripts/ingest_codebase_rag.py` para ingerir código-fonte
+  do repositório usando XML do repomix. Suporta chunking inteligente, extração de metadados
+  (linguagem, framework, caminho), e cálculo de custo de embeddings.
 
 Verificação sugerida:
 
 ```bash
-uv run pytest tests/e2e/test_rag_reindex.py -v
+# Testar ingestão de codebase
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-codebase" --dry-run
+
+# Testes de integração RAG
 uv run pytest tests/e2e/test_rag_integration.py -v
+uv run pytest tests/integration/rag/test_code_ingestion.py -v
 ```
 
 ## 🔧 Tooling e Operação
@@ -97,15 +101,29 @@ uv run pytest tests/e2e/test_rag_integration.py -v
 
 Comandos presentes na CLI:
 
-- `prompt list/show/use`
-- `config show/set/export` e `config` (check)
-- `logs show/export`
-- `db status/clear`
-- `mcp list`
-- `backup`
-- `ingest`
-- `chat`
-- `run/start`, `stop`, `restart`
+**Prompt Management:**
+- `prompt list/show/use` - Gerenciar arquivos de prompt do sistema
+
+**Config Management:**
+- `config show/set/export` - Validar e exportar configuração YAML
+- `config` (sem subcomando) - Diagnóstico de chaves de API e ambiente
+
+**Database:**
+- `db status/clear` - Verificar status e limpar banco de dados
+
+**Logs:**
+- `logs show/export` - Visualizar e exportar logs estruturados
+
+**MCP:**
+- `mcp list` - Listar servidores MCP configurados
+
+**Operations:**
+- `backup` (backup/list/restore) - Utilitários de backup do banco
+- `ingest` - Ingerir documentos DOCX para RAG
+- `chat` - Modo CLI interativo (sem Discord)
+- `run/start` - Iniciar bot Discord (padrão)
+- `stop` - Parar bot em execução
+- `restart` - Reiniciar bot
 
 Verificação sugerida:
 

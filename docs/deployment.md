@@ -22,8 +22,20 @@
 
 3. **Edit `.env` with your credentials**
    ```env
-   DISCORD_BOT_TOKEN=your_discord_bot_token_here
-   GOOGLE_API_KEY=your_google_api_key_here
+   # Discord Configuration (required)
+   BOTSALINHA_DISCORD__TOKEN=your_discord_bot_token_here
+
+   # Google AI Configuration (required)
+   BOTSALINHA_GOOGLE__API_KEY=your_google_api_key_here
+
+   # OpenAI Configuration (required for RAG embeddings)
+   BOTSALINHA_OPENAI__API_KEY=your_openai_api_key_here
+
+   # RAG Configuration (optional)
+   BOTSALINHA_RAG__ENABLED=true
+   BOTSALINHA_RAG__TOP_K=5
+   BOTSALINHA_RAG__MIN_SIMILARITY=0.4
+   BOTSALINHA_RAG__DOCUMENTS_PATH=data/documents
    ```
 
 4. **Build and start the bot**
@@ -161,7 +173,7 @@ docker stats botsalinha
 
 2. Verify Discord token
    ```bash
-   docker-compose exec botsalinha env | grep DISCORD_BOT_TOKEN
+   docker-compose exec botsalinha env | grep BOTSALINHA_DISCORD__TOKEN
    ```
 
 3. Check MESSAGE_CONTENT Intent is enabled in Discord Developer Portal
@@ -187,8 +199,8 @@ docker stats botsalinha
 
 1. Check rate limit settings in `.env`
    ```env
-   RATE_LIMIT_REQUESTS=10
-   RATE_LIMIT_WINDOW_SECONDS=60
+   BOTSALINHA_RATE_LIMIT__REQUESTS=10
+   BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS=60
    ```
 
 2. Restart with new settings
@@ -225,6 +237,54 @@ docker stats botsalinha
 4. **Regular cleanup** - Old conversations are automatically cleaned up
 
 5. **Backup strategy** - Daily automated backups in production
+
+## Environment Variables Reference
+
+All environment variables use the `BOTSALINHA_` prefix. Nested configurations use double underscore (`__`) separator.
+
+### Required Variables
+
+| Variable | Description | Example |
+|---|---|---|
+| `BOTSALINHA_DISCORD__TOKEN` | Discord bot token | `your_discord_bot_token_here` |
+| `BOTSALINHA_GOOGLE__API_KEY` | Google Gemini API key | `your_google_api_key_here` |
+
+### RAG Configuration (Optional)
+
+| Variable | Description | Default |
+|---|---|---|
+| `BOTSALINHA_RAG__ENABLED` | Enable RAG functionality | `true` |
+| `BOTSALINHA_RAG__TOP_K` | Number of documents to retrieve | `5` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY` | Minimum similarity threshold (0.0-1.0) | `0.4` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY_FLOOR` | Minimum similarity floor for fallback | `0.2` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY_FALLBACK_DELTA` | Delta for fallback similarity threshold | `0.1` |
+| `BOTSALINHA_RAG__MAX_CONTEXT_TOKENS` | Maximum context tokens | `2000` |
+| `BOTSALINHA_RAG__DOCUMENTS_PATH` | Path to documents directory | `data/documents` |
+| `BOTSALINHA_RAG__EMBEDDING_MODEL` | OpenAI embedding model | `text-embedding-3-small` |
+| `BOTSALINHA_RAG__CONFIDENCE_THRESHOLD` | Confidence threshold (0.0-1.0) | `0.70` |
+| `BOTSALINHA_RAG__RETRIEVAL_MODE` | Retrieval strategy | `hybrid_lite` |
+| `BOTSALINHA_RAG__RERANK_ENABLED` | Enable reranking | `true` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MULTIPLIER` | Candidate multiplier | `12` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MIN` | Minimum candidates | `60` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_CAP` | Maximum candidates | `240` |
+| `BOTSALINHA_OPENAI__API_KEY` | OpenAI API key (required for embeddings) | `your_openai_api_key_here` |
+
+### Optional Configuration
+
+| Variable | Description | Default |
+|---|---|---|
+| `BOTSALINHA_LOG_LEVEL` | Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL) | `INFO` |
+| `BOTSALINHA_LOG_FORMAT` | Log format (json/text) | `json` |
+| `BOTSALINHA_HISTORY__RUNS` | Conversation runs in context | `3` |
+| `BOTSALINHA_RATE_LIMIT__REQUESTS` | Max requests per window | `10` |
+| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS` | Rate limit window in seconds | `60` |
+| `BOTSALINHA_DATABASE__URL` | Database connection URL | `sqlite:///data/botsalinha.db` |
+| `BOTSALINHA_DATABASE__MAX_CONVERSATION_AGE_DAYS` | Max conversation age in days | `30` |
+| `BOTSALINHA_RETRY__MAX_RETRIES` | Maximum retry attempts | `3` |
+| `BOTSALINHA_RETRY__DELAY_SECONDS` | Initial retry delay in seconds | `1.0` |
+| `BOTSALINHA_APP_ENV` | Application environment | `development` |
+
+For a complete list of all environment variables, see `.env.example`.
 
 ## Support
 

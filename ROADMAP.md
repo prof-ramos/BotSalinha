@@ -4,29 +4,53 @@ Para uma visão detalhada das capacidades já implementadas e em desenvolvimento
 
 ## Agora (Sprint atual)
 
-- [ ] Concluir alinhamento multi-model (OpenAI padrão + Google oficial)
-- [ ] Fechar contrato de configuração (`config.yaml` define provider; `.env` define credenciais)
-- [ ] Cobrir startup/config com testes (provider inválido, API key ausente, smoke por provider)
-- [ ] Alinhar documentação operacional (`README.md`, `PRD.md`, `.env.example`, `docs/operations.md`)
-- [ ] Adicionar MCPs
-- [ ] Resolver apontamentos da análise do CodeRabbit
-  - [ ] **Configuração e Ambiente:** Padronizar variáveis `.env.example` com prefixo `BOTSALINHA_`, restaurar `env_prefix` em `settings.py` e adicionar seção de migração na ADR-001.
-  - [ ] **Segurança (MCP):** Remover credenciais hardcoded (API Keys, Banco de Dados) e caminhos locais do `.mcp.json`.
-  - [ ] **Core e Storage:** Corrigir erro de concorrência em iteradores no `sqlite_repository.py`, problemas de divisão de mensagens e logs estruturados em `discord.py`.
-  - [ ] **Testes:** Corrigir decorators `asyncio`, adicionar marcações `e2e` e substituir uso global de `settings` por `get_settings()` em `test_cli.py`.
-  - [ ] **Ferramental e Docs:** Melhorar validação, formatação e remover typos nos scripts de skill-creator; corrigir comandos do `memory_profiler` e comandos de lint (Ruff) em arquivos Markdown.
-
-## Próximas entregas (Curto prazo)
-
 - [ ] Sistema de citação de fontes jurídicas
 - [ ] Índice de legislação e jurisprudência
 - [ ] Dashboard de analytics
 - [ ] Interface web para gerenciamento de conversas
 
+---
+
+## Concluído
+
+### Multi-Model Support (Sprint Finalizada)
+- [x] Alinhamento multi-model (OpenAI padrão + Google oficial)
+- [x] Contrato de configuração (`config.yaml` define provider; `.env` define credenciais)
+- [x] Documentação operacional alinhada (`docs/architecture.md`, `docs/CODE_DOCUMENTATION.md`, `docs/operations.md`)
+- [x] **ADR-001:** Decisão arquitetural para multi-model provider documentada em `docs/adr/ADR-001-multi-model-provider.md`
+
+### RAG Implementation (Sprint Finalizada)
+- [x] Implementação completa de RAG para documentos
+- [x] Implementação de RAG para codebase (código como contexto)
+- [x] Sistema de chunking de código com metadados
+- [x] Parser XML para documentos estruturados
+- [x] Extração de metadados de código (funções, classes, imports)
+- [x] Integração com vector store (ChromaDB)
+- [x] Documentação completa em `docs/features/rag.md`
+
+### CodeRabbit Fixes (20 correções aplicadas)
+- [x] **Configuração e Ambiente:** Variáveis `.env.example` padronizadas com prefixo `BOTSALINHA_`, `env_prefix` restaurado em `settings.py`, seção de migração adicionada na ADR-001
+- [x] **Segurança (MCP):** Credenciais hardcoded removidas de `.mcp.json`
+- [x] **Core e Storage:** Erro de concorrência em iteradores corrigido em `sqlite_repository.py`, problemas de divisão de mensagens e logs estruturados corrigidos em `discord.py`
+- [x] **Testes:** Decorators `asyncio` corrigidos, marcações `e2e` adicionadas, uso global de `settings` substituído por `get_settings()` em `test_cli.py`
+- [x] **Ferramental e Docs:** Validação melhorada, formatação corrigida, typos removidos, comandos de lint (Ruff) corrigidos
+- [x] Documentação técnica atualizada:
+  - `docs/architecture.md` - Visão arquitetural completa
+  - `docs/CODE_DOCUMENTATION.md` - Documentação detalhada do código
+  - `docs/adr/ADR-001-multi-model-provider.md` - Decisão de multi-model provider
+
+## Próximas entregas (Curto prazo)
+
+- [ ] Sistema de citação de fontes jurídicas com formatação ABNT
+- [ ] Índice de legislação e jurisprudência (busca por palavras-chave)
+- [ ] Dashboard de analytics (uso por usuário, perguntas mais frequentes)
+- [ ] Interface web para gerenciamento de conversas
+
 ## Médio prazo
 
-- [ ] Suporte a modelos adicionais além de OpenAI/Google (ex.: Claude)
-- [ ] Suporte a múltiplos idiomas
+- [ ] Suporte a Claude (Anthropic) como provider adicional
+- [ ] Suporte a múltiplos idiomas (espanhol, inglês)
+- [ ] Sistema de feedback para respostas (thumbs up/down)
 
 ---
 

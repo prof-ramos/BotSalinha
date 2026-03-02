@@ -7,8 +7,8 @@ O BotSalinha implementa um sistema RAG que permite respostas jurídicas fundamen
 ## Arquitetura
 
 ```
-DOCX → Parser → MetadataExtractor → ChunkExtractor → EmbeddingService → SQLite
-                                                              ↓
+DOCX/XML → Parser → MetadataExtractor → ChunkExtractor → EmbeddingService → SQLite
+                                                                    ↓
 Usuario → Discord → QueryService → VectorStore → Agno → Resposta com Fontes
 ```
 
@@ -41,6 +41,24 @@ Responsável por ingerir documentos DOCX no sistema RAG.
 await ingestion_service.ingest_document(
     file_path="docs/plans/RAG/cf_de_1988_atualiz_ate_ec_138.docx",
     document_name="CF/88"
+)
+```
+
+#### CodeIngestionService (`src/rag/services/code_ingestion_service.py`)
+Responsável por ingerir código do repositório no sistema RAG.
+
+**Pipeline:**
+1. Parse XML (Repomix) com `RepomixXMLParser`
+2. Extrair metadados de código com `CodeMetadataExtractor`
+3. Criar chunks com `CodeChunkExtractor`
+4. Gerar embeddings com `EmbeddingService`
+5. Salvar no banco SQLite
+
+**Método principal:**
+```python
+await code_ingestion_service.ingest_codebase(
+    xml_file_path="repomix-output.xml",
+    document_name="botsalinha-codebase"
 )
 ```
 
@@ -192,6 +210,8 @@ CHUNK_CONFIG = {
 
 ### Metadados Extraídos
 
+#### Documentos Jurídicos (DOCX)
+
 | Campo | Fonte | Exemplo |
 |-------|-------|---------|
 | `documento` | Nome do arquivo | "CF/88" |
@@ -204,30 +224,72 @@ CHUNK_CONFIG = {
 | `banca` | Regex "CEBRASPE\|FCC" | "CEBRASPE" |
 | `ano` | Regex "\d{4}" | "2023" |
 
+#### Codebase (XML/Repomix)
+
+| Campo | Fonte | Exemplo |
+|-------|-------|---------|
+| `documento` | Nome do documento | "botsalinha-codebase" |
+| `file_path` | Caminho do arquivo | "src/core/agent.py" |
+| `language` | Extensão do arquivo | "python" |
+| `line_start` | Linha inicial | "42" |
+| `line_end` | Linha final | "156" |
+| `functions` | Funções detectadas | ["generate_response"] |
+| `classes` | Classes detectadas | ["AgentWrapper"] |
+| `layer` | Camada da arquitetura | "core" |
+| `module` | Módulo Python | "src.core.agent" |
+| `is_test` | Arquivo de teste | True/False |
+
 ## Como Indexar Novos Documentos
 
 ### 1. Preparar o Documento
 
+**Documentos Jurídicos (DOCX):**
 - Formato: DOCX (Microsoft Word)
 - Estrutura: Usar estilos deHeading (Heading 1-9) para títulos
 - Metadados: Incluir marcadores como `#Atenção:`, `#STF:`, `#Concurso:`
 
+**Codebase (XML/Repomix):**
+- Gerar arquivo XML com Repomix: `npx repomix --output xml`
+- O XML deve conter elementos `<file path="...">` com código
+- Suporta Python, TypeScript, JavaScript, YAML, JSON, Markdown, etc.
+
 ### 2. Adicionar ao Diretório
 
-Coloque o arquivo DOCX em:
+**Documentos DOCX:**
 ```
 docs/plans/RAG/novo_documento.docx
 ```
 
-### 3. Executar Reindexação
-
-```bash
-# Via Discord (admin)
-!reindexar
-
-# Ou via CLI (futuro)
-uv run python -m src.rag.ingest
+**Codebase (XML):**
 ```
+repomix-output.xml  # ou qualquer caminho acessível
+```
+
+### 3. Executar Ingestão
+
+**Documentos Jurídicos (via Discord):**
+```bash
+!reindexar
+```
+
+**Codebase (via CLI):**
+```bash
+# Ingestão básica
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml
+
+# Com nome personalizado
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "meu-projeto"
+
+# Dry-run (apenas validação)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+
+# Replace (substituir documento existente)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-codebase" --replace
+```
+
+**Requisitos para CLI:**
+- `OPENAI_API_KEY` configurada em `.env` ou exportada
+- Arquivo XML deve estar no formato Repomix
 
 ### 4. Verificar
 
@@ -242,17 +304,23 @@ src/rag/
 ├── __init__.py
 ├── models.py                    # Pydantic schemas (Document, Chunk)
 ├── parser/
+│   ├── __init__.py
+│   ├── chunker.py              # Extrator de chunks genérico
+│   ├── code_chunker.py         # Extrator de chunks para código
 │   ├── docx_parser.py          # Parser de DOCX
-│   ├── chunker.py              # Extrator de chunks
-│   └── __init__.py
+│   └── xml_parser.py           # Parser de XML (Repomix)
 ├── services/
+│   ├── __init__.py
 │   ├── embedding_service.py    # OpenAI text-embedding-3-small
-│   ├── ingestion_service.py    # Pipeline de ingestão
+│   ├── ingestion_service.py    # Pipeline de ingestão DOCX
+│   ├── code_ingestion_service.py  # Pipeline de ingestão codebase
 │   └── query_service.py        # Busca semântica
 ├── storage/
+│   ├── rag_repository.py       # Repository pattern para RAG
 │   └── vector_store.py         # SQLite + busca vetorial
 └── utils/
-    └── metadata_extractor.py   # Extração de metadados
+    ├── code_metadata_extractor.py  # Extração de metadados de código
+    └── metadata_extractor.py   # Extração de metadados jurídicos
 ```
 
 ## Integração com AgentWrapper
@@ -339,6 +407,14 @@ uv run pytest tests/ -k "rag" -v
 # Apenas unitários
 uv run pytest tests/unit/rag/ -v
 
+# Testes de code ingestion
+uv run pytest tests/integration/rag/test_code_ingestion.py -v
+
+# Testes de parsers
+uv run pytest tests/unit/rag/test_xml_parser.py -v
+uv run pytest tests/unit/rag/test_code_chunker.py -v
+uv run pytest tests/unit/rag/test_code_metadata_extractor.py -v
+
 # Apenas E2E
 uv run pytest tests/e2e/test_rag_*.py -v
 
@@ -384,6 +460,138 @@ uv run pytest tests/integration/rag/test_recall.py -v
 2. Verificar latência da API OpenAI
 3. Considerar cache de embeddings
 
+## Ingestão de Codebase
+
+### Visão Geral
+
+O sistema RAG suporta ingestão de código-fonte do repositório BotSalinha, permitindo consultas sobre a própria arquitetura e implementação do bot. Isso é útil para:
+
+- Responder perguntas sobre como o bot funciona
+- Documentar arquitetura e padrões de código
+- Auxiliar em manutenção e debugging
+- Fornecer contexto para novas funcionalidades
+
+### Pipeline de Ingestão
+
+```
+Repomix XML → RepomixXMLParser → CodeMetadataExtractor → CodeChunkExtractor → EmbeddingService → SQLite
+```
+
+**Componentes:**
+
+1. **RepomixXMLParser** (`src/rag/parser/xml_parser.py`)
+   - Parse arquivo XML gerado pelo Repomix
+   - Extrai conteúdo de elementos `<file path="...">`
+   - Detecta linguagem de programação pela extensão
+   - Suporta: Python, TypeScript, JavaScript, YAML, JSON, Markdown, etc.
+
+2. **CodeMetadataExtractor** (`src/rag/utils/code_metadata_extractor.py`)
+   - Extrai funções e classes do código
+   - Identifica camada da arquitetura (core, models, storage, etc.)
+   - Detecta arquivos de teste
+   - Mapeia módulo Python
+
+3. **CodeChunkExtractor** (`src/rag/parser/code_chunker.py`)
+   - Chunks menores (300 tokens vs 500 para documentos)
+   - Respeita limites de arquivos
+   - Rastreia números de linha
+   - Mantém contexto com overlap
+
+4. **EmbeddingService** (existente)
+   - Gera embeddings com OpenAI text-embedding-3-small
+   - Processa chunks em batch
+
+### CLI de Ingestão
+
+**Script:** `scripts/ingest_codebase_rag.py`
+
+**Uso básico:**
+```bash
+# Gerar XML com Repomix (primeira vez)
+npx repomix --output xml
+
+# Ingerir no RAG
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml
+```
+
+**Opções:**
+```bash
+# Nome personalizado
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-v1.0"
+
+# Dry-run (validação sem ingestão)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+
+# Replace (substituir documento existente)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-codebase" --replace
+```
+
+**Saída:**
+```
+📚 Codebase RAG Ingestion
+📄 XML: repomix-output.xml
+📦 Document: botsalinha-codebase
+
+Files:    238
+Chunks:   412
+Tokens:   125,430
+Cost:     $0.0251
+
+✅ Ingestion complete!
+```
+
+### Estratégia de Chunking para Código
+
+**Configuração padrão:**
+```python
+CHUNK_CONFIG = {
+    "max_tokens": 300,           # Tamanho menor para código
+    "overlap_tokens": 50,        # Overlap entre chunks
+    "respect_boundaries": True,  # Respeita limites de arquivos
+    "min_chunk_size": 50,        # Tamanho mínimo
+}
+```
+
+**Metadados enriquecidos:**
+- `file_path`: Caminho completo do arquivo
+- `language`: Linguagem de programação
+- `line_start`/`line_end`: Linhas do código
+- `functions`: Lista de funções no chunk
+- `classes`: Lista de classes no chunk
+- `layer`: Camada da arquitetura (core, models, storage, etc.)
+- `module`: Módulo Python (ex: `src.core.agent`)
+- `is_test`: True se for arquivo de teste
+
+### Exemplo de Consulta
+
+```python
+# Pergunta sobre o código
+query = "Como funciona o wrapper do Agno?"
+
+rag_context = await query_service.query(
+    query_text=query,
+    top_k=5,
+    min_similarity=0.4
+)
+
+# Retorna chunks de:
+# - src/core/agent.py (AgentWrapper)
+# - src/config/yaml_config.py (configuração do agente)
+# - docs/features/rag.md (documentação)
+```
+
+### Integração com Discord
+
+Após ingestão, usuários podem perguntar sobre o código:
+
+```
+!ask Como o bot implementa rate limiting?
+!ask Qual é a arquitetura do RAG?
+!ask Onde fica a configuração do Discord?
+```
+
+O bot responderá com citações para o código-fonte específico.
+
 ## Custos
 
 ### Embeddings
@@ -392,8 +600,9 @@ uv run pytest tests/integration/rag/test_recall.py -v
 |----------|--------|-----------|
 | CF/88 (ingestão) | ~150K | $0.003 |
 | Lei 8.112 (ingestão) | ~30K | $0.0006 |
+| Codebase (ingestão) | ~125K | $0.0025 |
 | Query (pergunta) | ~50 | $0.00001 |
-| **Total (one-time)** | ~180K | **$0.004** |
+| **Total (one-time)** | ~305K | **$0.006** |
 
 ### Operacional
 

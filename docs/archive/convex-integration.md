@@ -1,4 +1,16 @@
-# Convex Integration - BotSalinha
+# Convex Integration - BotSalinha (ARCHIVED)
+
+> **⚠️ NOTICE: This integration is EXPERIMENTAL and not actively maintained.**
+>
+> **Status:** Archived
+> **Date Archived:** 2026-03-01
+> **Reason:** Experimental feature not ready for production. The integration is incomplete and the Convex backend is disabled by default.
+>
+> **Alternative:** Use SQLite (default) or contribute to complete the Convex integration.
+>
+> If you want to revive this integration, see the "Próximos Passos" section below for remaining work.
+
+---
 
 Este documento descreve a integração do Convex como backend para o BotSalinha.
 
@@ -10,6 +22,8 @@ Este documento descreve a integração do Convex como backend para o BotSalinha.
 - ✅ .env.example atualizado
 - ✅ Exemplo de uso criado
 - ✅ Backend deployado (beaming-mongoose-330)
+- ⚠️ **NÃO está em produção** - SQLite é o padrão
+- ⚠️ **Integração incompleta** - ver "Próximos Passos"
 
 ## Configuração
 
@@ -112,7 +126,7 @@ source .venv/bin/activate
 python examples/convex_example.py
 ```
 
-## Próximos Passos
+## Próximos Passos (Para reviver esta integração)
 
 1. **Integrar no BotSalinhaBot**
    - Modificar `src/core/discord.py` para usar ConvexRepository
@@ -132,10 +146,15 @@ python examples/convex_example.py
    - Métricas de performance
    - Alertas de erro
 
+5. **Testes**
+   - Escrever testes unitários para ConvexRepository
+   - Testes de integração com backend Convex
+   - Testes de fallback para SQLite
+
 ## Links
 
 - **Convex Dashboard**: https://dashboard.convex.dev
-- **Projeto**: beaming-mongoose-330
+- **Projeto**: beaming-mongoose-330 (test deployment)
 - **Documentação Convex**: https://docs.convex.dev
 - **SDK Python**: https://pypi.org/project/convex/
 

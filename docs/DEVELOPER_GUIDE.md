@@ -7,8 +7,9 @@ Este guia fornece informações completas para desenvolvedores que trabalham no 
 1. [Instruções de Configuração](#1-instruções-de-configuração)
 2. [Visão Geral da Estrutura do Projeto](#2-visão-geral-da-estrutura-do-projeto)
 3. [Fluxo de Trabalho de Desenvolvimento](#3-fluxo-de-trabalho-de-desenvolvimento)
-4. [Abordagem de Teste](#4-abordagem-de-teste)
-5. [Solução de Problemas](#5-solução-de-problemas)
+4. [Desenvolvimento RAG](#4-desenvolvimento-rag)
+5. [Abordagem de Teste](#5-abordagem-de-teste)
+6. [Solução de Problemas](#6-solução-de-problemas)
 
 ---
 
@@ -128,7 +129,27 @@ BotSalinha/
 │   │
 │   ├── models/                 # Modelos de dados
 │   │   ├── conversation.py     # Modelo Conversação (SQLAlchemy + Pydantic)
-│   │   └── message.py          # Modelo Mensagem (SQLAlchemy + Pydantic)
+│   │   ├── message.py          # Modelo Mensagem (SQLAlchemy + Pydantic)
+│   │   └── rag_models.py       # Modelos RAG (Document, Chunk)
+│   │
+│   ├── rag/                    # Retrieval-Augmented Generation
+│   │   ├── __init__.py
+│   │   ├── models.py           # Modelos Pydantic RAG
+│   │   ├── parser/             # Parsers de documentos
+│   │   │   ├── chunker.py      # Extrator de chunks
+│   │   │   ├── docx_parser.py  # Parser DOCX
+│   │   │   ├── code_chunker.py # Chunker especializado para código
+│   │   │   └── xml_parser.py   # Parser XML (Repomix)
+│   │   ├── services/           # Serviços RAG
+│   │   │   ├── ingestion_service.py  # Ingestão de documentos
+│   │   │   ├── code_ingestion_service.py  # Ingestão de codebase
+│   │   │   ├── embedding_service.py     # Geração de embeddings
+│   │   │   └── query_service.py         # Consulta RAG
+│   │   ├── storage/           # Persistência RAG
+│   │   │   ├── rag_repository.py       # Repositório RAG
+│   │   │   └── vector_store.py         # Vector store abstrato
+│   │   └── utils/             # Utilitários RAG
+│   │       └── code_metadata_extractor.py  # Extração de metadados de código
 │   │
 │   ├── storage/                # Camada de persistência
 │   │   ├── repository.py       # Interfaces abstratas de repositório
@@ -144,8 +165,18 @@ BotSalinha/
 │
 ├── tests/                      # Suíte de testes
 │   ├── conftest.py             # Configuração pytest e fixtures
-│   ├── test_rate_limiter.py    # Testes de rate limiter
-│   └── ...                     # Mais testes
+│   ├── unit/                   # Testes unitários
+│   │   ├── test_rate_limiter.py
+│   │   └── rag/                # Testes RAG unitários
+│   │       ├── test_code_chunker.py
+│   │       ├── test_code_metadata_extractor.py
+│   │       ├── test_xml_parser.py
+│   │       └── test_rag_repository.py
+│   ├── integration/            # Testes de integração
+│   │   └── rag/
+│   │       └── test_code_ingestion.py
+│   └── e2e/                    # Testes end-to-end
+│       └── ...
 │
 ├── migrations/                 # Migrações Alembic
 │   ├── alembic.ini             # Configuração Alembic
@@ -153,7 +184,8 @@ BotSalinha/
 │   └── versions/               # Arquivos de migração
 │
 ├── scripts/                    # Scripts utilitários
-│   └── backup.py               # Script de backup do SQLite
+│   ├── backup.py               # Script de backup do SQLite
+│   └── ingest_codebase_rag.py  # Script de ingestão de codebase RAG
 │
 ├── docs/                       # Documentação
 │   ├── deployment.md           # Guia de implantação
@@ -350,6 +382,31 @@ uv run mypy src/
 uv run mypy src/core/agent.py
 ```
 
+#### Comandos RAG
+
+```bash
+# Ingerir codebase no RAG (substitui documento existente)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-codebase" --replace
+
+# Ingestão seca (apenas parse, sem salvar no banco)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+
+# Ingestão com nome customizado
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "meu-projeto"
+
+# Testes RAG unitários
+uv run pytest tests/unit/rag/ -v
+
+# Testes RAG de integração
+uv run pytest tests/integration/rag/ -v
+
+# Teste específico RAG
+uv run pytest tests/unit/rag/test_code_chunker.py -v
+
+# Gerar XML da codebase (requer repomix)
+repomix --output xml src/
+```
+
 ### Debugging
 
 #### Debug Local com VS Code
@@ -393,7 +450,263 @@ uv run bot.py
 
 ---
 
-## 4. Abordagem de Teste
+## 4. Desenvolvimento RAG
+
+O BotSalinha possui um sistema de Retrieval-Augmented Generation (RAG) para consultas contextuais sobre a base de código e documentação.
+
+### Arquitetura RAG
+
+```text
+┌─────────────────────────────────────────────────┐
+│           Camada de Ingestão                    │
+│  (Repomix XML, DOCX, Código)                    │
+└───────────────────┬─────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────┐
+│           Camada de Parsing                     │
+│  (Code Chunker, XML Parser, DOCX Parser)        │
+└───────────────────┬─────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────┐
+│           Camada de Metadados                   │
+│  (Code Metadata Extractor)                      │
+└───────────────────┬─────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────┐
+│           Camada de Embeddings                  │
+│  (OpenAI Embedding Service)                     │
+└───────────────────┬─────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────┐
+│           Camada de Storage                     │
+│  (SQLite RAG Repository)                        │
+└───────────────────┬─────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────┐
+│           Camada de Query                       │
+│  (Vector Similarity Search)                     │
+└─────────────────────────────────────────────────┘
+```
+
+### Componentes RAG
+
+#### Parsers (`src/rag/parser/`)
+
+- **`chunker.py`**: `ChunkExtractor` - Extrai chunks de texto com sobreposição
+- **`code_chunker.py`**: `CodeChunker` - Chunker especializado para código-fonte com análise de estrutura
+- **`xml_parser.py`**: `RepomixXMLParser` - Parser para XML gerado pelo Repomix
+- **`docx_parser.py`**: `DOCXParser` - Parser para documentos Word
+
+#### Serviços (`src/rag/services/`)
+
+- **`ingestion_service.py`**: `IngestionService` - Serviço genérico de ingestão de documentos
+- **`code_ingestion_service.py`**: `CodeIngestionService` - Serviço especializado para ingestão de codebase
+- **`embedding_service.py`**: `EmbeddingService` - Geração de embeddings via OpenAI API
+- **`query_service.py`**: `QueryService` - Consulta RAG com busca semântica
+
+#### Storage (`src/rag/storage/`)
+
+- **`rag_repository.py`**: `RAGRepository` - Repositório RAG com SQLAlchemy
+- **`vector_store.py`**: `VectorStore` - Interface abstrata para vector stores
+
+#### Utils (`src/rag/utils/`)
+
+- **`code_metadata_extractor.py`**: `CodeMetadataExtractor` - Extrai metadados de código (funções, classes, imports, linguagem, layer)
+
+### Fluxo de Trabalho RAG
+
+#### 1. Preparar o Código (Repomix)
+
+```bash
+# Instalar repomix globalmente
+npm install -g repomix
+
+# Gerar XML da codebase
+repomix --output xml src/
+
+# Ou com filtros específicos
+repomix --output xml --include "src/**/*.py" --exclude "tests/**" src/
+```
+
+#### 2. Ingerir no RAG
+
+```bash
+# Ingestão completa (substitui documento existente)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalinha-codebase" --replace
+
+# Ingestão seca (apenas parse, sem salvar)
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+
+# Ingestão com nome customizado
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "meu-projeto"
+```
+
+**Variáveis de Ambiente Necessárias:**
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...  # Necessária para embeddings
+BOTSALINHA_DATABASE__URL=sqlite:///data/botsalinha.db
+```
+
+#### 3. Consultar o RAG
+
+```python
+from src.rag.services.query_service import QueryService
+from src.rag.storage.rag_repository import RAGRepository
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+async def query_rag(question: str):
+    engine = create_async_engine("sqlite+aiosqlite:///data/botsalinha.db")
+    async with AsyncSession(engine) as session:
+        repository = RAGRepository(session)
+        query_service = QueryService(repository)
+
+        results = await query_service.query(
+            question=question,
+            document_name="botsalinha-codebase",
+            top_k=5
+        )
+
+        for result in results:
+            print(f"Score: {result.score:.4f}")
+            print(f"Content: {result.content[:200]}...")
+            print(f"Metadata: {result.metadata}")
+            print("---")
+```
+
+### Comandos CLI RAG
+
+```bash
+# Ingerir codebase
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --replace
+
+# Listar documentos RAG (via Python REPL)
+uv run python
+>>> from src.rag.storage.rag_repository import RAGRepository
+>>> import asyncio
+>>> async def list_docs():
+...     # ... código para listar documentos
+```
+
+### Estrutura de Dados RAG
+
+#### DocumentORM
+
+```python
+class DocumentORM(Base):
+    id: int
+    nome: str                    # Nome do documento
+    tipo: str                    # "codebase", "docx", etc.
+    chunk_count: int             # Número de chunks
+    total_tokens: int            # Total de tokens
+    created_at: datetime
+    content_hash: str            # Hash SHA-256 para deduplicação
+    chunks: List["ChunkORM"]     # Relacionamento
+```
+
+#### ChunkORM
+
+```python
+class ChunkORM(Base):
+    id: int
+    document_id: int             # FK para DocumentORM
+    content: str                 # Conteúdo do chunk
+    embedding: bytes             # Embedding vetorial (compactado)
+    metadata: JSON               # Metadados do chunk
+    index: int                   # Índice do chunk no documento
+    created_at: datetime
+```
+
+### Metadados de Código
+
+O `CodeMetadataExtractor` extrai informações estruturais de código:
+
+```python
+{
+    "file_path": "src/core/agent.py",
+    "language": "python",
+    "functions": ["generate_response", "load_history"],
+    "classes": ["AgentWrapper"],
+    "imports": ["asyncio", "structlog", "agno"],
+    "layer": "core",
+    "module": "agent",
+    "is_test": false
+}
+```
+
+### Configuração de Chunking
+
+#### Code Chunker
+
+- **Tamanho padrão**: 1000 tokens por chunk
+- **Sobreposição**: 200 tokens
+- **Respeita estrutura**: Mantém funções/classes intactas quando possível
+- **Metadados ricos**: Extrai funções, classes, imports, layer
+
+#### Chunker Genérico
+
+- **Tamanho configurável**: Definido no construtor
+- **Sobreposição configurável**: Para preservar contexto
+- **Divisão inteligente**: Evita cortar palavras/frases
+
+### Testes RAG
+
+```bash
+# Testes unitários RAG
+uv run pytest tests/unit/rag/
+
+# Testes de integração RAG
+uv run pytest tests/integration/rag/
+
+# Teste específico
+uv run pytest tests/unit/rag/test_code_chunker.py -v
+
+# Testes com coverage
+uv run pytest tests/unit/rag/ --cov=src/rag --cov-report=html
+```
+
+### Boas Práticas RAG
+
+1. **Deduplicação**: Use `content_hash` para evitar reingerir o mesmo conteúdo
+2. **Chunking**: Ajuste tamanho/overhead baseado no seu caso de uso
+3. **Metadados**: Inclua contexto máximo (layer, linguagem, funções)
+4. **Versionamento**: Use nomes de documentos versionados (ex: "codebase-v1.0")
+5. **Atomicidade**: Use `--replace` para updates atômicos
+
+### Troubleshooting RAG
+
+#### Erro: "OPENAI_API_KEY not configured"
+
+```bash
+# Adicionar ao .env
+OPENAI_API_KEY=sk-...
+```
+
+#### Erro: "Failed to parse XML input"
+
+```bash
+# Verificar se o XML é válido
+xmllint --noout repomix-output.xml
+
+# Regenerar com repomix
+repomix --output xml src/
+```
+
+#### Embeddings muito lentos
+
+```bash
+# Verificar uso da API
+# O script mostra tokens e custo estimado
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
+
+# Ajustar chunk size para reduzir chamadas à API
+# Editar src/rag/parser/code_chunker.py
+```
+
+---
+
+## 5. Abordagem de Teste
 
 ### Pirâmide de Testes
 
@@ -498,7 +811,7 @@ uv run pytest -s
 
 ---
 
-## 5. Solução de Problemas
+## 6. Solução de Problemas
 
 ### Problemas Comuns de Desenvolvimento
 

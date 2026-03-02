@@ -2,7 +2,29 @@
 
 ## Project Overview
 
-BotSalinha is a Discord bot specialized in Brazilian law and public contests, powered by Agno and Google Gemini 2.5 Flash Lite.
+BotSalinha is a Discord bot specialized in Brazilian law and public contests, powered by Agno and multi-model AI support (OpenAI as default, Google Gemini as alternative).
+
+### AI Model Providers
+
+- **OpenAI** (default): GPT-4o-mini for balanced performance and cost
+- **Google Gemini** (alternative): Gemini 2.5 Flash Lite for cost-effective responses
+
+Provider selection is configured via `config.yaml`:
+```yaml
+model:
+  provider: openai  # or google
+  id: gpt-4o-mini  # model ID based on provider
+```
+
+### RAG Codebase Ingestion
+
+The bot includes a RAG (Retrieval-Augmented Generation) system with codebase ingestion capabilities:
+- Automatic code parsing and chunking for Python/TypeScript files
+- Metadata extraction (functions, classes, modules)
+- Vector-based semantic search
+- Supports both legal documents and code documentation
+
+See [docs/CODE_DOCUMENTATION.md](docs/CODE_DOCUMENTATION.md) for detailed technical documentation.
 
 ## Build, Lint, and Test Commands
 
@@ -47,6 +69,7 @@ scripts/run_tests.sh --all --parallel
 - `e2e`: End-to-end system tests
 - `slow`: Tests taking > 1 second
 - `discord`: Tests requiring Discord API mocks
+- `openai`: Tests requiring OpenAI API mocks
 - `gemini`: Tests requiring Gemini API mocks
 - `database`: Tests requiring database access
 
@@ -193,8 +216,53 @@ tests/
 
 ## Environment Configuration
 
+### AI Provider Configuration
+
+**OpenAI (default):**
+```bash
+BOTSALINHA_OPENAI__API_KEY=sk-...
+BOTSALINHA_OPENAI__MODEL_ID=gpt-4o-mini
+```
+
+**Google Gemini (alternative):**
+```bash
+BOTSALINHA_GOOGLE__API_KEY=...
+BOTSALINHA_GOOGLE__MODEL_ID=gemini-2.5-flash-lite
+```
+
+### Database Configuration
+
 - **Production**: Use `.env.production`
 - **Testing**: Uses in-memory SQLite for speed
 - **Development**: Uses local configuration
 
 See `config.yaml` and `config.yaml.example` for structure.
+
+### RAG Configuration
+
+```bash
+BOTSALINHA_RAG__ENABLED=true
+BOTSALINHA_RAG__TOP_K=5
+BOTSALINHA_RAG__MIN_SIMILARITY=0.5
+```
+
+## Codebase Ingestion
+
+The RAG system supports automatic ingestion of Python and TypeScript codebases:
+
+```bash
+# Ingest codebase for semantic search
+uv run python scripts/ingest_codebase_rag.py
+
+# This will:
+# - Parse all .py and .ts files
+# - Extract functions, classes, and metadata
+# - Generate embeddings for semantic search
+# - Store chunks in vector database
+```
+
+## Documentation
+
+- **Technical Documentation**: See [docs/CODE_DOCUMENTATION.md](docs/CODE_DOCUMENTATION.md) for detailed architecture, API reference, and design patterns
+- **Developer Guide**: See `docs/DEVELOPER_GUIDE.md` for contribution guidelines
+- **Deployment**: See `docs/deployment.md` for Docker and production setup
