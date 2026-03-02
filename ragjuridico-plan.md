@@ -41,11 +41,18 @@ T9 ─────────────────────┘
 - **location**: `tests/integration/rag/`, `metricas/`, `scripts/analizar_qualidade_rag.py`, `scripts/gerar_relatorio_rag.py`
 - **description**: Criar baseline offline de retrieval com métricas `Recall@k`, `MRR`, `nDCG` e taxa de citação correta (artigo/parágrafo/inciso), separando retrieval de geração.
 - **validation**: Script gera relatório versionado com métricas por tipo de consulta (`artigo`, `jurisprudencia`, `concurso`, `geral`) e salva snapshot comparável.
-- **status**: Blocked (2026-03-02)
+- **status**: Completed (2026-03-02)
 - **log**:
-  - Execução iniciada via super-swarm, mas interrompida por instabilidade de ambiente (`Too many open files (os error 24)`), sem entrega validada.
+  - Implementado baseline offline separado da geração em `metricas/baseline_retrieval.py` com métricas `Recall@1/3/5`, `MRR`, `nDCG@5` e taxa de citação correta.
+  - Definido benchmark padrão com consultas rotuladas por tipo (`artigo`, `jurisprudencia`, `concurso`, `geral`) para avaliação reprodutível.
+  - Reescrito `scripts/analizar_qualidade_rag.py` para executar avaliação de retrieval, gerar snapshots versionados (`CSV` + `JSON`) e manter arquivos `latest` comparáveis.
+  - Reescrito `scripts/gerar_relatorio_rag.py` para produzir relatório Markdown consolidado por tipo e visão geral a partir do snapshot.
+  - Adicionados testes em `tests/integration/rag/test_retrieval_baseline_metrics.py` validando cálculo de métricas e regra de citação correta por tipo.
 - **files edited/created**:
-  - N/A (sem entrega consolidada)
+  - `metricas/baseline_retrieval.py`
+  - `scripts/analizar_qualidade_rag.py`
+  - `scripts/gerar_relatorio_rag.py`
+  - `tests/integration/rag/test_retrieval_baseline_metrics.py`
 
 ### T2: Parser DOCX Jurídico Orientado à Estrutura Legal
 - **depends_on**: []

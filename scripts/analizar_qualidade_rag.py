@@ -1,229 +1,194 @@
 #!/usr/bin/env python
-"""Script para analisar a qualidade do RAG Jurídico.
+"""Gera baseline offline de retrieval para o RAG jurídico.
 
-Verifica se o sistema RAG está capturando adequadamente:
-- Jurisprudências (STF, STJ, tribunais superiores)
-- Metadados de concursos (banca, ano, cargo)
-- Questões de prova
-- Material didático e comentários
+Métricas calculadas (sem geração):
+- Recall@1/3/5
+- MRR
+- nDCG@5
+- Taxa de citação correta
 
-Uso:
-    uv run python scripts/analizar_qualidade_rag.py
+Saídas versionadas:
+- CSV por consulta
+- CSV agregado por tipo
+- JSON completo da execução
+- arquivos *_latest para comparação rápida
 """
 
+from __future__ import annotations
+
+import argparse
 import asyncio
+import csv
 import json
-from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from metricas.baseline_retrieval import (
+    aggregate_results,
+    default_retrieval_benchmark,
+    evaluate_case,
+    summary_rows,
+)
 from src.config.settings import get_settings
-from src.models.rag_models import ChunkORM, DocumentORM
+from src.models.rag_models import DocumentORM
+from src.rag.services.embedding_service import EmbeddingService
+from src.rag.services.query_service import QueryService
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Gerar baseline offline de retrieval do RAG jurídico",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="metricas",
+        help="Diretório de saída para snapshots",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=5,
+        help="Quantidade de chunks para avaliação por consulta",
+    )
+    return parser
+
+
+def _ensure_async_db_url(db_url: str) -> str:
+    if db_url.startswith("sqlite:///"):
+        return db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    return db_url
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_latest(latest_path: Path, content: str) -> None:
+    latest_path.write_text(content, encoding="utf-8")
+
+
+async def _run_baseline(output_dir: Path, top_k: int) -> dict[str, Path]:
+    settings = get_settings()
+    db_url = _ensure_async_db_url(str(settings.database.url))
+
+    engine = create_async_engine(db_url)
+    async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    benchmark = default_retrieval_benchmark()
+
+    query_rows: list[dict[str, Any]] = []
+
+    async with async_session_maker() as session:
+        doc_count_stmt = select(func.count(DocumentORM.id))
+        doc_result = await session.execute(doc_count_stmt)
+        doc_count = doc_result.scalar() or 0
+
+        if doc_count == 0:
+            raise RuntimeError(
+                "Nenhum documento indexado no RAG. Rode a ingestão antes do baseline offline."
+            )
+
+        query_service = QueryService(
+            session=session,
+            embedding_service=EmbeddingService(),
+        )
+
+        query_results = []
+        for case in benchmark:
+            context = await query_service.query(query_text=case.query, top_k=top_k)
+            result = evaluate_case(case=case, retrieved_chunks=context.chunks_usados)
+            query_results.append(result)
+            query_rows.append(result.to_dict())
+
+    aggregated = aggregate_results(query_results)
+    summary = summary_rows(aggregated)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    queries_csv = output_dir / f"rag_retrieval_baseline_{timestamp}.csv"
+    summary_csv = output_dir / f"rag_retrieval_baseline_summary_{timestamp}.csv"
+    snapshot_json = output_dir / f"rag_retrieval_baseline_{timestamp}.json"
+
+    query_fieldnames = [
+        "case_id",
+        "tipo",
+        "query",
+        "relevant_rank",
+        "recall_at_1",
+        "recall_at_3",
+        "recall_at_5",
+        "mrr",
+        "ndcg_at_5",
+        "citation_correct",
+        "top_source",
+    ]
+    summary_fieldnames = [
+        "segmento",
+        "queries",
+        "recall_at_1",
+        "recall_at_3",
+        "recall_at_5",
+        "mrr",
+        "ndcg_at_5",
+        "citation_correct_rate",
+    ]
+
+    _write_csv(queries_csv, query_rows, query_fieldnames)
+    _write_csv(summary_csv, summary, summary_fieldnames)
+
+    payload = {
+        "generated_at": datetime.now().isoformat(),
+        "top_k": top_k,
+        "benchmark_size": len(benchmark),
+        "results": query_rows,
+        "summary": aggregated,
+        "artifacts": {
+            "queries_csv": str(queries_csv),
+            "summary_csv": str(summary_csv),
+        },
+    }
+    snapshot_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    _write_latest(output_dir / "rag_retrieval_baseline_latest.csv", queries_csv.read_text(encoding="utf-8"))
+    _write_latest(
+        output_dir / "rag_retrieval_baseline_summary_latest.csv",
+        summary_csv.read_text(encoding="utf-8"),
+    )
+    _write_latest(
+        output_dir / "rag_retrieval_baseline_latest.json",
+        snapshot_json.read_text(encoding="utf-8"),
+    )
+
+    await engine.dispose()
+
+    return {
+        "queries_csv": queries_csv,
+        "summary_csv": summary_csv,
+        "snapshot_json": snapshot_json,
+    }
 
 
 async def main() -> None:
-    """Analisa a qualidade do RAG Jurídico."""
-    import structlog
+    args = _build_parser().parse_args()
+    output_dir = Path(args.output_dir)
 
-    log = structlog.get_logger(__name__)
-    settings = get_settings()
+    artifacts = await _run_baseline(output_dir=output_dir, top_k=args.top_k)
 
-    # Conectar ao banco
-    db_url = str(settings.database.url)
-    if db_url.startswith("sqlite:///"):
-        db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-    engine = create_async_engine(db_url)
-    async_session_maker = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with async_session_maker() as session:
-        print("🔍 Análise de Qualidade do RAG Jurídico")
-        print("=" * 80)
-
-        # 1. Estatísticas gerais
-        stmt_total = select(
-            func.count(DocumentORM.id).label('total_docs'),
-            func.sum(DocumentORM.chunk_count).label('total_chunks'),
-        )
-        result = await session.execute(stmt_total)
-        total_docs, total_chunks = result.one()
-
-        print(f"\n📊 Estatísticas Gerais:")
-        print(f"   Documentos: {total_docs}")
-        print(f"   Chunks: {total_chunks}")
-
-        # 2. Análise de jurisprudência
-        print(f"\n⚖️  Jurisprudência:")
-
-        stmt_stf = select(func.count()).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_stf') == text('true')
-        )
-        result_stf = await session.execute(stmt_stf)
-        count_stf = result_stf.scalar()
-
-        stmt_stj = select(func.count()).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_stj') == text('true')
-        )
-        result_stj = await session.execute(stmt_stj)
-        count_stj = result_stj.scalar()
-
-        print(f"   Chunks com STF: {count_stf} ({count_stf/total_chunks*100:.1f}%)")
-        print(f"   Chunks com STJ: {count_stj} ({count_stj/total_chunks*100:.1f}%)")
-
-        # 3. Análise de concursos
-        print(f"\n📝 Concursos:")
-
-        stmt_concurso = select(func.count()).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_concurso') == text('true')
-        )
-        result_concurso = await session.execute(stmt_concurso)
-        count_concurso = result_concurso.scalar()
-
-        print(f"   Chunks com referência a concurso: {count_concurso} ({count_concurso/total_chunks*100:.1f}%)")
-
-        # Top bancas
-        stmt_bancas = select(
-            func.json_extract(ChunkORM.metadados, '$.banca').label('banca'),
-            func.count().label('total')
-        ).where(
-            func.json_extract(ChunkORM.metadados, '$.banca') != 'null'
-        ).group_by('banca').order_by(
-            func.count().desc()
-        )
-
-        result_bancas = await session.execute(stmt_bancas)
-        bancas = result_bancas.all()
-
-        print(f"\n   Top 20 Bancas:")
-        for banca, count in bancas[:20]:
-            print(f"      {banca:<20} {count:>6} chunks")
-
-        # Distribuição por anos
-        stmt_anos = select(
-            func.json_extract(ChunkORM.metadados, '$.ano').label('ano'),
-            func.count().label('total')
-        ).where(
-            func.json_extract(ChunkORM.metadados, '$.ano') != 'null'
-        ).group_by('ano').order_by('ano')
-
-        result_anos = await session.execute(stmt_anos)
-        anos = result_anos.all()
-
-        print(f"\n   Distribuição por Ano:")
-        for ano, count in anos[:20]:  # Últimos 20 anos
-            print(f"      {ano:<10} {count:>6} chunks")
-
-        # 4. Direito Penal (se existirem)
-        stmt_crime = select(func.count()).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_crime') == text('true')
-        )
-        result_crime = await session.execute(stmt_crime)
-        count_crime = result_crime.scalar()
-
-        stmt_pena = select(func.count()).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_pena') == text('true')
-        )
-        result_pena = await session.execute(stmt_pena)
-        count_pena = result_pena.scalar()
-
-        if count_crime > 0 or count_pena > 0:
-            print(f"\n⚖️  Direito Penal:")
-            print(f"   Chunks com 'crime': {count_crime}")
-            print(f"   Chunks com 'pena': {count_pena}")
-
-        # 5. Exemplos de chunks com jurisprudência
-        print(f"\n💡 Exemplos de Chunks com Jurisprudência STF/STJ:")
-
-        stmt_exemplos = select(ChunkORM).where(
-            func.json_extract(ChunkORM.metadados, '$.marca_stf') == text('true')
-        ).limit(3)
-
-        result_exemplos = await session.execute(stmt_exemplos)
-        exemplos = result_exemplos.scalars().all()
-
-        for i, chunk in enumerate(exemplos, 1):
-            metadata = json.loads(chunk.metadados)
-            print(f"\n   [{i}] {chunk.documento_id} - {chunk.id}")
-            print(f"       Texto: {chunk.texto[:100]}...")
-            print(f"       Artigo: {metadata.get('artigo', 'N/A')}")
-            print(f"       Banca: {metadata.get('banca', 'N/A')}")
-            print(f"       Ano: {metadata.get('ano', 'N/A')}")
-
-        # 6. Score de qualidade
-        print(f"\n⭐ Score de Qualidade do RAG:")
-
-        scores = []
-
-        # Jurisprudência (30%)
-        jurisprudencia_score = min((count_stf + count_stj) / total_chunks * 5, 1.0) if total_chunks > 0 else 0
-        scores.append(('Jurisprudência', jurisprudencia_score, 0.3))
-        print(f"   Jurisprudência: {jurisprudencia_score:.2%} (peso: 30%)")
-
-        # Concursos (40%)
-        concurso_score = min(count_concurso / total_chunks * 1.5, 1.0) if total_chunks > 0 else 0
-        scores.append(('Concursos', concurso_score, 0.4))
-        print(f"   Concursos: {concurso_score:.2%} (peso: 40%)")
-
-        # Bancas variadas (20%)
-        variedade_bancas = min(len([b for b, c in bancas if c >= 10]) / 20, 1.0)  # Máx 20 bancas = 100%
-        scores.append(('Variedade Bancas', variedade_bancas, 0.2))
-        print(f"   Variedade de Bancas: {variedade_bancas:.2%} (peso: 20%)")
-
-        # Anos recentes (10%)
-        anos_recentes = sum(1 for a, c in anos if int(a) >= 2015) / len(anos) if anos else 0
-        scores.append(('Anos Recentes', anos_recentes, 0.1))
-        print(f"   Anos Recentes (>=2015): {anos_recentes:.2%} (peso: 10%)")
-
-        # Score total
-        score_total = sum(score * peso for _, score, peso in scores)
-        print(f"\n   🎯 SCORE TOTAL: {score_total:.2%}")
-
-        if score_total >= 0.8:
-            print(f"   ✅ EXCELENTE - RAG bem implementado para concursos")
-        elif score_total >= 0.6:
-            print(f"   ⚠️  BOM - RAG adequado, mas pode melhorar")
-        else:
-            print(f"   ❌ PRECISA MELHORAR - Faltam metadados importantes")
-
-        # Salvar relatório
-        metrics_dir = Path(__file__).parent.parent / "metricas"
-        metrics_dir.mkdir(exist_ok=True)
-        report_file = metrics_dir / f"rag_quality_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-        with open(report_file, 'w', encoding='utf-8') as f:
-            f.write("=" * 80 + "\n")
-            f.write(f"RELATÓRIO DE QUALIDADE RAG JURÍDICO\n")
-            f.write(f"Gerado em: {datetime.now().isoformat()}\n")
-            f.write("=" * 80 + "\n\n")
-
-            f.write(f"ESTATÍSTICAS GERAIS:\n")
-            f.write(f"Documentos: {total_docs}\n")
-            f.write(f"Chunks: {total_chunks}\n\n")
-
-            f.write(f"JURISPRUDÊNCIA:\n")
-            f.write(f"STF: {count_stf} chunks ({count_stf/total_chunks*100:.1f}%)\n")
-            f.write(f"STJ: {count_stj} chunks ({count_stj/total_chunks*100:.1f}%)\n\n")
-
-            f.write(f"CONCURSOS:\n")
-            f.write(f"Referências a concurso: {count_concurso} chunks ({count_concurso/total_chunks*100:.1f}%)\n\n")
-
-            f.write(f"BANCAS TOP 20:\n")
-            for banca, count in bancas[:20]:
-                f.write(f"  {banca}: {count}\n")
-
-            f.write(f"\nSCORE DE QUALIDADE: {score_total:.2%}\n")
-            for nome, score, peso in scores:
-                f.write(f"  {nome}: {score:.2%} (peso {peso*100:.0f}%)\n")
-
-        print(f"\n📁 Relatório salvo em: {report_file}")
+    print("Baseline offline de retrieval gerado com sucesso.")
+    print(f"- CSV (consultas): {artifacts['queries_csv']}")
+    print(f"- CSV (sumário): {artifacts['summary_csv']}")
+    print(f"- Snapshot JSON: {artifacts['snapshot_json']}")
 
 
 if __name__ == "__main__":

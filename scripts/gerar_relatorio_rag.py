@@ -1,149 +1,111 @@
 #!/usr/bin/env python
-"""Script para gerar relatório consolidado de métricas RAG.
+"""Gera relatório textual do baseline de retrieval RAG.
 
-Gera estatísticas detalhadas do sistema RAG incluindo:
-- Estatísticas gerais de documentos e chunks
-- Análise de metadados (concurso, STF, STJ)
-- Distribuição por tipo de documento
-- Performance de ingestão
+Lê snapshot JSON versionado e cria relatório Markdown com visão
+agregada geral e por tipo (`artigo`, `jurisprudencia`, `concurso`, `geral`).
 """
 
-import asyncio
-import csv
+from __future__ import annotations
+
+import argparse
+import json
 from datetime import datetime
 from pathlib import Path
-
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.config.settings import get_settings
-from src.models.rag_models import ChunkORM, DocumentORM
+from typing import Any
 
 
-async def main() -> None:
-    """Gera relatório de métricas RAG."""
-    settings = get_settings()
-
-    # Conectar ao banco
-    db_url = str(settings.database.url)
-    if db_url.startswith("sqlite:///"):
-        db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-    engine = create_async_engine(db_url)
-    async_session_maker = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Gerar relatório consolidado do baseline de retrieval RAG",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    parser.add_argument(
+        "--input",
+        default="metricas/rag_retrieval_baseline_latest.json",
+        help="Snapshot JSON de entrada",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="metricas",
+        help="Diretório onde o relatório markdown será salvo",
+    )
+    return parser
 
-    async with async_session_maker() as session:
-        print("📊 Gerando Relatório de Métricas RAG")
-        print("=" * 80)
 
-        # Estatísticas gerais
-        stmt_docs = select(
-            func.count(DocumentORM.id).label('total_docs'),
-            func.sum(DocumentORM.chunk_count).label('total_chunks'),
-            func.sum(DocumentORM.token_count).label('total_tokens')
+def _pct(value: float) -> str:
+    return f"{value * 100:.1f}%"
+
+
+def _fmt_metric_line(values: dict[str, Any]) -> list[str]:
+    return [
+        f"- Queries: {values['queries']}",
+        f"- Recall@1: {_pct(values['recall_at_1'])}",
+        f"- Recall@3: {_pct(values['recall_at_3'])}",
+        f"- Recall@5: {_pct(values['recall_at_5'])}",
+        f"- MRR: {values['mrr']:.4f}",
+        f"- nDCG@5: {values['ndcg_at_5']:.4f}",
+        f"- Taxa de citação correta: {_pct(values['citation_correct_rate'])}",
+    ]
+
+
+def _render_report(snapshot: dict[str, Any], snapshot_path: Path) -> str:
+    generated_at = snapshot.get("generated_at", "N/A")
+    top_k = snapshot.get("top_k", "N/A")
+    benchmark_size = snapshot.get("benchmark_size", "N/A")
+    summary = snapshot["summary"]
+
+    lines: list[str] = []
+    lines.append("# Relatório de Baseline Offline de Retrieval")
+    lines.append("")
+    lines.append(f"- Gerado em: {generated_at}")
+    lines.append(f"- Snapshot: `{snapshot_path}`")
+    lines.append(f"- Top-K avaliado: {top_k}")
+    lines.append(f"- Tamanho do benchmark: {benchmark_size} consultas")
+    lines.append("")
+
+    lines.append("## Visão Geral")
+    lines.append("")
+    lines.extend(_fmt_metric_line(summary["overall"]))
+    lines.append("")
+
+    lines.append("## Métricas por Tipo")
+    lines.append("")
+    for tipo in ["artigo", "jurisprudencia", "concurso", "geral"]:
+        lines.append(f"### {tipo}")
+        lines.append("")
+        lines.extend(_fmt_metric_line(summary["per_type"][tipo]))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
+
+    snapshot_path = Path(args.input)
+    if not snapshot_path.exists():
+        raise FileNotFoundError(
+            f"Snapshot não encontrado: {snapshot_path}. "
+            "Execute primeiro scripts/analizar_qualidade_rag.py"
         )
-        result = await session.execute(stmt_docs)
-        row = result.one()
 
-        print(f"\n📈 Estatísticas Gerais:")
-        print(f"   Documentos: {row.total_docs}")
-        print(f"   Chunks: {row.total_chunks:,}")
-        print(f"   Tokens: {row.total_tokens:,}")
-        print(f"   Custo estimado: ${row.total_tokens * 0.02 / 1_000_000:.2f} USD")
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
 
-        # Top documentos por tamanho
-        stmt_top = select(DocumentORM).order_by(
-            DocumentORM.token_count.desc()
-        ).limit(10)
-        result_top = await session.execute(stmt_top)
-        top_docs = result_top.scalars().all()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = output_dir / f"rag_retrieval_relatorio_{timestamp}.md"
 
-        print(f"\n📚 Top 10 Documentos por Tokens:")
-        for doc in top_docs:
-            print(f"   {doc.nome:<50} {doc.token_count:>10,} tokens | {doc.chunk_count:>4} chunks")
+    content = _render_report(snapshot, snapshot_path)
+    report_path.write_text(content, encoding="utf-8")
 
-        # Análise de metadados
-        stmt_meta = select(
-            func.sum(func.json_extract(ChunkORM.metadados, '$.marca_concurso')).label('concurso'),
-            func.sum(func.json_extract(ChunkORM.metadados, '$.marca_stf')).label('stf'),
-            func.sum(func.json_extract(ChunkORM.metadados, '$.marca_stj')).label('stj'),
-            func.count(ChunkORM.id).label('total')
-        )
-        result_meta = await session.execute(stmt_meta)
-        meta_row = result_meta.one()
+    latest_path = output_dir / "rag_retrieval_relatorio_latest.md"
+    latest_path.write_text(content, encoding="utf-8")
 
-        print(f"\n🏷️  Metadados de Jurisprudência/Concurso:")
-        print(f"   marca_concurso: {meta_row.concurso} ({meta_row.concurso / meta_row.total * 100:.1f}%)")
-        print(f"   marca_stf: {meta_row.stf} ({meta_row.stf / meta_row.total * 100:.1f}%)")
-        print(f"   marca_stj: {meta_row.stj} ({meta_row.stj / meta_row.total * 100:.1f}%)")
-
-        # Bancas mais comuns
-        stmt_bancas = select(
-            func.json_extract(ChunkORM.metadados, '$.banca').label('banca'),
-            func.count().label('total')
-        ).where(
-            func.json_extract(ChunkORM.metadados, '$.banca') != 'null'
-        ).group_by('banca').order_by(
-            func.count().desc()
-        ).limit(15)
-
-        result_bancas = await session.execute(stmt_bancas)
-        bancas = result_bancas.all()
-
-        print(f"\n🏛️  Top 15 Bancas:")
-        for banca, count in bancas:
-            print(f"   {banca:<15} {count:>6} chunks")
-
-        # Distribuição por tipo de documento
-        print(f"\n📂 Distribuição por Tipo:")
-
-        tipos = {
-            'CF/88': 'cf de 1988',
-            'Lei 8.112/90': 'regime juridico dos servidores',
-            'Código Penal': 'codigo_penal',
-            'Súmulas': 'sumulas',
-            'Leis Penais': ['penal', 'crime', 'hediondos', 'drogas', 'lavagem', 'tortura'],
-        }
-
-        for tipo_nome, padrão in tipos.items():
-            if isinstance(padrão, str):
-                stmt_tipo = select(func.count()).where(DocumentORM.nome.like(f'%{padrão}%'))
-            else:
-                conditions = [DocumentORM.nome.like(f'%{p}%') for p in padrão]
-                stmt_tipo = select(func.count()).where(
-                    *conditions
-                )
-
-            result_tipo = await session.execute(stmt_tipo)
-            count = result_tipo.scalar()
-
-            print(f"   {tipo_nome:<20} {count:>6} documentos")
-
-        # Salvar relatório CSV
-        metrics_dir = Path(__file__).parent.parent / "metricas"
-        metrics_dir.mkdir(exist_ok=True)
-        report_file = metrics_dir / f"rag_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
-        with open(report_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Métrica', 'Valor'])
-
-            writer.writerow(['Total Documentos', row.total_docs])
-            writer.writerow(['Total Chunks', row.total_chunks])
-            writer.writerow(['Total Tokens', row.total_tokens])
-            writer.writerow(['Custo Estimado USD', f"${row.total_tokens * 0.02 / 1_000_000:.2f}"])
-            writer.writerow(['Chunks com marca_concurso', meta_row.concurso])
-            writer.writerow(['Chunks com marca_stf', meta_row.stf])
-            writer.writerow(['Chunks com marca_stj', meta_row.stj])
-            writer.writerow(['Timestamp', datetime.now().isoformat()])
-
-        print(f"\n📁 Relatório salvo em: {report_file}")
+    print("Relatório de retrieval gerado com sucesso.")
+    print(f"- Relatório versionado: {report_path}")
+    print(f"- Relatório latest: {latest_path}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
