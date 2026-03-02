@@ -1,5 +1,5 @@
 prompt,response_length,used_rag,duration_seconds,status
-"Olá, tudo bem?",56,False,3.536,success
-Me explique o artigo 5 da constituição.,2949,True,14.662,success
-Quais as regras de vacância na lei 8112?,2131,True,10.026,success
-Quais os fundamentos da República Federativa do Brasil?,2143,True,11.63,success
+"Olá, tudo bem?",59,False,2.466,success
+Me explique o artigo 5 da constituição.,2358,True,12.735,success
+Quais as regras de vacância na lei 8112?,1954,True,15.106,success
+Quais os fundamentos da República Federativa do Brasil?,1877,True,10.587,success

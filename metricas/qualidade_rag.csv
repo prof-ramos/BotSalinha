@@ -1,7 +1,7 @@
 query,confidence,avg_similarity,max_similarity,chunks_retrieved,duration_ms
-o que é estágio probatório?,media,0.5624,0.5804,3,2174.04
-quais os requisitos para ser presidente da república?,baixa,0.5188,0.5321,2,1460.38
-como funciona a licença maternidade?,media,0.6764,0.6764,1,1124.66
-quais são os princípios da administração pública?,media,0.5774,0.6218,3,866.3
-o que é habeas corpus?,baixa,0.4809,0.4809,1,865.34
-qual o prazo para impetrar mandado de segurança?,media,0.5709,0.5709,1,851.38
+o que é estágio probatório?,media,0.5624,0.5804,3,1082.53
+quais os requisitos para ser presidente da república?,baixa,0.5188,0.5321,2,649.24
+como funciona a licença maternidade?,media,0.6764,0.6764,1,581.85
+quais são os princípios da administração pública?,media,0.5774,0.6218,3,555.21
+o que é habeas corpus?,baixa,0.4808,0.4808,1,760.52
+qual o prazo para impetrar mandado de segurança?,media,0.5709,0.5709,1,752.91
