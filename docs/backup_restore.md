@@ -133,14 +133,25 @@ cp -r backups/rag_docs/* /path/to/documentos_originais/
 
 Após restore do banco, os dados RAG já estão prontos. Não é necessário reindexar.
 
-No entanto, se quiser reindexar do zero:
+Se quiser validar consistência sem rebuild total, prefira incremental:
 
 ```bash
-# Limpar dados RAG
-sqlite3 data/botsalinha.db "DELETE FROM rag_chunks; DELETE FROM rag_documents;"
+# Refresh incremental (reembed apenas conteúdo alterado)
+uv run python scripts/ingest_all_rag.py --mode incremental --recursive
+```
 
-# Reindexar
-uv run python scripts/ingest_all_rag.py
+Se for necessário reconstruir tudo do zero:
+
+```bash
+# Reindex completo (limpa índice e reingesta)
+uv run python scripts/ingest_all_rag.py --mode completo --recursive
+```
+
+Em produção com Discord, owner do bot também pode executar:
+
+```text
+!reindexar incremental
+!reindexar completo
 ```
 
 ---
@@ -222,7 +233,13 @@ Se a coluna `embedding` estiver NULL em todos os chunks:
 sqlite3 data/botsalinha.db "SELECT COUNT(*) FROM rag_chunks WHERE embedding IS NULL;"
 
 # Se todos estiverem NULL, reindexar
-uv run python scripts/ingest_all_rag.py
+uv run python scripts/ingest_all_rag.py --mode completo --recursive
+```
+
+Se a perda for parcial, começar por incremental:
+
+```bash
+uv run python scripts/ingest_all_rag.py --mode incremental --recursive
 ```
 
 ### Cenário 3: Restore em Nova Máquina
@@ -279,8 +296,17 @@ du -sh data/botsalinha.db
 # Verificar contagem de chunks RAG
 sqlite3 data/botsalinha.db "SELECT COUNT(*) FROM rag_chunks;"
 
+# Verificar documentos e estatísticas operacionais
+sqlite3 data/botsalinha.db "SELECT nome, chunk_count, token_count FROM rag_documents ORDER BY nome;"
+
 # Verificar integridade
 sqlite3 data/botsalinha.db "PRAGMA integrity_check;"
+```
+
+Logs recomendados para operação RAG:
+
+```bash
+tail -f logs/botsalinha.log | grep -E "rag_reindex|rag_ingestion|rag_fontes"
 ```
 
 ---

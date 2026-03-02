@@ -149,11 +149,17 @@ Total: 2 documentos
 ```
 
 ### `!reindexar` (Admin apenas)
-Recria o índice RAG do zero. Deleta todos chunks e documentos, então reingesta todos os arquivos DOCX.
+Executa operação administrativa de índice RAG.
+
+Modos suportados:
+- `completo` (default): recria o índice do zero.
+- `incremental`: faz refresh por hash de conteúdo e só reembeda o que mudou.
 
 **Uso:**
 ```
 !reindexar
+!reindexar completo
+!reindexar incremental
 ```
 
 **Requisitos:**
@@ -164,11 +170,24 @@ Recria o índice RAG do zero. Deleta todos chunks e documentos, então reingesta
 ```
 ✅ Reindexação RAG Concluída!
 
+Modo: completo
 📄 Documentos processados: 2
-📦 Chunks criados: 3300
-⏱️ Tempo total: 12.5s
+📦 Chunks indexados: 3300
+⏱️ Duração: 12.5s
 
 O índice RAG foi reconstruído com sucesso.
+```
+
+Resposta incremental:
+```
+✅ Reindexação RAG incremental concluída!
+
+📄 Processados: 120
+♻️ Atualizados: 8
+⏭️ Sem alteração: 111
+❌ Falhas: 1
+📦 Chunks totais vistos: 45120
+⏱️ Duração: 48.3s
 ```
 
 ## Configurações
@@ -355,7 +374,8 @@ repomix-output.xml  # ou qualquer caminho acessível
 
 **Documentos Jurídicos (via Discord):**
 ```bash
-!reindexar
+!reindexar completo
+!reindexar incremental
 ```
 
 **Codebase (via CLI):**
@@ -482,6 +502,12 @@ LogEvents.RAG_REINDEXACAO_INICIADA     # Início da reindexação
 LogEvents.RAG_REINDEXACAO_CONCLUIDA    # Fim da reindexação
 ```
 
+Eventos operacionais adicionais:
+- `rag_fontes_consultadas`: métrica de inspeção de catálogo RAG via Discord.
+- `rag_reindex_command_started`: início do comando `!reindexar` com modo e usuário.
+- `rag_reindex_command_completed`: fechamento do comando com contagens e duração.
+- `rag_reindex_incremental_document_failed`: falha por documento no modo incremental.
+
 ## Testes
 
 ### Rodar Testes RAG
@@ -523,9 +549,10 @@ uv run pytest tests/integration/rag/test_recall.py -v
 
 **Soluções:**
 1. Verificar se documentos estão indexados: `!fontes`
-2. Reindexar: `!reindexar`
-3. Verificar `RAG_MIN_SIMILARITY` (muito alto?)
-4. Verificar se OPENAI_API_KEY está configurada
+2. Reindexar incremental: `!reindexar incremental`
+3. Se necessário, rebuild completo: `!reindexar completo`
+4. Verificar `RAG_MIN_SIMILARITY` (muito alto?)
+5. Verificar se OPENAI_API_KEY está configurada
 
 ### Erro de Ingestão
 
@@ -534,8 +561,10 @@ uv run pytest tests/integration/rag/test_recall.py -v
 **Soluções:**
 1. Verificar formato do documento (deve ser DOCX)
 2. Verificar estrutura (usar Heading styles)
-3. Verificar logs: `tail logs/botsalinha.log | grep rag_ingestion`
-4. Testar parser isoladamente
+3. Verificar logs: `tail -f logs/botsalinha.log | grep -E "rag_reindex|rag_ingestion|rag_fontes"`
+4. Rodar incremental por CLI para diagnóstico:
+   `uv run python scripts/ingest_all_rag.py --mode incremental --recursive`
+5. Testar parser isoladamente
 
 ### Latência Alta
 

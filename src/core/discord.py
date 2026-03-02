@@ -6,15 +6,24 @@ and integration with the AI agent.
 """
 
 import asyncio
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 import discord
 import structlog
 from discord.ext import commands
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..config.settings import settings
+from ..models.rag_models import DocumentORM
+from ..rag.services.embedding_service import EmbeddingService
+from ..rag.services.ingestion_service import IngestionService
 from ..services.conversation_service import ConversationService
 from ..storage.repository_factory import get_configured_repository
 from ..utils.errors import RateLimitError as BotRateLimitError
+from ..utils.log_events import LogEvents
 from ..utils.logger import bind_request_context
 from ..utils.message_splitter import MessageSplitter
 from .agent import AgentWrapper
@@ -32,6 +41,8 @@ HELP_TEXT_TEMPLATE = """
 • `{prefix}ask <pergunta>` - Faça uma pergunta sobre direito ou concursos
 • `{prefix}ping` - Verifique a latência do bot
 • `{prefix}ajuda` - Mostra esta mensagem de ajuda
+• `{prefix}fontes` - Lista documentos indexados no RAG
+• `{prefix}reindexar [completo|incremental]` - Reindexa o RAG (owner)
 
 **Sobre:**
 Sou um assistente especializado em direito brasileiro e concursos públicos.
@@ -82,6 +93,36 @@ class BotSalinhaBot(commands.Bot):
         self._ready_event = asyncio.Event()
 
         log.info("discord_bot_initialized", prefix=settings.discord.command_prefix)
+
+    @staticmethod
+    def _resolve_async_database_url() -> str:
+        """Retorna URL de banco compatível com SQLAlchemy async."""
+        db_url = str(settings.database.url)
+        if db_url.startswith("sqlite:///"):
+            return db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+        return db_url
+
+    @staticmethod
+    def _resolve_rag_documents_dir() -> Path:
+        """Retorna diretório padrão de documentos DOCX do RAG."""
+        return Path(__file__).resolve().parents[2] / "docs" / "plans" / "RAG"
+
+    @asynccontextmanager
+    async def _rag_session(self) -> AsyncSession:
+        """Cria sessão isolada para operações RAG administrativas."""
+        db_url = self._resolve_async_database_url()
+        connect_args = {"check_same_thread": False} if db_url.startswith("sqlite+") else {}
+        engine = create_async_engine(
+            db_url,
+            echo=settings.database.echo,
+            connect_args=connect_args,
+        )
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with session_factory() as session:
+                yield session
+        finally:
+            await engine.dispose()
 
     async def setup_hook(self) -> None:
         """Called when the bot is setting up."""
@@ -279,6 +320,202 @@ class BotSalinhaBot(commands.Bot):
         )
 
         await ctx.send(embed=embed)
+
+    @commands.command(name="fontes")
+    async def fontes_command(self, ctx: commands.Context) -> None:
+        """Lista documentos indexados no RAG e estatísticas resumidas."""
+        if not settings.rag.enabled:
+            await ctx.send("ℹ️ RAG está desabilitado na configuração atual.")
+            return
+
+        await ctx.typing()
+        try:
+            async with self._rag_session() as session:
+                stmt = select(DocumentORM).order_by(DocumentORM.nome.asc())
+                documents = (await session.execute(stmt)).scalars().all()
+
+            if not documents:
+                await ctx.send(
+                    "📚 Nenhuma fonte RAG indexada ainda.\n"
+                    "Use `!reindexar completo` para criar o índice inicial."
+                )
+                return
+
+            total_chunks = sum(doc.chunk_count for doc in documents)
+            total_tokens = sum(doc.token_count for doc in documents)
+            max_lines = 15
+
+            lines = ["📚 Fontes RAG Indexadas", ""]
+            for doc in documents[:max_lines]:
+                lines.append(f"• {doc.nome}")
+                lines.append(f"  {doc.chunk_count:,} chunks | {doc.token_count:,} tokens")
+
+            if len(documents) > max_lines:
+                lines.append(f"\n... e mais {len(documents) - max_lines} documento(s).")
+
+            lines.append(f"\nTotal: {len(documents)} documento(s)")
+            lines.append(f"Chunks totais: {total_chunks:,}")
+            lines.append(f"Tokens totais: {total_tokens:,}")
+
+            await ctx.send("\n".join(lines))
+            log.info(
+                "rag_fontes_consultadas",
+                user_id=str(ctx.author.id),
+                guild_id=str(ctx.guild.id) if ctx.guild else None,
+                documentos=len(documents),
+                chunks_total=total_chunks,
+                tokens_total=total_tokens,
+                event_name="rag_fontes_consultadas",
+            )
+        except Exception as e:
+            log.exception(
+                "rag_fontes_falhou",
+                user_id=str(ctx.author.id),
+                error_type=type(e).__name__,
+                error=str(e),
+            )
+            await ctx.send("❌ Falha ao consultar fontes RAG. Verifique os logs.")
+
+    @commands.command(name="reindexar")
+    async def reindexar_command(self, ctx: commands.Context, mode: str = "completo") -> None:
+        """Executa reindexação RAG nos modos completo ou incremental (owner only)."""
+        if not settings.rag.enabled:
+            await ctx.send("ℹ️ RAG está desabilitado na configuração atual.")
+            return
+
+        if not await self.is_owner(ctx.author):
+            await ctx.send("❌ Apenas o dono do bot pode executar este comando.")
+            return
+
+        mode_normalized = mode.strip().lower()
+        aliases = {
+            "c": "completo",
+            "full": "completo",
+            "completo": "completo",
+            "i": "incremental",
+            "inc": "incremental",
+            "incremental": "incremental",
+        }
+        mode_normalized = aliases.get(mode_normalized, mode_normalized)
+        if mode_normalized not in {"completo", "incremental"}:
+            await ctx.send("❌ Modo inválido. Use `!reindexar completo` ou `!reindexar incremental`.")
+            return
+
+        documents_dir = self._resolve_rag_documents_dir()
+        start = time.perf_counter()
+        log.info(
+            LogEvents.RAG_REINDEXACAO_INICIADA,
+            user_id=str(ctx.author.id),
+            guild_id=str(ctx.guild.id) if ctx.guild else None,
+            mode=mode_normalized,
+            documents_dir=str(documents_dir),
+            event_name="rag_reindex_command_started",
+        )
+        await ctx.send(f"🔄 Reindexação RAG iniciada (`{mode_normalized}`). Aguarde...")
+        await ctx.typing()
+
+        try:
+            async with self._rag_session() as session:
+                ingestion_service = IngestionService(
+                    session=session,
+                    embedding_service=EmbeddingService(),
+                )
+
+                if mode_normalized == "completo":
+                    stats = await ingestion_service.reindex(documents_dir=str(documents_dir))
+                    duration = float(stats["duration_seconds"])
+                    await ctx.send(
+                        "✅ Reindexação RAG concluída!\n\n"
+                        f"Modo: `{mode_normalized}`\n"
+                        f"📄 Documentos processados: {stats['documents_count']}\n"
+                        f"📦 Chunks indexados: {stats['chunks_count']}\n"
+                        f"⏱️ Duração: {duration:.2f}s"
+                    )
+                    log.info(
+                        LogEvents.RAG_REINDEXACAO_CONCLUIDA,
+                        user_id=str(ctx.author.id),
+                        guild_id=str(ctx.guild.id) if ctx.guild else None,
+                        mode=mode_normalized,
+                        documents_count=int(stats["documents_count"]),
+                        chunks_count=int(stats["chunks_count"]),
+                        duration_seconds=duration,
+                        event_name="rag_reindex_command_completed",
+                    )
+                    return
+
+                docx_files = sorted(documents_dir.rglob("*.docx"))
+                if not docx_files:
+                    await ctx.send(f"⚠️ Nenhum arquivo DOCX encontrado em `{documents_dir}`.")
+                    return
+
+                updated_docs = 0
+                unchanged_docs = 0
+                failed_docs = 0
+                total_chunks = 0
+
+                for docx_file in docx_files:
+                    previous = (
+                        await session.execute(
+                            select(DocumentORM).where(DocumentORM.arquivo_origem == str(docx_file))
+                        )
+                    ).scalar_one_or_none()
+                    previous_hash = previous.content_hash if previous else None
+                    previous_chunks = previous.chunk_count if previous else 0
+                    try:
+                        document = await ingestion_service.ingest_document(
+                            file_path=str(docx_file),
+                            document_name=docx_file.stem,
+                        )
+                        total_chunks += document.chunk_count
+                        if previous_hash == document.content_hash and previous_chunks > 0:
+                            unchanged_docs += 1
+                        else:
+                            updated_docs += 1
+                    except Exception as e:
+                        failed_docs += 1
+                        log.error(
+                            "rag_reindex_incremental_document_failed",
+                            document=str(docx_file),
+                            error_type=type(e).__name__,
+                            error=str(e),
+                            event_name="rag_reindex_incremental_document_failed",
+                        )
+
+                duration = time.perf_counter() - start
+                await ctx.send(
+                    "✅ Reindexação RAG incremental concluída!\n\n"
+                    f"📄 Processados: {len(docx_files)}\n"
+                    f"♻️ Atualizados: {updated_docs}\n"
+                    f"⏭️ Sem alteração: {unchanged_docs}\n"
+                    f"❌ Falhas: {failed_docs}\n"
+                    f"📦 Chunks totais vistos: {total_chunks}\n"
+                    f"⏱️ Duração: {duration:.2f}s"
+                )
+                log.info(
+                    LogEvents.RAG_REINDEXACAO_CONCLUIDA,
+                    user_id=str(ctx.author.id),
+                    guild_id=str(ctx.guild.id) if ctx.guild else None,
+                    mode=mode_normalized,
+                    documents_count=len(docx_files),
+                    updated_documents=updated_docs,
+                    unchanged_documents=unchanged_docs,
+                    failed_documents=failed_docs,
+                    chunks_count=total_chunks,
+                    duration_seconds=duration,
+                    event_name="rag_reindex_command_completed",
+                )
+        except Exception as e:
+            duration = time.perf_counter() - start
+            log.exception(
+                "rag_reindex_command_failed",
+                user_id=str(ctx.author.id),
+                guild_id=str(ctx.guild.id) if ctx.guild else None,
+                mode=mode_normalized,
+                duration_seconds=duration,
+                error_type=type(e).__name__,
+                error=str(e),
+            )
+            await ctx.send("❌ Reindexação falhou. Verifique logs e configuração do RAG.")
 
     @ask_command.error
     async def ask_command_error(self, ctx: commands.Context, error: Exception) -> None:

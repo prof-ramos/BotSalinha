@@ -218,11 +218,25 @@ T9 ─────────────────────┘
 - **location**: `src/core/discord.py`, `scripts/ingest_all_rag.py`, `docs/features/rag.md`, `docs/backup_restore.md`
 - **description**: Consolidar comandos de operação (`!fontes`, `!reindexar`, reindex incremental), observabilidade e runbooks de recuperação para produção.
 - **validation**: Comandos funcionam em ambiente de teste e documentação operacional cobre cenários de falha e rollback.
-- **status**: Blocked (2026-03-02)
+- **status**: Completed (2026-03-02)
 - **log**:
-  - Subagente não conseguiu iniciar execução (erro imediato `Too many open files (os error 24)`), sem mudanças aplicadas.
+  - Implementado `!fontes` no Discord para listar catálogo RAG com totais de documentos/chunks/tokens.
+  - Implementado `!reindexar [completo|incremental]` (owner only) com:
+    - `completo`: rebuild total do índice via `IngestionService.reindex`;
+    - `incremental`: refresh por hash de conteúdo com contagem de atualizados/inalterados/falhas.
+  - Adicionada observabilidade operacional com logs estruturados de início/fim e métricas de execução:
+    - `LogEvents.RAG_REINDEXACAO_INICIADA` / `LogEvents.RAG_REINDEXACAO_CONCLUIDA`;
+    - eventos operacionais `rag_fontes_consultadas`, `rag_reindex_command_started`, `rag_reindex_command_completed`, `rag_reindex_incremental_document_failed`.
+  - Reescrito `scripts/ingest_all_rag.py` para operação em produção:
+    - CLI com `--mode incremental|completo`, `--docs-dir`, `--pattern`, `--recursive`;
+    - incremental idempotente por hash de conteúdo e CSV de métricas;
+    - completo com rebuild total via `IngestionService.reindex`.
+  - Atualizados runbooks e documentação operacional em `docs/features/rag.md` e `docs/backup_restore.md` com procedimentos de recuperação, observabilidade e rollback operacional.
 - **files edited/created**:
-  - N/A (sem alterações consolidadas)
+  - `src/core/discord.py`
+  - `scripts/ingest_all_rag.py`
+  - `docs/features/rag.md`
+  - `docs/backup_restore.md`
 
 ## Parallel Execution Groups
 
