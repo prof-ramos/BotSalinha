@@ -19,6 +19,10 @@ class ChunkMetadata(BaseModel):
     titulo: str | None = Field(None, description="Section title")
     capitulo: str | None = Field(None, description="Chapter reference")
     secao: str | None = Field(None, description="Section reference")
+    hierarquia_normativa: list[str] = Field(
+        default_factory=list,
+        description="Normative hierarchy path for legal chunks",
+    )
     artigo: str | None = Field(None, description="Article number")
     paragrafo: str | None = Field(None, description="Paragraph number")
     inciso: str | None = Field(None, description="Inciso/Item number")

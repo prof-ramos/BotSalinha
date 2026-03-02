@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
@@ -28,6 +29,13 @@ class ChunkExtractor:
     DEFAULT_RESPECT_BOUNDARIES = True
     DEFAULT_MIN_CHUNK_SIZE = 100
     DEFAULT_METADATA_MAX_DEPTH = 3
+    _ARTIGO_RE = re.compile(r"^\s*Art\.?\s*(\d+[A-Za-z]?)\b", re.IGNORECASE)
+    _PARAGRAFO_RE = re.compile(
+        r"^\s*(?:§\s*([0-9]+|[úu]nico)\s*[º°]?|par[aá]grafo\s+([úu]nico|\d+)\b)",
+        re.IGNORECASE,
+    )
+    _INCISO_RE = re.compile(r"^\s*([IVXLCDM]+)\s*[-–—\)]", re.IGNORECASE)
+    _ALINEA_RE = re.compile(r"^\s*([a-z])\)", re.IGNORECASE)
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
@@ -97,6 +105,7 @@ class ChunkExtractor:
             log.warning("rag_chunker_empty_document", document=document_name)
             return []
 
+        semantic_blocks = self._build_semantic_blocks(parsed_doc)
         chunks: list[Chunk] = []
         current_chunk: list[dict[str, Any]] = []
         current_tokens = 0
@@ -107,18 +116,18 @@ class ChunkExtractor:
             "rag_chunk_progress",
             document=document_name,
             total_paragraphs=total_paragraphs,
+            semantic_blocks=len(semantic_blocks),
             stage="started",
         )
 
-        for idx, paragraph in enumerate(parsed_doc):
-            paragraph_text = paragraph.get("text", "")
-            paragraph_tokens = self._estimate_tokens(paragraph_text)
+        for block_idx, block in enumerate(semantic_blocks):
+            block_tokens = int(block["token_count"])
+            start_idx = int(block["start_idx"])
+            first_paragraph = block["paragraphs"][0]
 
-            # Check if we should break before adding this paragraph
-            should_break = self._should_break_chunk(paragraph, current_tokens, paragraph_tokens)
+            should_break = self._should_break_chunk(first_paragraph, current_tokens, block_tokens)
 
             if should_break and current_chunk:
-                # Create chunk from accumulated paragraphs
                 chunk = self._create_chunk(
                     parsed_doc=parsed_doc,
                     current_chunk=current_chunk,
@@ -127,30 +136,27 @@ class ChunkExtractor:
                     documento_id=documento_id,
                     sequence=chunk_sequence,
                     total_paragraphs=total_paragraphs,
-                    start_idx=idx - len(current_chunk),
+                    start_idx=self._get_paragraph_index(parsed_doc, current_chunk[0]),
                 )
                 chunks.append(chunk)
                 chunk_sequence += 1
 
-                # Start new chunk with overlap if configured
                 current_chunk, current_tokens = self._create_overlap_chunk(current_chunk)
 
-            # Add paragraph to current chunk
-            current_chunk.append(paragraph)
-            current_tokens += paragraph_tokens
+            current_chunk.extend(block["paragraphs"])
+            current_tokens += block_tokens
 
-            # Log progress periodically
-            if (idx + 1) % 100 == 0 or (idx + 1) == total_paragraphs:
+            if (block_idx + 1) % 25 == 0 or (block_idx + 1) == len(semantic_blocks):
                 log.info(
                     "rag_chunk_progress",
                     document=document_name,
-                    processed=idx + 1,
-                    total=total_paragraphs,
+                    processed_blocks=block_idx + 1,
+                    total_blocks=len(semantic_blocks),
+                    last_start_idx=start_idx,
                     chunks_created=len(chunks),
-                    progress_percent=round((idx + 1) / total_paragraphs * 100, 1),
+                    progress_percent=round((block_idx + 1) / len(semantic_blocks) * 100, 1),
                 )
 
-        # Don't forget the last chunk
         if current_chunk:
             chunk = self._create_chunk(
                 parsed_doc=parsed_doc,
@@ -160,7 +166,7 @@ class ChunkExtractor:
                 documento_id=documento_id,
                 sequence=chunk_sequence,
                 total_paragraphs=total_paragraphs,
-                start_idx=total_paragraphs - len(current_chunk),
+                start_idx=self._get_paragraph_index(parsed_doc, current_chunk[0]),
             )
             chunks.append(chunk)
 
@@ -186,24 +192,37 @@ class ChunkExtractor:
         start_idx: int,
     ) -> Chunk:
         """Create a Chunk from accumulated paragraphs."""
-        # Combine paragraph texts
         chunk_text = "\n\n".join(p.get("text", "") for p in current_chunk)
         token_count = self._estimate_tokens(chunk_text)
 
-        # Get hierarchical context using the full document history
-        context = self._get_hierarchical_context(parsed_doc, start_idx)
+        context = self._get_hierarchical_context(parsed_doc, start_idx, current_chunk[0])
         context["documento"] = document_name
 
-        # Extract metadata using MetadataExtractor
         metadata = metadata_extractor.extract(chunk_text, context)
+        effective_artigo = metadata.artigo or context.get("artigo")
+        effective_paragrafo = metadata.paragrafo or context.get("paragrafo")
+        effective_inciso = metadata.inciso or context.get("inciso")
+        hierarchy_context = {
+            **context,
+            "artigo": effective_artigo,
+            "paragrafo": effective_paragrafo,
+            "inciso": effective_inciso,
+        }
+        metadata = metadata.model_copy(
+            update={
+                "artigo": effective_artigo,
+                "paragrafo": effective_paragrafo,
+                "inciso": effective_inciso,
+                "tipo": context.get("tipo", metadata.tipo),
+                "hierarquia_normativa": self._build_normative_hierarchy(hierarchy_context),
+            }
+        )
 
-        # Calculate position in document (0.0 to 1.0)
         end_idx = start_idx + len(current_chunk) - 1
         posicao_documento = (
             (start_idx + end_idx) / 2 / total_paragraphs if total_paragraphs > 0 else 0.0
         )
 
-        # Generate unique chunk_id
         chunk_id = self._generate_chunk_id(document_name, sequence)
 
         chunk = Chunk(
@@ -242,7 +261,6 @@ class ChunkExtractor:
         overlap_chunk: list[dict[str, Any]] = []
         overlap_tokens = 0
 
-        # Add paragraphs from end of previous chunk until we reach overlap_tokens
         for paragraph in reversed(previous_chunk):
             para_text = paragraph.get("text", "")
             para_tokens = self._estimate_tokens(para_text)
@@ -253,10 +271,18 @@ class ChunkExtractor:
             overlap_chunk.insert(0, paragraph)
             overlap_tokens += para_tokens
 
+        if not overlap_chunk and previous_chunk:
+            last_paragraph = previous_chunk[-1]
+            overlap_chunk = [last_paragraph]
+            overlap_tokens = self._estimate_tokens(last_paragraph.get("text", ""))
+
         return overlap_chunk, overlap_tokens
 
     def _get_hierarchical_context(
-        self, paragraphs: list[dict[str, Any]], current_idx: int
+        self,
+        paragraphs: list[dict[str, Any]],
+        current_idx: int,
+        first_paragraph: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Get hierarchical context (title, chapter, section) for current position.
@@ -272,11 +298,11 @@ class ChunkExtractor:
             Dict with titulo, capitulo, secao, tipo based on headings
         """
         context: dict[str, Any] = {}
-
-        # Track most recent heading at each level
         headings: dict[int, str] = {}
+        artigo: str | None = None
+        paragrafo: str | None = None
+        inciso: str | None = None
 
-        # Scan backwards from current position
         for i in range(current_idx - 1, -1, -1):
             if i >= len(paragraphs):
                 continue
@@ -288,8 +314,15 @@ class ChunkExtractor:
                 text = para.get("text", "")
                 if level not in headings and text:
                     headings[level] = text
+            text = para.get("text", "")
+            marker_type, marker_value = self._detect_legal_marker(text)
+            if marker_type == "artigo" and not artigo:
+                artigo = marker_value
+            elif marker_type == "paragrafo" and not paragrafo:
+                paragrafo = marker_value
+            elif marker_type == "inciso" and not inciso:
+                inciso = marker_value
 
-        # Map heading levels to context keys
         if 1 in headings:
             context["titulo"] = headings[1]
         if 2 in headings:
@@ -297,11 +330,31 @@ class ChunkExtractor:
         if 3 in headings:
             context["secao"] = headings[3]
 
-        # Determine type based on first paragraph in chunk
-        if paragraphs and paragraphs[0].get("is_heading"):
-            context["tipo"] = "heading"
+        if first_paragraph:
+            first_marker_type, first_marker_value = self._detect_legal_marker(
+                first_paragraph.get("text", "")
+            )
+            if first_marker_type == "artigo":
+                artigo = first_marker_value
+                paragrafo = None
+                inciso = None
+            elif first_marker_type == "paragrafo":
+                paragrafo = first_marker_value
+                inciso = None
+            elif first_marker_type == "inciso":
+                inciso = first_marker_value
+            elif first_paragraph.get("is_heading"):
+                first_marker_type = "heading"
+            context["tipo"] = first_marker_type or "content"
         else:
             context["tipo"] = "content"
+
+        if artigo:
+            context["artigo"] = artigo
+        if paragrafo:
+            context["paragrafo"] = paragrafo
+        if inciso:
+            context["inciso"] = inciso
 
         return context
 
@@ -352,6 +405,110 @@ class ChunkExtractor:
         has_min_content = current_tokens >= self._min_chunk_size
 
         return (would_exceed_max and has_min_content) or (is_major_heading and has_min_content)
+
+    def _build_semantic_blocks(self, paragraphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Group paragraphs by legal boundaries to avoid breaking inciso/§ bodies."""
+        blocks: list[dict[str, Any]] = []
+        current_block: list[dict[str, Any]] = []
+        current_tokens = 0
+        current_start_idx = 0
+        current_kind = "content"
+
+        for idx, paragraph in enumerate(paragraphs):
+            text = paragraph.get("text", "")
+            if not text:
+                continue
+            marker_type, _marker_value = self._detect_legal_marker(text)
+            is_new_block = bool(current_block) and marker_type in {
+                "heading",
+                "artigo",
+                "paragrafo",
+                "inciso",
+            }
+
+            if is_new_block:
+                blocks.append(
+                    {
+                        "paragraphs": current_block,
+                        "token_count": current_tokens,
+                        "start_idx": current_start_idx,
+                        "kind": current_kind,
+                    }
+                )
+                current_block = []
+                current_tokens = 0
+                current_start_idx = idx
+
+            if not current_block:
+                current_start_idx = idx
+                current_kind = marker_type or "content"
+
+            current_block.append(paragraph)
+            current_tokens += self._estimate_tokens(text)
+
+        if current_block:
+            blocks.append(
+                {
+                    "paragraphs": current_block,
+                    "token_count": current_tokens,
+                    "start_idx": current_start_idx,
+                    "kind": current_kind,
+                }
+            )
+
+        return blocks
+
+    def _detect_legal_marker(self, text: str) -> tuple[str, str | None]:
+        """Detect legal structure marker at paragraph start."""
+        stripped = text.strip()
+        if not stripped:
+            return "content", None
+
+        artigo_match = self._ARTIGO_RE.match(stripped)
+        if artigo_match:
+            return "artigo", artigo_match.group(1)
+
+        paragrafo_match = self._PARAGRAFO_RE.match(stripped)
+        if paragrafo_match:
+            value = paragrafo_match.group(1) or paragrafo_match.group(2)
+            normalized = str(value).lower() if value else None
+            return "paragrafo", normalized
+
+        inciso_match = self._INCISO_RE.match(stripped)
+        if inciso_match:
+            return "inciso", inciso_match.group(1).upper()
+
+        alinea_match = self._ALINEA_RE.match(stripped)
+        if alinea_match:
+            return "alinea", alinea_match.group(1).lower()
+
+        return "content", None
+
+    def _build_normative_hierarchy(self, context: dict[str, Any]) -> list[str]:
+        """Build normalized hierarchy path for chunk metadata."""
+        hierarchy: list[str] = []
+        if context.get("titulo"):
+            hierarchy.append(f"titulo:{context['titulo']}")
+        if context.get("capitulo"):
+            hierarchy.append(f"capitulo:{context['capitulo']}")
+        if context.get("secao"):
+            hierarchy.append(f"secao:{context['secao']}")
+        if context.get("artigo"):
+            hierarchy.append(f"artigo:{context['artigo']}")
+        if context.get("paragrafo"):
+            hierarchy.append(f"paragrafo:{context['paragrafo']}")
+        if context.get("inciso"):
+            hierarchy.append(f"inciso:{context['inciso']}")
+        return hierarchy
+
+    def _get_paragraph_index(
+        self, paragraphs: list[dict[str, Any]], paragraph: dict[str, Any]
+    ) -> int:
+        """Resolve paragraph index preserving first-match semantics."""
+        for idx, candidate in enumerate(paragraphs):
+            if candidate is paragraph:
+                return idx
+        return 0
 
     def _generate_chunk_id(self, document_name: str, seq: int) -> str:
         """
