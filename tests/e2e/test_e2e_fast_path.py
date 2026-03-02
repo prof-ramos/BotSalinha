@@ -8,10 +8,8 @@ from contextlib import suppress
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.agent import AgentWrapper
-from src.rag import RAGContext, SemanticCache
+from src.rag import RAGContext
 from src.rag.models import Chunk, ChunkMetadata, ConfiancaLevel
 
 
@@ -24,9 +22,8 @@ class TestFastPathE2E:
     @pytest.mark.asyncio
     async def test_fast_path_cache_hit_skips_history_load(
         self,
+        agent_with_fast_path,  # noqa: ARG001 (unused fixture - needed for setup)
         prod_rag_query_service,  # noqa: ARG001 (unused fixture - needed for setup)
-        prod_db_session: AsyncSession,
-        monkeypatch,  # noqa: ARG001 (unused fixture - needed for setup)
     ) -> None:
         """
         Verify that conversation history is NOT loaded on cache hit.
@@ -36,22 +33,9 @@ class TestFastPathE2E:
         should be skipped entirely.
         """
         from src.config.settings import get_settings
-        from src.storage.sqlite_repository import SQLiteRepository
 
-        # Setup repository with production database
-        repository = SQLiteRepository("sqlite+aiosqlite:///data/botsalinha.db")
-        await repository.initialize_database()
-
-        # Create semantic cache with default TTL
-        cache = SemanticCache(max_memory_mb=50, default_ttl_seconds=86400)
-
-        # Create AgentWrapper with cache enabled
-        agent = AgentWrapper(
-            repository=repository,
-            db_session=prod_db_session,
-            semantic_cache=cache,
-            enable_rag=True,
-        )
+        agent, cache = agent_with_fast_path
+        repository = agent.repository
 
         # Create a minimal RAG context for caching
         test_rag_context = RAGContext(
@@ -111,14 +95,13 @@ class TestFastPathE2E:
             # CRITICAL: Verify get_conversation_history was NOT called (Fast Path)
             mock_history.assert_not_called()
 
-        await repository.close()
+        # Teardown verification: repository.close() called by fixture context manager
 
     @pytest.mark.asyncio
     async def test_fast_path_cache_miss_loads_history(
         self,
+        agent_with_fast_path,  # noqa: ARG001 (unused fixture - needed for setup)
         prod_rag_query_service,  # noqa: ARG001 (unused fixture - needed for setup)
-        prod_db_session: AsyncSession,
-        monkeypatch,  # noqa: ARG001 (unused fixture - needed for setup)
     ) -> None:
         """
         Verify that conversation history IS loaded on cache miss.
@@ -126,22 +109,8 @@ class TestFastPathE2E:
         This test validates the Slow Path: when no cached response exists,
         get_conversation_history should be called normally.
         """
-        from src.storage.sqlite_repository import SQLiteRepository
-
-        # Setup repository with production database
-        repository = SQLiteRepository("sqlite+aiosqlite:///data/botsalinha.db")
-        await repository.initialize_database()
-
-        # Create semantic cache (empty - will miss)
-        cache = SemanticCache(max_memory_mb=50, default_ttl_seconds=86400)
-
-        # Create AgentWrapper with cache enabled
-        agent = AgentWrapper(
-            repository=repository,
-            db_session=prod_db_session,
-            semantic_cache=cache,
-            enable_rag=True,
-        )
+        agent, cache = agent_with_fast_path
+        repository = agent.repository
 
         # Mock get_conversation_history to verify it's called
         with patch.object(
@@ -158,14 +127,13 @@ class TestFastPathE2E:
             # CRITICAL: Verify get_conversation_history WAS called (Slow Path)
             mock_history.assert_called_once()
 
-        await repository.close()
+        # Teardown verification: repository.close() called by fixture context manager
 
     @pytest.mark.asyncio
     async def test_fast_path_latency_slo_cache_hit(
         self,
+        agent_with_fast_path,  # noqa: ARG001 (unused fixture - needed for setup)
         prod_rag_query_service,  # noqa: ARG001 (unused fixture - needed for setup)
-        prod_db_session: AsyncSession,
-        monkeypatch,  # noqa: ARG001 (unused fixture - needed for setup)
     ) -> None:
         """
         Verify that cache hit latency is ≤100ms (Fast Path SLO).
@@ -176,22 +144,8 @@ class TestFastPathE2E:
         NO database calls or LLM generation.
         """
         from src.config.settings import get_settings
-        from src.storage.sqlite_repository import SQLiteRepository
 
-        # Setup repository with production database
-        repository = SQLiteRepository("sqlite+aiosqlite:///data/botsalinha.db")
-        await repository.initialize_database()
-
-        # Create semantic cache
-        cache = SemanticCache(max_memory_mb=50, default_ttl_seconds=86400)
-
-        # Create AgentWrapper with cache enabled
-        agent = AgentWrapper(
-            repository=repository,
-            db_session=prod_db_session,
-            semantic_cache=cache,
-            enable_rag=True,
-        )
+        agent, cache = agent_with_fast_path
 
         # Create and populate cache entry
         test_rag_context = RAGContext(
@@ -231,14 +185,13 @@ class TestFastPathE2E:
         # Verify SLO: cache hit should be ≤100ms
         assert latency_ms <= 100, f"Cache hit latency {latency_ms:.2f}ms exceeds 100ms SLO"
 
-        await repository.close()
+        # Teardown verification: repository.close() called by fixture context manager
 
     @pytest.mark.asyncio
     async def test_fast_path_multiple_cache_hits(
         self,
+        agent_with_fast_path,  # noqa: ARG001 (unused fixture - needed for setup)
         prod_rag_query_service,  # noqa: ARG001 (unused fixture - needed for setup)
-        prod_db_session: AsyncSession,
-        monkeypatch,  # noqa: ARG001 (unused fixture - needed for setup)
     ) -> None:
         """
         Verify that multiple consecutive cache hits all meet latency SLO.
@@ -247,22 +200,8 @@ class TestFastPathE2E:
         identical queries and that Fast Path performance is consistent.
         """
         from src.config.settings import get_settings
-        from src.storage.sqlite_repository import SQLiteRepository
 
-        # Setup repository with production database
-        repository = SQLiteRepository("sqlite+aiosqlite:///data/botsalinha.db")
-        await repository.initialize_database()
-
-        # Create semantic cache
-        cache = SemanticCache(max_memory_mb=50, default_ttl_seconds=86400)
-
-        # Create AgentWrapper with cache enabled
-        agent = AgentWrapper(
-            repository=repository,
-            db_session=prod_db_session,
-            semantic_cache=cache,
-            enable_rag=True,
-        )
+        agent, cache = agent_with_fast_path
 
         # Create and populate cache entry
         test_rag_context = RAGContext(
@@ -309,14 +248,13 @@ class TestFastPathE2E:
         max_latency = max(latencies)
         assert max_latency <= 100, f"Max cache hit latency {max_latency:.2f}ms exceeds 100ms SLO"
 
-        await repository.close()
+        # Teardown verification: repository.close() called by fixture context manager
 
     @pytest.mark.asyncio
     async def test_fast_path_cache_invalidation(
         self,
+        agent_with_fast_path,  # noqa: ARG001 (unused fixture - needed for setup)
         prod_rag_query_service,  # noqa: ARG001 (unused fixture - needed for setup)
-        prod_db_session: AsyncSession,
-        monkeypatch,  # noqa: ARG001 (unused fixture - needed for setup)
     ) -> None:
         """
         Verify cache entry expiration behavior.
@@ -326,22 +264,9 @@ class TestFastPathE2E:
         2. After expiration, the next call follows Slow Path (loads history)
         """
         from src.config.settings import get_settings
-        from src.storage.sqlite_repository import SQLiteRepository
 
-        # Setup repository with production database
-        repository = SQLiteRepository("sqlite+aiosqlite:///data/botsalinha.db")
-        await repository.initialize_database()
-
-        # Create semantic cache with very short TTL (1 second)
-        cache = SemanticCache(max_memory_mb=50, default_ttl_seconds=1)
-
-        # Create AgentWrapper with cache enabled
-        agent = AgentWrapper(
-            repository=repository,
-            db_session=prod_db_session,
-            semantic_cache=cache,
-            enable_rag=True,
-        )
+        agent, cache = agent_with_fast_path
+        repository = agent.repository
 
         # Create and populate cache entry with short TTL
         test_rag_context = RAGContext(
@@ -403,4 +328,4 @@ class TestFastPathE2E:
             # CRITICAL: After expiration, should load history (Slow Path)
             mock_history.assert_called_once()
 
-        await repository.close()
+        # Teardown verification: repository.close() called by fixture context manager
