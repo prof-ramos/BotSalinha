@@ -1,13 +1,16 @@
-# CLAUDE.md — BotSalinha
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-BotSalinha is a Discord bot specialized in **Brazilian law and public contest preparation (concursos públicos)**, powered by Google Gemini 2.5 Flash Lite via the [Agno](https://github.com/agno-agi/agno) AI agent framework. It provides contextual conversations with persistent history, per-user rate limiting, and structured logging.
+BotSalinha is a Discord bot specialized in **Brazilian law and public contest preparation (concursos públicos)**. It provides contextual conversations with persistent history, per-user rate limiting, RAG (Retrieval-Augmented Generation), and structured logging.
 
 - **Language:** Python 3.12+
-- **Framework:** discord.py + Agno
-- **AI Backend:** Google Gemini 2.5 Flash Lite (via `google-genai`)
-- **Database:** SQLite via SQLAlchemy async ORM + Alembic migrations
+- **Framework:** discord.py + [Agno](https://github.com/agno-agi/agno) AI agent framework
+- **AI Backend:** Multi-model support (OpenAI default, Google Gemini alternative)
+- **Database:** SQLite via SQLAlchemy async ORM (Supabase optional)
+- **RAG:** Document + codebase ingestion with vector search
 - **Package Manager:** `uv`
 
 ---
@@ -34,15 +37,25 @@ BotSalinha/
 │   │   ├── settings.py           # Pydantic Settings (env vars with BOTSALINHA_ prefix)
 │   │   └── yaml_config.py        # YAML config loader with Pydantic validation
 │   ├── core/
-│   │   ├── agent.py              # Agno AgentWrapper — generates AI responses
+│   │   ├── agent.py              # Agno AgentWrapper — generates AI responses with RAG
+│   │   ├── cli.py                # Interactive CLI chat mode
 │   │   ├── discord.py            # BotSalinhaBot — Discord commands and events
 │   │   └── lifecycle.py          # Startup/shutdown lifecycle and signal handling
 │   ├── models/
 │   │   ├── conversation.py       # ConversationORM + Pydantic schemas
-│   │   └── message.py            # MessageORM + Pydantic schemas
+│   │   ├── message.py            # MessageORM + Pydantic schemas
+│   │   └── rag_models.py         # RAG DocumentORM, ChunkORM models
+│   ├── rag/                      # RAG (Retrieval-Augmented Generation) module
+│   │   ├── parser/               # Document parsers (DOCX, XML, code chunking)
+│   │   ├── services/             # RAG services (query, ingestion, embeddings)
+│   │   ├── storage/              # Vector store and RAG repository
+│   │   └── utils/                # RAG utilities (confidence, metadata, ranking)
 │   ├── storage/
+│   │   ├── factory.py            # Repository factory (DI pattern)
 │   │   ├── repository.py         # Abstract repository interfaces
-│   │   └── sqlite_repository.py  # SQLite implementation (async SQLAlchemy)
+│   │   ├── sqlite_repository.py  # SQLite implementation (default)
+│   │   └── supabase_repository.py # Supabase implementation (optional)
+│   ├── tools/                    # Integrations (MCP manager, etc.)
 │   ├── middleware/
 │   │   └── rate_limiter.py       # Token bucket rate limiter (per-user/per-guild)
 │   └── utils/
@@ -157,6 +170,25 @@ uv run alembic upgrade head
 uv run alembic downgrade -1
 ```
 
+### RAG (Retrieval-Augmented Generation)
+
+```bash
+# Ingest single document
+uv run python scripts/ingest_rag.py data/documents/doc.docx --replace
+
+# Ingest entire codebase (requires Repomix XML output)
+uv run python scripts/ingest_codebase_rag.py repomix_output.xml --replace
+
+# Ingest all documents from data/documents/
+uv run python scripts/ingest_all_rag.py --replace
+
+# Test RAG query
+uv run python scripts/test_rag_query.py "pergunta sobre direito"
+
+# Analyze RAG quality
+uv run python scripts/analizar_qualidade_rag.py
+```
+
 ### Database Backup
 
 ```bash
@@ -187,6 +219,22 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
+### RAG Scripts (scripts/)
+
+```bash
+# Document ingestion
+uv run python scripts/ingest_rag.py <file.docx> --replace
+uv run python scripts/ingest_all_rag.py --replace
+
+# Codebase ingestion (requires Repomix XML)
+uv run python scripts/ingest_codebase_rag.py <repomix.xml> --replace
+
+# Testing and analysis
+uv run python scripts/test_rag_query.py "query text"
+uv run python scripts/analizar_qualidade_rag.py
+uv run python scripts/gerar_relatorio_rag.py
+```
+
 ---
 
 ## Environment Configuration
@@ -212,6 +260,22 @@ All env vars use the `BOTSALINHA_` prefix. Nested configs use double underscores
 
 ## Architecture
 
+### Multi-Model AI Support
+
+BotSalinha supports multiple AI providers via Agno framework. Provider selection is configured in `config.yaml`:
+
+```yaml
+model:
+  provider: openai  # Options: openai (default), google
+  id: gpt-4o-mini     # OpenAI: gpt-4o-mini, Google: gemini-2.5-flash-lite
+```
+
+Environment variables (`.env`):
+- `BOTSALINHA_OPENAI__API_KEY` - Required for OpenAI provider
+- `BOTSALINHA_GOOGLE__API_KEY` - Required for Google provider
+
+The `AgentWrapper` (`src/core/agent.py`) dynamically instantiates the appropriate model class based on `config.yaml`.
+
 ### Layered Architecture
 
 ```
@@ -219,20 +283,38 @@ Discord Commands (BotSalinhaBot)
          ↓
 Middleware (RateLimiter — token bucket per user/guild)
          ↓
-Service Layer (AgentWrapper — Agno + Gemini)
+Service Layer (AgentWrapper — Agno + Multi-model AI + RAG)
+         ↓
+RAG Layer (QueryService → EmbeddingService → VectorStore)
          ↓
 Data Access Layer (Repository Pattern — abstract interfaces)
          ↓
-Database Layer (SQLite via SQLAlchemy async ORM)
+Database Layer (SQLite default, Supabase optional)
 ```
+
+### RAG (Retrieval-Augmented Generation)
+
+BotSalinha implements a complete RAG pipeline in `src/rag/`:
+
+**Components:**
+- **Parsers** (`src/rag/parser/`): DOCX, XML (Repomix), code chunking
+- **Services** (`src/rag/services/`): Query, Ingestion (documents + codebase), Embeddings (OpenAI)
+- **Storage** (`src/rag/storage/`): Vector store with cosine similarity
+- **Utils** (`src/rag/utils/`): Confidence calculator, metadata extraction, retrieval ranking
+
+**Flow:**
+1. Document ingestion → Chunking → Embedding → SQLite storage
+2. Query → Embedding → Vector search → Context injection → AI response
+
+**Confidence Levels:** `ALTA`, `MEDIA`, `BAIXA`, `SEM_RAG` (based on similarity scores)
 
 ### Key Design Patterns
 
-- **Repository Pattern:** `ConversationRepository` and `MessageRepository` are abstract interfaces in `src/storage/repository.py`. The only concrete implementation is `SQLiteRepository` in `src/storage/sqlite_repository.py`. Tests use an in-memory SQLite database.
-- **Pydantic Settings:** `src/config/settings.py` uses `pydantic-settings` with `@lru_cache` for a singleton. Never call `Settings()` directly; use `get_settings()`.
+- **Repository Pattern with Factory:** `src/storage/factory.py` provides `create_repository()` context manager that returns `SQLiteRepository` or `SupabaseRepository` based on settings. **Always use this pattern** for database access — never instantiate repositories directly.
+- **Pydantic Settings:** `src/config/settings.py` uses `pydantic-settings` with `@lru_cache` for a singleton. Never call `Settings()` directly; use `get_settings()` or the `settings` instance.
 - **YAML Config:** Agent and model settings live in `config.yaml`, parsed by `src/config/yaml_config.py` with Pydantic validation. The active prompt file is specified here (`prompt_v1.md` by default).
 - **Async Throughout:** All I/O-bound operations use `async/await`. Never call blocking functions from async context.
-- **Dependency Injection:** The repository is instantiated at startup and injected into `AgentWrapper` and `BotSalinhaBot`.
+- **Dependency Injection:** Use `create_repository()` factory for database access. The repository is injected into `AgentWrapper` and `BotSalinhaBot`.
 
 ---
 
@@ -401,49 +483,20 @@ To switch prompts, update `config.yaml` → `prompt.file`.
 
 ---
 
-## Common Development Tasks
-
-### Adding a New Discord Command
-
-1. Open `src/core/discord.py`.
-2. Add a new method decorated with `@commands.command(name="mycommand")`.
-3. Apply rate limiting via the existing `rate_limiter` check pattern.
-4. Add corresponding unit tests in `tests/unit/`.
-
-### Adding a New Configuration Option
-
-1. Add the field to the appropriate nested config class in `src/config/settings.py`.
-2. Add the env variable to `.env.example` with a description and default.
-3. Update this CLAUDE.md environment table if needed.
-
-### Adding a New Database Model
-
-1. Create the ORM model (inheriting from `Base`) and Pydantic schemas in `src/models/`.
-2. Add abstract methods to `src/storage/repository.py`.
-3. Implement the methods in `src/storage/sqlite_repository.py`.
-4. Generate a migration: `uv run alembic revision --autogenerate -m "add_my_model"`.
-5. Apply: `uv run alembic upgrade head`.
-
-### Running the Bot Locally (without Discord)
-
-```bash
-cp .env.example .env
-# Edit .env with your GOOGLE API key (DISCORD token not needed for CLI mode)
-uv sync
-uv run bot.py --chat
-```
-
----
-
 ## Important Files to Know
 
 | File | Why it matters |
 |---|---|
-| `src/config/settings.py` | All configuration with defaults and validation |
+| `src/config/settings.py` | All configuration with defaults and validation (Pydantic Settings singleton) |
+| `src/config/yaml_config.py` | Agent/model configuration (provider selection, prompt file, parameters) |
+| `src/core/agent.py` | AI response generation with RAG integration and multi-model support |
 | `src/core/discord.py` | All bot commands and Discord event handlers |
-| `src/core/agent.py` | AI response generation and conversation history |
-| `src/storage/sqlite_repository.py` | All database operations |
+| `src/rag/` | Complete RAG implementation (parsers, services, storage, utils) |
+| `src/storage/factory.py` | Repository factory for DI pattern — **use this for database access** |
+| `src/storage/repository.py` | Abstract repository interfaces |
+| `src/storage/sqlite_repository.py` | SQLite implementation (default database) |
 | `src/utils/errors.py` | Exception hierarchy — use these, don't use bare exceptions |
-| `config.yaml` | Model provider, prompt file, agent behavior flags |
-| `tests/conftest.py` | All shared test fixtures |
+| `config.yaml` | Model provider selection (openai/google), prompt file, agent behavior |
 | `.env.example` | Canonical list of all supported environment variables |
+| `docs/architecture.md` | Comprehensive system architecture documentation |
+| `docs/CODE_DOCUMENTATION.md` | Detailed module-by-module technical documentation |
