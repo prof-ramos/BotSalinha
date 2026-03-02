@@ -7,10 +7,14 @@ import time
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config.settings import get_settings
-from src.rag import QueryService, VectorStore, ConfiancaCalculator
-from src.rag.services.embedding_service import EmbeddingService
+from metricas.baseline_retrieval import RetrievalBenchmarkCase
+from metricas.integrated_evaluation import (
+    IntegratedSLOs,
+    compare_baseline_candidate,
+    evaluate_integrated_case,
+)
 from src.models.rag_models import ChunkORM, DocumentORM
+from src.rag import ConfiancaCalculator, QueryService, VectorStore
 from src.rag.models import Chunk, ChunkMetadata
 
 
@@ -20,6 +24,17 @@ from src.rag.models import Chunk, ChunkMetadata
 class TestRAGSearchE2E:
     """End-to-end tests for RAG search."""
 
+    @staticmethod
+    def _make_chunk(*, doc: str, artigo: str, texto: str) -> Chunk:
+        return Chunk(
+            chunk_id=f"chunk-{doc}-{artigo}",
+            documento_id=1,
+            texto=texto,
+            metadados=ChunkMetadata(documento=doc, artigo=artigo),
+            token_count=120,
+            posicao_documento=0.1,
+        )
+
     @pytest.mark.asyncio
     async def test_simple_search_returns_results(
         self,
@@ -28,7 +43,7 @@ class TestRAGSearchE2E:
     ) -> None:
         """Test that a simple search returns relevant chunks."""
         # Check if documents are indexed
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -65,7 +80,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test search with document filter."""
-        from sqlalchemy import select, func
+        from sqlalchemy import select
 
         # Get a document ID
         doc_stmt = select(DocumentORM).limit(1)
@@ -111,7 +126,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test that search completes within acceptable latency."""
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -131,7 +146,7 @@ class TestRAGSearchE2E:
         latencies: list[float] = []
         for query in queries:
             start_time = time.time()
-            context = await rag_query_service.query(query_text=query, top_k=5)
+            await rag_query_service.query(query_text=query, top_k=5)
             latency = time.time() - start_time
             latencies.append(latency)
 
@@ -147,7 +162,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test that RAG context has proper structure."""
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -188,7 +203,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test confidence calculation for different queries."""
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -226,7 +241,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test VectorStore direct retrieval."""
-        from sqlalchemy import select, func
+        from sqlalchemy import select
 
         # Get a chunk with embedding
         chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
@@ -256,7 +271,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test QueryService query_by_tipo method."""
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -283,7 +298,7 @@ class TestRAGSearchE2E:
         db_session: AsyncSession,
     ) -> None:
         """Test prompt augmentation with RAG context."""
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         chunk_count_stmt = select(func.count(ChunkORM.id))
         chunk_result = await db_session.execute(chunk_count_stmt)
@@ -311,3 +326,59 @@ class TestRAGSearchE2E:
         if context.chunks_usados:
             assert len(aug_text) > 0
             assert "CONTEXTO JURÍDICO" in aug_text or "SEM RAG" in aug_text
+
+    def test_integrated_baseline_candidate_with_slos(self) -> None:
+        """Valida avaliação integrada baseline/candidato com SLOs operacionais."""
+        case = RetrievalBenchmarkCase(
+            case_id="integrated_e2e_1",
+            tipo="artigo",
+            query="O que diz o Art. 5 da CF/88?",
+            expected_doc="CF/88",
+            expected_artigo="5",
+            expected_keywords=("direitos",),
+        )
+
+        retrieved = [
+            self._make_chunk(doc="CF/88", artigo="5", texto="Art. 5 direitos e garantias fundamentais."),
+        ]
+
+        baseline = evaluate_integrated_case(
+            case=case,
+            retrieved_chunks=retrieved,
+            response_text="Não tenho base suficiente para responder com segurança.",
+            latency_s=0.62,
+            variant="baseline",
+            context_tokens=180,
+        )
+        candidate = evaluate_integrated_case(
+            case=case,
+            retrieved_chunks=retrieved,
+            response_text=(
+                "Com base na CF/88, Art. 5, os direitos fundamentais protegem "
+                "liberdade e igualdade. Fonte: CF/88, Art. 5."
+            ),
+            latency_s=0.34,
+            variant="candidate",
+            context_tokens=180,
+        )
+
+        slos = IntegratedSLOs(
+            min_recall_at_5=0.8,
+            min_response_citation_correct_rate=0.7,
+            min_normative_coverage=0.5,
+            max_p95_latency_s=0.8,
+            max_cost_per_query_usd=0.01,
+            max_timeout_rate=0.05,
+            max_error_rate=0.05,
+        )
+
+        comparison = compare_baseline_candidate(
+            baseline_results=[baseline],
+            candidate_results=[candidate],
+            slos=slos,
+        )
+
+        assert comparison["candidate_beats_baseline"] is True
+        assert comparison["slos"]["all_pass"] is True
+        assert comparison["deltas"]["response_citation_correct_rate"] > 0.0
+        assert comparison["deltas"]["sem_base_rate"] < 0.0

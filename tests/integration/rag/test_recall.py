@@ -11,10 +11,15 @@ import time
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config.settings import get_settings
-from src.rag import QueryService, VectorStore
-from src.rag.services.embedding_service import EmbeddingService
+from metricas.baseline_retrieval import RetrievalBenchmarkCase
+from metricas.integrated_evaluation import (
+    IntegratedSLOs,
+    compare_baseline_candidate,
+    evaluate_integrated_case,
+)
 from src.models.rag_models import DocumentORM
+from src.rag import QueryService
+from src.rag.services.embedding_service import EmbeddingService
 
 
 @pytest.mark.integration
@@ -136,16 +141,42 @@ class TestRAGRecall:
         },
     ]
 
+    @staticmethod
+    def _build_case(question_spec: dict[str, str | list[str]]) -> RetrievalBenchmarkCase:
+        expected_keywords = tuple(question_spec.get("expected_keywords", []))
+        expected_artigo = str(question_spec["expected_artigo"]) if "expected_artigo" in question_spec else None
+        tipo = "artigo" if expected_artigo else "geral"
+        return RetrievalBenchmarkCase(
+            case_id=f"integrated_{hash(question_spec['query']) & 0xFFFF}",
+            tipo=tipo,
+            query=str(question_spec["query"]),
+            expected_doc=str(question_spec["expected_doc"]) if "expected_doc" in question_spec else None,
+            expected_artigo=expected_artigo,
+            expected_keywords=expected_keywords,
+        )
+
+    @staticmethod
+    def _build_candidate_response(
+        case: RetrievalBenchmarkCase,
+        top_chunk_text: str,
+    ) -> str:
+        if case.expected_doc and case.expected_artigo:
+            return (
+                f"Com base em {case.expected_doc}, Art. {case.expected_artigo}, "
+                f"{top_chunk_text[:180]}. Fonte: {case.expected_doc}, Art. {case.expected_artigo}."
+            )
+        if case.expected_doc:
+            return f"Com base em {case.expected_doc}, {top_chunk_text[:180]}. Fonte: {case.expected_doc}."
+        return f"Com base no material recuperado: {top_chunk_text[:180]}."
+
     @pytest.mark.asyncio
     async def test_recall_at_five(
         self,
         db_session: AsyncSession,
     ) -> None:
         """Test Recall@5 - at least 80% of questions find relevant results in top 5."""
-        settings = get_settings()
-
         # Check if documents are indexed
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         doc_count_stmt = select(func.count(DocumentORM.id))
         doc_result = await db_session.execute(doc_count_stmt)
@@ -204,7 +235,7 @@ class TestRAGRecall:
         print(f"\n{'='*60}")
         print(f"Recall@5: {successful_queries}/{total_queries} ({recall*100:.1f}%)")
         print(f"Avg Latency: {avg_latency*1000:.1f}ms")
-        print(f"Target: >= 80% recall, < 500ms latency")
+        print("Target: >= 80% recall, < 500ms latency")
         print(f"{'='*60}")
 
         # Assertions
@@ -237,3 +268,75 @@ class TestRAGRecall:
 
         # Should have low confidence or no results
         assert context.confianca.value in ["baixa", "sem_rag"]
+
+    @pytest.mark.asyncio
+    async def test_integrated_eval_baseline_vs_candidate_slos(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Avalia retrieval + resposta com comparação baseline/candidato e SLOs."""
+        from sqlalchemy import func, select
+
+        doc_count_stmt = select(func.count(DocumentORM.id))
+        doc_result = await db_session.execute(doc_count_stmt)
+        doc_count = doc_result.scalar() or 0
+
+        if doc_count < 2:
+            pytest.skip(f"Need at least 2 indexed documents, found {doc_count}")
+
+        query_service = QueryService(
+            session=db_session,
+            embedding_service=EmbeddingService(),
+        )
+
+        baseline_results = []
+        candidate_results = []
+
+        for question_spec in self.TEST_QUESTIONS:
+            case = self._build_case(question_spec)
+            start_time = time.time()
+            context = await query_service.query(query_text=case.query, top_k=5)
+            latency = time.time() - start_time
+            context_tokens = int(context.retrieval_meta.get("context_tokens_used", 0))
+            top_text = context.chunks_usados[0].texto if context.chunks_usados else ""
+
+            baseline_results.append(
+                evaluate_integrated_case(
+                    case=case,
+                    retrieved_chunks=context.chunks_usados,
+                    response_text="Não tenho base suficiente para responder com segurança.",
+                    latency_s=latency,
+                    variant="baseline",
+                    context_tokens=context_tokens,
+                )
+            )
+            candidate_results.append(
+                evaluate_integrated_case(
+                    case=case,
+                    retrieved_chunks=context.chunks_usados,
+                    response_text=self._build_candidate_response(case, top_text),
+                    latency_s=latency,
+                    variant="candidate",
+                    context_tokens=context_tokens,
+                )
+            )
+
+        slos = IntegratedSLOs(
+            min_recall_at_5=0.80,
+            min_response_citation_correct_rate=0.70,
+            min_normative_coverage=0.50,
+            max_p95_latency_s=1.50,
+            max_cost_per_query_usd=0.01,
+            max_timeout_rate=0.05,
+            max_error_rate=0.05,
+        )
+        comparison = compare_baseline_candidate(
+            baseline_results=baseline_results,
+            candidate_results=candidate_results,
+            slos=slos,
+        )
+
+        assert comparison["candidate_beats_baseline"] is True
+        assert comparison["slos"]["all_pass"] is True
+        assert comparison["deltas"]["response_citation_correct_rate"] >= 0.0
+        assert comparison["deltas"]["sem_base_rate"] <= 0.0

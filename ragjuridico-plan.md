@@ -199,11 +199,19 @@ T9 ─────────────────────┘
 - **location**: `tests/e2e/test_rag_search.py`, `tests/integration/rag/test_recall.py`, `metricas/`
 - **description**: Criar suíte de avaliação completa com métricas de retrieval e de resposta fundamentada (citação correta, cobertura normativa, taxa de “sem base”).
 - **validation**: Pipeline CI produz relatório comparando baseline e candidato; critérios mínimos de aprovação definidos com SLOs (`P95` latência, custo por consulta e taxa de timeout/erro).
-- **status**: Blocked (2026-03-02)
+- **status**: Completed (2026-03-02)
 - **log**:
-  - Task interrompida durante instabilidade de ambiente por saturação de descritores (`Too many open files (os error 24)`), sem entrega validada.
+  - Implementado módulo `metricas/integrated_evaluation.py` unificando avaliação de retrieval + resposta final, com métricas de:
+    - `Recall@5` e citação correta de retrieval;
+    - citação correta da resposta final, cobertura normativa e taxa de “sem base”;
+    - SLOs operacionais (`P95` latência, custo médio por consulta, taxa de timeout e erro).
+  - Implementada comparação baseline vs candidato com deltas e gate de aprovação (`candidate_beats_baseline` + `all_pass`).
+  - Adicionado teste E2E para validar comparação baseline/candidato e aplicação de SLOs com cenário sintético controlado.
+  - Adicionado teste de integração executando consultas reais de retrieval e avaliando baseline/candidato de resposta sobre o mesmo conjunto de queries.
 - **files edited/created**:
-  - N/A (sem entrega consolidada)
+  - `metricas/integrated_evaluation.py`
+  - `tests/e2e/test_rag_search.py`
+  - `tests/integration/rag/test_recall.py`
 
 ### T11: Operação, Comandos de Administração e Runbooks
 - **depends_on**: [T10]
