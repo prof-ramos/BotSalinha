@@ -18,7 +18,8 @@
 - [src/utils/]: Utilitários core, incluindo sistema de observabilidade (logs, sanitização, correlation ID)
 
 ## Documentação-Chave
-- [docs/architecture.md]: Visão geral da arquitetura (DI pattern, estado híbrido, logging)
+- [docs/architecture.md]: Arquitetura completa do sistema (DI pattern, estado híbrido, logging, RAG, MCP)
+- [docs/CODE_DOCUMENTATION.md]: Documentação técnica detalhada módulo a módulo (108k+ bytes)
 - [README.md]: Visão geral, quick start e configuração
 - [docs/api.md]: Referência dos comandos Discord e fluxos de API
 - [docs/cli.md]: Interface CLI para operações de dev/admin
@@ -26,7 +27,7 @@
 - [docs/deployment.md]: Guia de deploy via Docker
 - [docs/DEVELOPER_GUIDE.md]: Fluxo de desenvolvimento e contribuição
 - [docs/adr/ADR-001-multi-model-provider.md]: Decisão arquitetural do Roteador de Provider Multi-Model
-- [docs/plans/mcp-integration.md]: Plano ativo de integração MCP (Model Context Protocol)
+- [docs/plans/mcp-integration.md]: Plano de integração MCP (Model Context Protocol)
 - [CLAUDE.md] e [AGENTS.md]: Convenções do projeto para agentes IA e desenvolvimento
 
 ## Conceitos-Chave
@@ -38,8 +39,8 @@
 - **Persistência**: Histórico de interações em SQLite via SQLAlchemy async ORM
 - **Observabilidade e Logs**: Uso do `structlog` com decodificação em JSON, rotacionamento em `data/logs/`, tracking distribuído por `correlation_id` (ex: `20250227_143022_botsalinha_a1b2`) e logs sanitizados de PII/Chaves automáticos. Eventos padronizados em `PT-BR`.
 - **Modos de Interação**: Canal exclusivo de IA (config. via `CANAL_IA_ID`) e DMs automáticas via Discord.
-- **MCP (Model Context Protocol)**: Integração com ferramentas locais (arquivos, scripts) expandindo capacidades de contexto do LLM.
-- **Contrato RAG no Prompt**: Quando há augmentação, `src/core/agent.py` injeta bloco delimitado por `BLOCO_RAG_INICIO/FIM` com `RAG_STATUS` e fontes para reduzir alucinação.
+- **RAG (Retrieval-Augmented Generation)**: Sistema implementado com ingestão de codebase, chunking XML/metadata, e consulta híbrida (vetorial + keyword). Injeção no prompt via blocos `BLOCO_RAG_INICIO/FIM` com `RAG_STATUS` e fontes para reduzir alucinação.
+- **MCP (Model Context Protocol)**: Integração implementada com ferramentas locais (arquivos, scripts) expandindo capacidades de contexto do LLM.
 
 ## Padrões de Código
 - Banco de dados (Novo): SEMPRE usar `async with create_repository() as repo:`

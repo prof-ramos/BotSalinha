@@ -4,7 +4,8 @@ Este diretório concentra os documentos operacionais e técnicos do BotSalinha.
 
 ## Principais documentos
 
-- [docs/architecture.md](architecture.md): Visão geral da arquitetura
+- [docs/architecture.md](architecture.md): Arquitetura completa do sistema (1002 linhas, diagramas, glossário)
+- [docs/CODE_DOCUMENTATION.md](CODE_DOCUMENTATION.md): Documentação técnica módulo a módulo (2135 linhas, 99 diagramas, 66 exemplos)
 - [docs/api.md](api.md): Referência dos comandos Discord
 - [docs/deployment.md](deployment.md): Guia de deploy
 - [docs/operations.md](operations.md): Manual de operações e resposta a incidentes
