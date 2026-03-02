@@ -177,11 +177,22 @@ T9 ─────────────────────┘
 - **location**: `src/rag/services/ingestion_service.py`, `src/rag/services/code_ingestion_service.py`, `src/models/rag_models.py`, `migrations/versions/`
 - **description**: Trocar deduplicação por hash de caminho/nome para hash de conteúdo real (documento/chunk), com migração + backfill de legado (`hash` nulo/antigo), atualização incremental e reindex seletivo idempotente.
 - **validation**: Alterar conteúdo sem alterar path dispara re-embed apenas dos chunks afetados; sem duplicação incorreta; backfill mantém unicidade e reindex repetido não cria divergência.
-- **status**: Blocked (2026-03-02)
+- **status**: Completed (2026-03-02)
 - **log**:
-  - Não foi possível avançar: subagente reportou falha generalizada de execução (`Too many open files (os error 24)`), impedindo edição/validação/commit.
+  - Hash de documento migrado para conteúdo real do arquivo (`SHA-256` dos bytes), removendo dependência de nome/caminho.
+  - Adicionado `content_hash` por chunk (`rag_chunks`) com backfill de legado e índice dedicado.
+  - Migração aplica backfill de `rag_documents.content_hash` a partir da assinatura dos chunks (com resolução determinística de colisões para manter unicidade).
+  - `IngestionService` e `CodeIngestionService` passaram a usar refresh incremental idempotente:
+    - detectam documento inalterado e pulam re-embed;
+    - reaproveitam embeddings de chunks inalterados por hash de conteúdo;
+    - re-embedam somente chunks novos/alterados;
+    - mantêm backfill automático para hashes legados nulos.
+  - Reexecuções sucessivas com mesmo conteúdo não geram divergência nem custo adicional de embeddings.
 - **files edited/created**:
-  - N/A (sem alterações consolidadas)
+  - `src/rag/services/ingestion_service.py`
+  - `src/rag/services/code_ingestion_service.py`
+  - `src/models/rag_models.py`
+  - `migrations/versions/20260302_1800_refresh_content_hash_for_incremental_ingestion.py`
 
 ### T10: Avaliação Integrada (Retrieval + Resposta Final)
 - **depends_on**: [T1, T7, T8, T9]

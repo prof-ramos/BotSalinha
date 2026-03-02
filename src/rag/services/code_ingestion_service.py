@@ -8,11 +8,9 @@ from uuid import uuid4
 
 import structlog
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
 from sqlalchemy.exc import DatabaseError as SQLAlchemyDatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models.rag_models import ChunkORM, DocumentORM
 from ...utils.log_events import LogEvents
 from ..models import Chunk
 from ..parser.code_chunker import CodeChunkExtractor
@@ -116,7 +114,43 @@ class CodeIngestionService(IngestionService):
         )
 
         try:
-            # Step 1: Parse the XML file
+            # Step 1: Resolve target document by real XML content hash
+            content_hash = self._compute_document_content_hash(xml_file_path)
+            document_orm, is_unchanged = await self._resolve_document_for_ingestion(
+                document_name=document_name,
+                file_path=xml_file_path,
+                content_hash=content_hash,
+            )
+
+            if is_unchanged:
+                backfilled_chunks = await self._backfill_chunk_hashes(document_orm.id)
+                await self._session.commit()
+                await self._session.refresh(document_orm)
+                log.info(
+                    "rag_code_ingestion_progress",
+                    document=document_name,
+                    document_id=document_orm.id,
+                    stage="skipped_unchanged",
+                    backfilled_chunks=backfilled_chunks,
+                    event_name="rag_code_ingestion_progress",
+                )
+                document = DocumentResult(
+                    id=document_orm.id,
+                    nome=document_orm.nome,
+                    arquivo_origem=document_orm.arquivo_origem,
+                    content_hash=document_orm.content_hash,
+                    chunk_count=document_orm.chunk_count,
+                    token_count=document_orm.token_count,
+                )
+                return CodeIngestionResult(
+                    document=document,
+                    files_processed=0,
+                    chunks_created=document_orm.chunk_count,
+                    total_tokens=document_orm.token_count,
+                    estimated_cost_usd=0.0,
+                )
+
+            # Step 2: Parse the XML file
             parser = RepomixXMLParser(xml_file_path)
             parsed_files = await parser.parse()
 
@@ -138,30 +172,11 @@ class CodeIngestionService(IngestionService):
                 event_name="rag_code_ingestion_progress",
             )
 
-            # Step 2: Get or create DocumentORM (dedupe by content_hash)
-            content_hash = self._compute_document_content_hash(document_name, xml_file_path)
-            stmt = select(DocumentORM).where(DocumentORM.content_hash == content_hash)
-            result = await self._session.execute(stmt)
-            document_orm = result.scalar_one_or_none()
-
-            if document_orm is None:
-                document_orm = self._create_document_orm(document_name, xml_file_path)
-                self._session.add(document_orm)
-                # Flush to get the ID before creating chunks
-                await self._session.flush()
-                document_stage = "document_created"
-            else:
-                # Deletar chunks antigos antes de reutilizar
-                delete_stmt = delete(ChunkORM).where(ChunkORM.documento_id == document_orm.id)
-                await self._session.execute(delete_stmt)
-                await self._session.flush()
-                document_stage = "document_reused"
-
             log.info(
                 "rag_code_ingestion_progress",
                 document=document_name,
                 document_id=document_orm.id,
-                stage=document_stage,
+                stage="document_resolved",
                 content_hash=content_hash,
                 event_name="rag_code_ingestion_progress",
             )
@@ -191,19 +206,19 @@ class CodeIngestionService(IngestionService):
                 event_name="rag_code_ingestion_progress",
             )
 
-            # Step 4: Generate embeddings and create ChunkORMs
-            chunk_texts = [chunk.texto for chunk in chunks]
-            embeddings = await self._embedding_service.embed_batch(chunk_texts)
-
-            for chunk, embedding in zip(chunks, embeddings, strict=True):
-                chunk_orm = self._create_chunk_orm(chunk, embedding)
-                self._session.add(chunk_orm)
+            # Step 4: Incremental refresh with content hashes
+            refresh_stats = await self._sync_document_chunks_incrementally(
+                document_id=document_orm.id,
+                chunks=chunks,
+            )
 
             log.info(
                 "rag_code_ingestion_progress",
                 document=document_name,
                 stage="embeddings_generated",
-                embeddings_count=len(embeddings),
+                chunks_embedded=refresh_stats["embedded_chunks"],
+                chunks_reused=refresh_stats["reused_chunks"],
+                chunks_backfilled=refresh_stats["backfilled_hashes"],
                 event_name="rag_code_ingestion_progress",
             )
 
@@ -226,6 +241,9 @@ class CodeIngestionService(IngestionService):
                 chunk_count=document_orm.chunk_count,
                 token_count=document_orm.token_count,
                 estimated_cost_usd=round(estimated_cost, 4),
+                chunks_deleted=refresh_stats["deleted_chunks"],
+                chunks_embedded=refresh_stats["embedded_chunks"],
+                chunks_reused=refresh_stats["reused_chunks"],
                 stage="rag_code_ingestion_completed",
                 event_name="rag_code_ingestion_completed",
             )

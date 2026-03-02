@@ -72,6 +72,11 @@ class ChunkORM(Base):
     )
     texto: Mapped[str] = mapped_column(Text, nullable=False)
     metadados: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True, default=None

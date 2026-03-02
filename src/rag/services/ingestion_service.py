@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...models.rag_models import ChunkORM, DocumentORM
@@ -85,7 +87,36 @@ class IngestionService:
         )
 
         try:
-            # Step 1: Parse the document
+            # Step 1: Resolve document by real file content hash
+            document_content_hash = self._compute_document_content_hash(file_path)
+            document_orm, is_unchanged = await self._resolve_document_for_ingestion(
+                document_name=document_name,
+                file_path=file_path,
+                content_hash=document_content_hash,
+            )
+
+            if is_unchanged:
+                backfilled_chunks = await self._backfill_chunk_hashes(document_orm.id)
+                await self._session.commit()
+                await self._session.refresh(document_orm)
+                log.info(
+                    "rag_ingestion_progress",
+                    document=document_name,
+                    document_id=document_orm.id,
+                    stage="skipped_unchanged",
+                    backfilled_chunks=backfilled_chunks,
+                    event_name="rag_ingestion_progress",
+                )
+                return Document(
+                    id=document_orm.id,
+                    nome=document_orm.nome,
+                    arquivo_origem=document_orm.arquivo_origem,
+                    content_hash=document_orm.content_hash,
+                    chunk_count=document_orm.chunk_count,
+                    token_count=document_orm.token_count,
+                )
+
+            # Step 2: Parse the document
             parser = DOCXParser(file_path)
             parsed_doc = parser.parse()
 
@@ -107,18 +138,12 @@ class IngestionService:
                 event_name="rag_ingestion_progress",
             )
 
-            # Step 2: Create DocumentORM (first to get documento_id)
-            document_orm = self._create_document_orm(document_name, file_path)
-            self._session.add(document_orm)
-
-            # Flush to get the ID before creating chunks
-            await self._session.flush()
-
             log.info(
                 "rag_ingestion_progress",
                 document=document_name,
                 document_id=document_orm.id,
-                stage="document_created",
+                stage="document_resolved",
+                content_hash=document_content_hash,
                 event_name="rag_ingestion_progress",
             )
 
@@ -148,19 +173,18 @@ class IngestionService:
                 event_name="rag_ingestion_progress",
             )
 
-            # Step 4: Generate embeddings and create ChunkORMs
-            chunk_texts = [chunk.texto for chunk in chunks]
-            embeddings = await self._embedding_service.embed_batch(chunk_texts)
-
-            for chunk, embedding in zip(chunks, embeddings, strict=True):
-                chunk_orm = self._create_chunk_orm(chunk, embedding)
-                self._session.add(chunk_orm)
+            # Step 4: Incremental refresh with chunk content hashes
+            refresh_stats = await self._sync_document_chunks_incrementally(
+                document_id=document_orm.id,
+                chunks=chunks,
+            )
 
             log.info(
                 "rag_ingestion_progress",
                 document=document_name,
                 stage="embeddings_generated",
-                embeddings_count=len(embeddings),
+                chunks_embedded=refresh_stats["embedded_chunks"],
+                chunks_reused=refresh_stats["reused_chunks"],
                 event_name="rag_ingestion_progress",
             )
 
@@ -177,6 +201,10 @@ class IngestionService:
                 document_id=document_orm.id,
                 chunk_count=document_orm.chunk_count,
                 token_count=document_orm.token_count,
+                chunks_deleted=refresh_stats["deleted_chunks"],
+                chunks_embedded=refresh_stats["embedded_chunks"],
+                chunks_reused=refresh_stats["reused_chunks"],
+                chunks_backfilled=refresh_stats["backfilled_hashes"],
                 stage="rag_ingestion_completed",
                 event_name="rag_ingestion_completed",
             )
@@ -211,7 +239,163 @@ class IngestionService:
                 msg, details={"file_path": file_path, "document_name": document_name}
             ) from e
 
-    def _create_document_orm(self, document_name: str, file_path: str) -> DocumentORM:
+    async def _resolve_document_for_ingestion(
+        self,
+        document_name: str,
+        file_path: str,
+        content_hash: str,
+    ) -> tuple[DocumentORM, bool]:
+        """Resolve target document row for ingestion with legacy-safe deduplication."""
+        by_hash_stmt = select(DocumentORM).where(DocumentORM.content_hash == content_hash)
+        by_hash_result = await self._session.execute(by_hash_stmt)
+        document_by_hash = by_hash_result.scalar_one_or_none()
+
+        by_path_stmt = select(DocumentORM).where(DocumentORM.arquivo_origem == file_path)
+        by_path_result = await self._session.execute(by_path_stmt)
+        document_by_path = by_path_result.scalar_one_or_none()
+
+        if document_by_hash is not None:
+            if document_by_path is not None and document_by_path.id != document_by_hash.id:
+                await self._session.delete(document_by_path)
+                await self._session.flush()
+            document_by_hash.nome = document_name
+            document_by_hash.arquivo_origem = file_path
+            await self._session.flush()
+            return document_by_hash, document_by_hash.chunk_count > 0
+
+        if document_by_path is not None:
+            is_unchanged = (
+                document_by_path.content_hash == content_hash and document_by_path.chunk_count > 0
+            )
+            document_by_path.nome = document_name
+            document_by_path.content_hash = content_hash
+            await self._session.flush()
+            return document_by_path, is_unchanged
+
+        document_orm = self._create_document_orm(
+            document_name=document_name,
+            file_path=file_path,
+            content_hash=content_hash,
+        )
+        self._session.add(document_orm)
+        await self._session.flush()
+        return document_orm, False
+
+    async def _backfill_chunk_hashes(self, document_id: int) -> int:
+        """Backfill legacy chunk hashes for unchanged documents."""
+        stmt = select(ChunkORM).where(ChunkORM.documento_id == document_id)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        backfilled = 0
+        for row in rows:
+            if row.content_hash:
+                continue
+            row.content_hash = self._compute_chunk_content_hash(row.texto, row.metadados)
+            backfilled += 1
+        if backfilled > 0:
+            await self._session.flush()
+        return backfilled
+
+    async def _sync_document_chunks_incrementally(
+        self,
+        document_id: int,
+        chunks: list[Chunk],
+    ) -> dict[str, int]:
+        """
+        Sync chunks idempotently, embedding only content-changed chunks.
+
+        Strategy:
+        - Build reusable embedding pool from existing chunk content hashes.
+        - Backfill legacy rows with missing chunk hash.
+        - Rebuild chunk rows for the document with deterministic hash metadata.
+        """
+        existing_stmt = select(ChunkORM).where(ChunkORM.documento_id == document_id)
+        existing_chunks = (await self._session.execute(existing_stmt)).scalars().all()
+
+        reusable_embeddings: dict[str, list[bytes | None]] = defaultdict(list)
+        backfilled_hashes = 0
+        for existing_chunk in existing_chunks:
+            chunk_hash = existing_chunk.content_hash
+            if not chunk_hash:
+                chunk_hash = self._compute_chunk_content_hash(
+                    existing_chunk.texto,
+                    existing_chunk.metadados,
+                )
+                existing_chunk.content_hash = chunk_hash
+                backfilled_hashes += 1
+            reusable_embeddings[chunk_hash].append(existing_chunk.embedding)
+
+        new_chunk_hashes: list[str] = []
+        new_metadata_payloads: list[str] = []
+        embedding_blobs: list[bytes | None] = [None] * len(chunks)
+        pending_embed_indexes: list[int] = []
+        pending_embed_texts: list[str] = []
+        reused_chunks = 0
+
+        for index, chunk in enumerate(chunks):
+            metadata_payload = chunk.metadados.model_dump_json()
+            chunk_hash = self._compute_chunk_content_hash(chunk.texto, metadata_payload)
+            new_chunk_hashes.append(chunk_hash)
+            new_metadata_payloads.append(metadata_payload)
+
+            candidate_pool = reusable_embeddings.get(chunk_hash, [])
+            reused_embedding = None
+            while candidate_pool:
+                candidate = candidate_pool.pop()
+                if candidate is not None:
+                    reused_embedding = candidate
+                    break
+
+            if reused_embedding is not None:
+                embedding_blobs[index] = reused_embedding
+                reused_chunks += 1
+            else:
+                pending_embed_indexes.append(index)
+                pending_embed_texts.append(chunk.texto)
+
+        if pending_embed_texts:
+            generated_embeddings = await self._embedding_service.embed_batch(pending_embed_texts)
+            for chunk_index, embedding in zip(
+                pending_embed_indexes, generated_embeddings, strict=True
+            ):
+                if len(embedding) != EMBEDDING_DIM:
+                    msg = (
+                        f"Invalid embedding dimension: expected {EMBEDDING_DIM}, got {len(embedding)}"
+                    )
+                    raise ValueError(msg)
+                embedding_blobs[chunk_index] = serialize_embedding(embedding)
+
+        if existing_chunks:
+            await self._session.execute(delete(ChunkORM).where(ChunkORM.documento_id == document_id))
+
+        for chunk, metadata_payload, chunk_hash, embedding_blob in zip(
+            chunks,
+            new_metadata_payloads,
+            new_chunk_hashes,
+            embedding_blobs,
+            strict=True,
+        ):
+            chunk_orm = self._create_chunk_orm_with_blob(
+                chunk=chunk,
+                metadados_json=metadata_payload,
+                embedding_blob=embedding_blob,
+                content_hash=chunk_hash,
+            )
+            self._session.add(chunk_orm)
+
+        await self._session.flush()
+        return {
+            "deleted_chunks": len(existing_chunks),
+            "embedded_chunks": len(pending_embed_texts),
+            "reused_chunks": reused_chunks,
+            "backfilled_hashes": backfilled_hashes,
+        }
+
+    def _create_document_orm(
+        self,
+        document_name: str,
+        file_path: str,
+        content_hash: str,
+    ) -> DocumentORM:
         """
         Create a DocumentORM instance.
 
@@ -225,24 +409,30 @@ class IngestionService:
         return DocumentORM(
             nome=document_name,
             arquivo_origem=file_path,
-            content_hash=self._compute_document_content_hash(document_name, file_path),
+            content_hash=content_hash,
             chunk_count=0,
             token_count=0,
             created_at=datetime.now(UTC),
         )
 
     @staticmethod
-    def _compute_document_content_hash(document_name: str, file_path: str) -> str:
+    def _compute_document_content_hash(file_path: str) -> str:
         """
-        Compute deterministic SHA-256 hash for document deduplication.
-
-        NOTE: We use metadata (name + path) instead of file content for hashing.
-        This is semantically correct for RAG where the document name is the
-        logical identifier, and maintains backward compatibility with existing
-        migrations that compute hash the same way.
+        Compute deterministic SHA-256 hash from real file content.
         """
-        payload = f"{document_name}|{file_path}".encode()
+        payload = Path(file_path).read_bytes()
         return hashlib.sha256(payload).hexdigest()
+
+    @staticmethod
+    def _compute_chunk_content_hash(text: str, metadata_json: str) -> str:
+        """Compute deterministic SHA-256 hash from chunk text + metadata payload."""
+        normalized = json.dumps(
+            {"text": text, "metadata": json.loads(metadata_json)},
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def _create_chunk_orm(self, chunk: Chunk, embedding: list[float]) -> ChunkORM:
         """
@@ -270,17 +460,30 @@ class IngestionService:
             )
             raise ValueError(msg)
 
-        # Serialize metadata to JSON
         metadados_json = chunk.metadados.model_dump_json()
-
-        # Serialize embedding to bytes for storage
         embedding_blob = serialize_embedding(embedding)
+        content_hash = self._compute_chunk_content_hash(chunk.texto, metadados_json)
+        return self._create_chunk_orm_with_blob(
+            chunk=chunk,
+            metadados_json=metadados_json,
+            embedding_blob=embedding_blob,
+            content_hash=content_hash,
+        )
 
+    def _create_chunk_orm_with_blob(
+        self,
+        chunk: Chunk,
+        metadados_json: str,
+        embedding_blob: bytes | None,
+        content_hash: str,
+    ) -> ChunkORM:
+        """Create a chunk ORM row from pre-serialized payload."""
         return ChunkORM(
             id=chunk.chunk_id,
             documento_id=chunk.documento_id,
             texto=chunk.texto,
             metadados=metadados_json,
+            content_hash=content_hash,
             token_count=chunk.token_count,
             embedding=embedding_blob,
             created_at=datetime.now(UTC),
