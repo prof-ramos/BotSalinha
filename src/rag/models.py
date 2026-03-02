@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field, model_validator
 class ChunkMetadata(BaseModel):
     """Metadata for a document chunk."""
 
+    model_config = {"extra": "allow"}
+
     documento: str = Field(..., description="Document identifier (e.g., 'CF/88')")
     titulo: str | None = Field(None, description="Section title")
     capitulo: str | None = Field(None, description="Chapter reference")
@@ -33,6 +35,15 @@ class ChunkMetadata(BaseModel):
     marca_militar: bool = Field(False, description="Marked as military law/criminal content")
     banca: str | None = Field(None, description="Exam board/banca name")
     ano: str | None = Field(None, description="Exam year")
+    # Code-specific fields (for code ingestion)
+    file_path: str | None = Field(None, description="Source file path for code chunks")
+    language: str | None = Field(None, description="Programming language (python, typescript, etc.)")
+    layer: str | None = Field(None, description="Architectural layer (core, storage, rag, etc.)")
+    module: str | None = Field(None, description="Module name")
+    functions: list[str] = Field(default_factory=list, description="Function names found in code")
+    classes: list[str] = Field(default_factory=list, description="Class names found in code")
+    imports: list[str] = Field(default_factory=list, description="Imported modules")
+    is_test: bool = Field(False, description="Whether this is a test file")
 
 
 class Chunk(BaseModel):
@@ -54,6 +65,10 @@ class Document(BaseModel):
     id: int = Field(..., description="Document ID")
     nome: str = Field(..., description="Document name (e.g., 'CF/88')")
     arquivo_origem: str = Field(..., description="Source file path")
+    content_hash: str | None = Field(
+        default=None,
+        description="SHA-256 hash used for deduplication",
+    )
     chunk_count: int = Field(..., description="Number of chunks", ge=0)
     token_count: int = Field(..., description="Total token count", ge=0)
 

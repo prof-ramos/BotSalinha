@@ -6,10 +6,10 @@ Uses tenacity library for robust retry logic with configurable policies.
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 import structlog
 from tenacity import (
@@ -25,6 +25,8 @@ from .errors import APIError, RetryExhaustedError
 log = structlog.get_logger()
 
 T = TypeVar("T")
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 @dataclass
@@ -62,7 +64,7 @@ class AsyncRetryConfig:
 
 
 async def async_retry[T](
-    func: Callable[..., T],
+    func: Callable[..., Awaitable[T]],
     config: AsyncRetryConfig | None = None,
     operation_name: str | None = None,
 ) -> T:
@@ -90,7 +92,7 @@ async def async_retry[T](
         return await func()
 
     try:
-        async with AsyncRetrying(
+        async for attempt in AsyncRetrying(
             stop=stop_after_attempt(config.max_attempts),
             wait=wait_exponential(
                 multiplier=config.wait_min,
@@ -100,9 +102,9 @@ async def async_retry[T](
             retry=retry_if_exception_type(config.retryable_exceptions),
             before_sleep=before_sleep_log(log, logging.DEBUG),
             reraise=True,
-        ) as retry_state:
-            result = await retry_state(_execute)
-            return result
+        ):
+            with attempt:
+                return await _execute()
 
     except Exception as e:
         # Wrap in RetryExhaustedError with context
@@ -111,15 +113,17 @@ async def async_retry[T](
             last_error=e,
             attempts=config.max_attempts,
         ) from e
+    # Never reached - function always raises
+    raise AssertionError("unreachable")  # noqa: B023
 
 
-def async_retry_decorator[T](
+def async_retry_decorator(
     max_attempts: int = 3,
     wait_min: float = 1.0,
     wait_max: float = 60.0,
     exponential_base: float = 2.0,
     operation_name: str | None = None,
-):
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator for adding async retry logic to functions.
 
@@ -139,9 +143,9 @@ def async_retry_decorator[T](
             ...
     """
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             op_name = operation_name or func.__name__
 
             try:
@@ -157,6 +161,10 @@ def async_retry_decorator[T](
                     with attempt:
                         result = await func(*args, **kwargs)
                         return result
+                raise RetryExhaustedError(
+                    f"Operation '{op_name}' failed after {max_attempts} attempts",
+                    attempts=max_attempts,
+                )
 
             except Exception as e:
                 raise RetryExhaustedError(

@@ -25,6 +25,12 @@ class DocumentORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nome: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     arquivo_origem: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        unique=True,
+    )
     chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

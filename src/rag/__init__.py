@@ -5,7 +5,12 @@ from .parser import DOCXParser
 from .services import (
     EMBEDDING_DIM,
     CachedEmbeddingService,
+    CodeIngestionResult,
+    CodeIngestionService,
+    DocumentResult,
     EmbeddingService,
+    IngestionError,
+    IngestionService,
     LRUCache,
     QueryService,
 )
@@ -29,6 +34,11 @@ __all__ = [
     "CachedEmbeddingService",
     "LRUCache",
     "QueryService",
+    "CodeIngestionService",
+    "CodeIngestionResult",
+    "DocumentResult",
+    "IngestionService",
+    "IngestionError",
     "EMBEDDING_DIM",
     # Storage
     "VectorStore",

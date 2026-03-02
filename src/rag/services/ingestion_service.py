@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -185,6 +186,7 @@ class IngestionService:
                 id=document_orm.id,
                 nome=document_orm.nome,
                 arquivo_origem=document_orm.arquivo_origem,
+                content_hash=document_orm.content_hash,
                 chunk_count=document_orm.chunk_count,
                 token_count=document_orm.token_count,
             )
@@ -223,10 +225,24 @@ class IngestionService:
         return DocumentORM(
             nome=document_name,
             arquivo_origem=file_path,
+            content_hash=self._compute_document_content_hash(document_name, file_path),
             chunk_count=0,
             token_count=0,
             created_at=datetime.now(UTC),
         )
+
+    @staticmethod
+    def _compute_document_content_hash(document_name: str, file_path: str) -> str:
+        """
+        Compute deterministic SHA-256 hash for document deduplication.
+
+        NOTE: We use metadata (name + path) instead of file content for hashing.
+        This is semantically correct for RAG where the document name is the
+        logical identifier, and maintains backward compatibility with existing
+        migrations that compute hash the same way.
+        """
+        payload = f"{document_name}|{file_path}".encode()
+        return hashlib.sha256(payload).hexdigest()
 
     def _create_chunk_orm(self, chunk: Chunk, embedding: list[float]) -> ChunkORM:
         """

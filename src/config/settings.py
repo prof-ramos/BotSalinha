@@ -11,8 +11,16 @@ This module uses environment variables with validation, following best practices
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..utils.errors import ValidationError
@@ -103,6 +111,18 @@ class RAGConfig(BaseModel):
         le=1.0,
         description="Minimum similarity threshold (ajustado para 0.4 baseado em dados empíricos)",
     )
+    min_similarity_floor: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity floor for fallback",
+    )
+    min_similarity_fallback_delta: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=0.5,
+        description="Delta for fallback similarity threshold",
+    )
     max_context_tokens: int = Field(
         default=2000, ge=100, le=8000, description="Maximum context tokens"
     )
@@ -121,6 +141,35 @@ class RAGConfig(BaseModel):
     retrieval_candidate_multiplier: int = Field(default=12, description="Candidate multiplier")
     retrieval_candidate_min: int = Field(default=60, description="Minimum candidates")
     retrieval_candidate_cap: int = Field(default=240, description="Maximum candidates")
+    # Code-specific RAG settings
+    code_chunk_max_tokens: int = Field(
+        default=300, ge=50, le=1000, description="Max tokens per code chunk"
+    )
+    code_chunk_min_tokens: int = Field(
+        default=50, ge=10, le=200, description="Min tokens per code chunk"
+    )
+    code_respect_boundaries: bool = Field(
+        default=True, description="Respect function/class boundaries"
+    )
+    code_include_line_numbers: bool = Field(
+        default=True, description="Include line numbers in metadata"
+    )
+
+    @model_validator(mode="after")
+    def validate_code_chunk_bounds(self) -> "RAGConfig":
+        """Ensure code chunk min tokens does not exceed max tokens."""
+        if self.code_chunk_min_tokens > self.code_chunk_max_tokens:
+            msg = (
+                "RAG config inválida: code_chunk_min_tokens deve ser <= "
+                "code_chunk_max_tokens."
+            )
+            raise ValidationError(
+                msg,
+                field="rag.code_chunk_min_tokens",
+                value=self.code_chunk_min_tokens,
+                details={"code_chunk_max_tokens": self.code_chunk_max_tokens},
+            )
+        return self
 
 
 class Settings(BaseSettings):
@@ -169,6 +218,46 @@ class Settings(BaseSettings):
     retry: RetryConfig = Field(default_factory=RetryConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
 
+    @model_validator(mode="before")
+    @classmethod
+    def apply_legacy_env_overrides(cls, data: Any) -> Any:
+        """Apply legacy unprefixed env vars for backward compatibility."""
+        if not isinstance(data, dict):
+            return data
+
+        values = dict(data)
+
+        def _coerce_nested_model(model_data: Any) -> dict[str, Any]:
+            if isinstance(model_data, dict):
+                return dict(model_data)
+            if model_data is None:
+                return {}
+            if hasattr(model_data, "model_dump"):
+                dumped = model_data.model_dump()
+                if isinstance(dumped, dict):
+                    return dict(dumped)
+            return {}
+
+        legacy_database_url = os.getenv("DATABASE__URL") or os.getenv("DATABASE_URL")
+        if legacy_database_url:
+            database = _coerce_nested_model(values.get("database"))
+            database.setdefault("url", legacy_database_url)
+            values["database"] = database
+
+        legacy_openai_key = os.getenv("OPENAI__API_KEY") or os.getenv("OPENAI_API_KEY")
+        if legacy_openai_key:
+            openai = _coerce_nested_model(values.get("openai"))
+            openai.setdefault("api_key", legacy_openai_key)
+            values["openai"] = openai
+
+        legacy_google_key = os.getenv("GOOGLE__API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if legacy_google_key:
+            google = _coerce_nested_model(values.get("google"))
+            google.setdefault("api_key", legacy_google_key)
+            values["google"] = google
+
+        return values
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -191,7 +280,7 @@ class Settings(BaseSettings):
 
     @field_validator("debug")
     @classmethod
-    def set_debug_from_env(cls, v: bool | None, info) -> bool:
+    def set_debug_from_env(cls, v: bool | None, info: ValidationInfo) -> bool:
         """Set debug mode based on app_env if not explicitly set."""
         if v is not None:
             return v
@@ -214,17 +303,26 @@ class Settings(BaseSettings):
             return Path(self.database.url.replace("sqlite:///", ""))
         return None
 
-    def get_discord_token(self) -> str:
+    def get_discord_token(self) -> str | None:
         """Get the Discord bot token."""
         return self.discord.token
 
-    def get_google_api_key(self) -> str:
-        """Get the Google API key."""
-        return self.google.api_key
+    def get_google_api_key(self) -> str | None:
+        """Get the Google API key with legacy env fallback."""
+        return self.google.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE__API_KEY")
 
     def get_openai_api_key(self) -> str | None:
         """Get the OpenAI API key with legacy env fallback."""
         return self.openai.api_key or os.getenv("OPENAI_API_KEY")
+
+    def get_ai_api_key(self, provider: str) -> str | None:
+        """Get API key for selected AI provider."""
+        provider_normalized = provider.strip().lower()
+        if provider_normalized == "openai":
+            return self.get_openai_api_key()
+        if provider_normalized == "google":
+            return self.get_google_api_key()
+        raise ValueError(f"Provedor de IA não suportado: {provider}")
 
 
 @lru_cache

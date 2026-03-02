@@ -288,7 +288,7 @@ class QueryService:
 
         if normalized_tipo != "todos":
             # Map tipo to metadata filters
-            tipo_filters = {
+            tipo_filters: dict[str, dict[str, Any]] = {
                 "artigo": {"artigo": "not_null"},  # Has artigo field
                 # OR condition: STF OR STJ
                 "jurisprudencia": {"__or__": [{"marca_stf": True}, {"marca_stj": True}]},
@@ -336,6 +336,48 @@ class QueryService:
                     },
                     query_normalized=normalize_query_text(query_text),
                 )
+
+        return await self.query(query_text, top_k=effective_top_k, filters=filters)
+
+    async def query_code(
+        self,
+        query_text: str,
+        language: str | None = None,
+        layer: str | None = None,
+        module: str | None = None,
+        top_k: int | None = None,
+    ) -> RAGContext:
+        """Query optimized for code search.
+
+        Args:
+            query_text: Search query
+            language: Filter by programming language (python, typescript, etc.)
+            layer: Filter by architectural layer (core, storage, rag, etc.)
+            module: Filter by module name
+            top_k: Number of results (default from RAG config)
+
+        Returns:
+            RAGContext with code-specific filtering applied
+        """
+        filters: dict[str, Any] = {}
+
+        if language:
+            filters["language"] = language
+        if layer:
+            filters["layer"] = layer
+        if module:
+            filters["module"] = module
+
+        effective_top_k = top_k or self._settings.rag.top_k
+
+        log.info(
+            LogEvents.RAG_BUSCA_INICIADA,
+            query_length=len(query_text),
+            top_k=effective_top_k,
+            filters=list(filters.keys()) if filters else None,
+            query_type="code",
+            event_name="rag_query_service_query_code",
+        )
 
         return await self.query(query_text, top_k=effective_top_k, filters=filters)
 

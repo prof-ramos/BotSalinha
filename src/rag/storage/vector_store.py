@@ -117,6 +117,7 @@ class VectorStore:
     # Whitelist of allowed metadata filter keys to prevent SQL injection
     # Only these keys can be used in json_extract() queries
     _ALLOWED_FILTER_KEYS = {
+        # Legal document fields
         "documento",
         "titulo",
         "capitulo",
@@ -136,6 +137,15 @@ class VectorStore:
         "marca_militar",
         "banca",
         "ano",
+        # Code-specific fields
+        "file_path",
+        "language",
+        "layer",
+        "module",
+        "functions",
+        "classes",
+        "imports",
+        "is_test",
     }
     _RESERVED_FILTER_KEYS = {"__or__"}
 

@@ -120,3 +120,29 @@ def test_api_key_legacy_env_fallback_runtime(monkeypatch: pytest.MonkeyPatch) ->
 
     assert settings.get_openai_api_key() == "legacy-openai"
     assert settings.get_google_api_key() == "legacy-google"
+
+
+@pytest.mark.unit
+def test_rag_code_chunk_bounds_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RAG code chunk bounds should accept min <= max."""
+    _clear_relevant_env(monkeypatch)
+
+    settings = Settings(
+        _env_file=None,
+        rag={"code_chunk_min_tokens": 40, "code_chunk_max_tokens": 300},
+    )
+
+    assert settings.rag.code_chunk_min_tokens == 40
+    assert settings.rag.code_chunk_max_tokens == 300
+
+
+@pytest.mark.unit
+def test_rag_code_chunk_bounds_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RAG code chunk bounds should reject min > max."""
+    _clear_relevant_env(monkeypatch)
+
+    with pytest.raises(ValidationError, match="code_chunk_min_tokens"):
+        Settings(
+            _env_file=None,
+            rag={"code_chunk_min_tokens": 150, "code_chunk_max_tokens": 100},
+        )
