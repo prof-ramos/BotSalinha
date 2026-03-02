@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import (
-    AliasChoices,
     BaseModel,
     Field,
     ValidationInfo,
@@ -53,23 +52,6 @@ class OpenAIConfig(BaseModel):
     """OpenAI configuration."""
 
     api_key: str | None = Field(None, description="OpenAI API key")
-
-
-class SupabaseConfig(BaseModel):
-    """Supabase configuration."""
-
-    url: str | None = Field(
-        None,
-        description="Supabase project URL",
-        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
-    )
-    key: str | None = Field(
-        None,
-        description="Supabase service role API key or anon key",
-        validation_alias=AliasChoices(
-            "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-        ),
-    )
 
 
 class RateLimitConfig(BaseModel):
@@ -189,10 +171,7 @@ class RAGConfig(BaseModel):
     def validate_code_chunk_bounds(self) -> "RAGConfig":
         """Ensure code chunk min tokens does not exceed max tokens."""
         if self.code_chunk_min_tokens > self.code_chunk_max_tokens:
-            msg = (
-                "RAG config inválida: code_chunk_min_tokens deve ser <= "
-                "code_chunk_max_tokens."
-            )
+            msg = "RAG config inválida: code_chunk_min_tokens deve ser <= code_chunk_max_tokens."
             raise ValidationError(
                 msg,
                 field="rag.code_chunk_min_tokens",
@@ -319,7 +298,6 @@ class Settings(BaseSettings):
     discord: DiscordConfig = Field(default_factory=DiscordConfig)
     google: GoogleConfig = Field(default_factory=GoogleConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
-    supabase: SupabaseConfig = Field(default_factory=SupabaseConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
@@ -328,7 +306,12 @@ class Settings(BaseSettings):
     @model_validator(mode="before")
     @classmethod
     def apply_legacy_env_overrides(cls, data: Any) -> Any:
-        """Apply legacy unprefixed env vars for backward compatibility."""
+        """Apply legacy unprefixed env vars for backward compatibility.
+
+        Supports the format used in .env where variables are defined without
+        the BOTSALINHA_ prefix (e.g. DISCORD_BOT_TOKEN, GOOGLE_API_KEY).
+        The BOTSALINHA_ prefixed form always takes precedence.
+        """
         if not isinstance(data, dict):
             return data
 
@@ -345,23 +328,103 @@ class Settings(BaseSettings):
                     return dict(dumped)
             return {}
 
+        def _safe_int(env_var: str, value: str, field_name: str) -> int:
+            """Safely convert env var to int with clear error message."""
+            try:
+                return int(value)
+            except ValueError as e:
+                raise ValidationError(
+                    f"Invalid value for {field_name}: '{value}' from environment variable {env_var}. "
+                    f"Expected an integer, got: {value!r}",
+                    details={"env_var": env_var, "invalid_value": value, "field": field_name},
+                ) from e
+
+        def _safe_float(env_var: str, value: str, field_name: str) -> float:
+            """Safely convert env var to float with clear error message."""
+            try:
+                return float(value)
+            except ValueError as e:
+                raise ValidationError(
+                    f"Invalid value for {field_name}: '{value}' from environment variable {env_var}. "
+                    f"Expected a number, got: {value!r}",
+                    details={"env_var": env_var, "invalid_value": value, "field": field_name},
+                ) from e
+
+        # --- Database ---
         legacy_database_url = os.getenv("DATABASE__URL") or os.getenv("DATABASE_URL")
         if legacy_database_url:
             database = _coerce_nested_model(values.get("database"))
             database.setdefault("url", legacy_database_url)
             values["database"] = database
 
+        legacy_max_age = os.getenv("MAX_CONVERSATION_AGE_DAYS")
+        if legacy_max_age:
+            database = _coerce_nested_model(values.get("database"))
+            database.setdefault("max_conversation_age_days", _safe_int("MAX_CONVERSATION_AGE_DAYS", legacy_max_age, "database.max_conversation_age_days"))
+            values["database"] = database
+
+        # --- OpenAI ---
         legacy_openai_key = os.getenv("OPENAI__API_KEY") or os.getenv("OPENAI_API_KEY")
         if legacy_openai_key:
             openai = _coerce_nested_model(values.get("openai"))
             openai.setdefault("api_key", legacy_openai_key)
             values["openai"] = openai
 
+        # --- Google ---
         legacy_google_key = os.getenv("GOOGLE__API_KEY") or os.getenv("GOOGLE_API_KEY")
         if legacy_google_key:
             google = _coerce_nested_model(values.get("google"))
             google.setdefault("api_key", legacy_google_key)
             values["google"] = google
+
+        # --- Discord ---
+        legacy_discord_token = os.getenv("DISCORD_BOT_TOKEN")
+        legacy_command_prefix = os.getenv("COMMAND_PREFIX")
+        if legacy_discord_token or legacy_command_prefix:
+            discord = _coerce_nested_model(values.get("discord"))
+            if legacy_discord_token:
+                discord.setdefault("token", legacy_discord_token)
+            if legacy_command_prefix:
+                discord.setdefault("command_prefix", legacy_command_prefix)
+            values["discord"] = discord
+
+        # --- Top-level scalars ---
+        legacy_log_level = os.getenv("LOG_LEVEL")
+        if legacy_log_level:
+            values.setdefault("log_level", legacy_log_level)
+
+        legacy_app_env = os.getenv("APP_ENV")
+        if legacy_app_env:
+            values.setdefault("app_env", legacy_app_env)
+
+        legacy_history_runs = os.getenv("HISTORY_RUNS")
+        if legacy_history_runs:
+            values.setdefault("history_runs", _safe_int("HISTORY_RUNS", legacy_history_runs, "history_runs"))
+
+        # --- Rate limit ---
+        legacy_rl_requests = os.getenv("RATE_LIMIT_REQUESTS")
+        legacy_rl_window = os.getenv("RATE_LIMIT_WINDOW_SECONDS")
+        if legacy_rl_requests or legacy_rl_window:
+            rate_limit = _coerce_nested_model(values.get("rate_limit"))
+            if legacy_rl_requests:
+                rate_limit.setdefault("requests", _safe_int("RATE_LIMIT_REQUESTS", legacy_rl_requests, "rate_limit.requests"))
+            if legacy_rl_window:
+                rate_limit.setdefault("window_seconds", _safe_int("RATE_LIMIT_WINDOW_SECONDS", legacy_rl_window, "rate_limit.window_seconds"))
+            values["rate_limit"] = rate_limit
+
+        # --- Retry ---
+        legacy_max_retries = os.getenv("MAX_RETRIES")
+        legacy_delay = os.getenv("RETRY_DELAY_SECONDS")
+        legacy_max_delay = os.getenv("RETRY_MAX_DELAY_SECONDS")
+        if legacy_max_retries or legacy_delay or legacy_max_delay:
+            retry = _coerce_nested_model(values.get("retry"))
+            if legacy_max_retries:
+                retry.setdefault("max_retries", _safe_int("MAX_RETRIES", legacy_max_retries, "retry.max_retries"))
+            if legacy_delay:
+                retry.setdefault("delay_seconds", _safe_float("RETRY_DELAY_SECONDS", legacy_delay, "retry.delay_seconds"))
+            if legacy_max_delay:
+                retry.setdefault("max_delay_seconds", _safe_float("RETRY_MAX_DELAY_SECONDS", legacy_max_delay, "retry.max_delay_seconds"))
+            values["retry"] = retry
 
         return values
 

@@ -30,8 +30,10 @@ uv run bot.py --chat
 | Variável | Descrição | Default |
 |----------|-----------|---------|
 | DISCORD_BOT_TOKEN | Token do bot Discord | obrigatório |
-| OPENAI_API_KEY | Chave da OpenAI | obrigatório |
-| GOOGLE_API_KEY | Chave do Google AI | opcional |
+| BOTSALINHA_OPENAI__API_KEY | Chave da OpenAI (formato canônico) | obrigatório |
+| OPENAI_API_KEY | Chave da OpenAI (formato legado) | compatibilidade |
+| BOTSALINHA_GOOGLE__API_KEY | Chave do Google AI (formato canônico) | opcional |
+| GOOGLE_API_KEY | Chave do Google AI (formato legado) | compatibilidade |
 | DATABASE_URL | URL do banco | sqlite:///data/botsalinha.db |
 | RATE_LIMIT_REQUESTS | Limite por janela | 10 |
 | RATE_LIMIT_WINDOW_SECONDS | Janela em segundos | 60 |

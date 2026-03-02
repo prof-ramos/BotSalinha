@@ -509,7 +509,7 @@ def config_check() -> None:
     # API Keys
     openai_key = settings.get_openai_api_key()
     table.add_row(
-        "OPENAI_API_KEY",
+        "BOTSALINHA_OPENAI__API_KEY",
         "[green]✓ OK[/]" if openai_key else "[red]✗ MISSING[/]",
         "Necessário para provider=openai",
     )
@@ -544,9 +544,18 @@ app.add_typer(mcp_app, name="mcp")
 @mcp_app.command("list")
 def mcp_list() -> None:
     """Listar servidores MCP configurados."""
-    enabled_servers = yaml_config.mcp.get_enabled_servers()
+    mcp_config = getattr(yaml_config, "mcp", None)
+    if mcp_config is None:
+        table = Table(title="MCP Servers (Enabled: False)")
+        table.add_column("Nome", style="cyan")
+        table.add_column("Tipo", style="magenta")
+        table.add_column("Status", style="green")
+        console.print(table)
+        return
 
-    table = Table(title=f"MCP Servers (Enabled: {yaml_config.mcp.enabled})")
+    enabled_servers = mcp_config.get_enabled_servers()
+
+    table = Table(title=f"MCP Servers (Enabled: {mcp_config.enabled})")
     table.add_column("Nome", style="cyan")
     table.add_column("Tipo", style="magenta")
     table.add_column("Status", style="green")
@@ -593,15 +602,13 @@ async def run_ingest(file_path: str, document_name: str) -> None:
         console.print(f"[red]Erro: Arquivo deve ser .docx:[/] {file_path}")
         raise typer.Exit(code=1)
 
-    # Check OpenAI API key (try settings first, then env var, then pydantic env)
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI__API__KEY")
-    if not api_key:
-        settings_instance = get_settings()
-        api_key = settings_instance.get_openai_api_key()
+    # Check OpenAI API key via settings (handles canonical + legacy fallback)
+    settings_instance = get_settings()
+    api_key = settings_instance.get_openai_api_key()
 
     if not api_key:
-        console.print("[red]Erro: OPENAI_API_KEY não configurada[/]")
-        console.print("[dim]Configure a variável de ambiente e tente novamente.[/]")
+        console.print("[red]Erro: BOTSALINHA_OPENAI__API_KEY não configurada[/]")
+        console.print("[dim]Configure BOTSALINHA_OPENAI__API_KEY no .env (ou OPENAI_API_KEY para compatibilidade)[/]")
         raise typer.Exit(code=1)
 
     console.print(f"\n[bold cyan]Iniciando ingestão do documento:[/] {document_name}")

@@ -137,7 +137,8 @@ class AgentWrapper:
             if not openai_api_key:
                 raise ConfigurationError(
                     "API key da OpenAI não configurada. "
-                    "Defina OPENAI_API_KEY no .env para usar provider='openai'.",
+                    "Defina BOTSALINHA_OPENAI__API_KEY no .env para usar provider='openai'. "
+                    "(Formato legado OPENAI_API_KEY também funciona via fallback.)",
                     config_key="openai.api_key",
                 )
             # Type assertion: we know api_key is not None here due to the check above

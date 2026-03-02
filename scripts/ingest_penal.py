@@ -14,7 +14,6 @@ Este script irá:
 
 import asyncio
 import csv
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -41,10 +40,12 @@ async def main() -> None:
 
     settings = get_settings()
 
-    # Verificar API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.startswith("sk-"):
-        print(f"❌ OPENAI_API_KEY não configurada")
+    # Obter API key via settings (suporta formato canônico e legado)
+    api_key = settings.get_openai_api_key()
+    if not api_key:
+        print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
+        print("💡 Defina BOTSALINHA_OPENAI__API_KEY no .env")
+        print("   (ou use OPENAI_API_KEY para compatibilidade legada)")
         sys.exit(1)
 
     # Conectar ao banco
@@ -192,7 +193,7 @@ async def main() -> None:
         print(f"✅ {success_count}/{len(docx_files)} documentos ingeridos")
         print(f"⏭️  {skipped_count}/{len(docx_files)} documentos já existiam")
         print()
-        print(f"📊 Estatísticas:")
+        print("📊 Estatísticas:")
         print(f"   • Total de chunks: {total_chunks}")
         print(f"   • Total de tokens: {total_tokens:,}")
         print(f"   • Custo estimado: ${total_tokens * 0.02 / 1_000_000:.4f} USD")

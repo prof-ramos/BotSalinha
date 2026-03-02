@@ -203,7 +203,8 @@ BOTSALINHA_RAG__MAX_CONTEXT_TOKENS=2000             # Máximo de tokens no conte
 BOTSALINHA_RAG__CONFIDENCE_THRESHOLD=0.70           # Limiar para confiança média
 BOTSALINHA_RAG__RETRIEVAL_MODE=hybrid_lite          # Modo estável atual
 BOTSALINHA_RAG__RERANK_ENABLED=true                 # Rerank estável atual
-OPENAI_API_KEY=sk-...                               # Usada para embeddings
+BOTSALINHA_OPENAI__API_KEY=sk-...                   # Usada para embeddings (canônico)
+# OPENAI_API_KEY=sk-...                             # Formato legado (funciona via fallback)
 ```
 
 ### Flags de Rollout Seguro (T3)
@@ -394,7 +395,7 @@ uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "botsalin
 ```
 
 **Requisitos para CLI:**
-- `OPENAI_API_KEY` configurada em `.env` ou exportada
+- `BOTSALINHA_OPENAI__API_KEY` configurada em `.env` (ou `OPENAI_API_KEY` para compatibilidade legada)
 - Arquivo XML deve estar no formato Repomix
 
 ### 4. Verificar
@@ -552,7 +553,7 @@ uv run pytest tests/integration/rag/test_recall.py -v
 2. Reindexar incremental: `!reindexar incremental`
 3. Se necessário, rebuild completo: `!reindexar completo`
 4. Verificar `RAG_MIN_SIMILARITY` (muito alto?)
-5. Verificar se OPENAI_API_KEY está configurada
+5. Verificar se `BOTSALINHA_OPENAI__API_KEY` está configurada (ou `OPENAI_API_KEY` para compatibilidade legada)
 
 ### Erro de Ingestão
 

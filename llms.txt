@@ -33,7 +33,7 @@
 ## Conceitos-Chave
 - **Provider**: Definido dinamicamente em `config.yaml` (`model.provider: openai|google`)
 - **Prompt Ativo**: Definido em `config.yaml` (`prompt.file`)
-- **Credenciais**: API keys gerenciadas em `.env` (`OPENAI_API_KEY`, `GOOGLE_API_KEY`)
+- **Credenciais**: API keys gerenciadas em `.env` (`BOTSALINHA_OPENAI__API_KEY` canônico, `OPENAI_API_KEY` legado; `BOTSALINHA_GOOGLE__API_KEY` canônico, `GOOGLE_API_KEY` legado)
 - **Injeção de Dependência**: Usar a factory `create_repository()`, não instanciar singleton globalmente
 - **Estado Híbrido (v2.0)**: Transição arquitetural ativa de singleton para DI
 - **Persistência**: Histórico de interações em SQLite via SQLAlchemy async ORM

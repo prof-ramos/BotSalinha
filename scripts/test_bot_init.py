@@ -23,30 +23,30 @@ async def test():
     print("TESTING BOT INITIALIZATION")
     print("=" * 60)
     print()
-    
+
     # Test repository factory
     print("1. Testing repository factory...")
     from src.storage.repository_factory import get_configured_repository
-    
+
     repo = get_configured_repository()
     print(f"   Repository type: {type(repo).__name__}")
     print(f"   Has initialize_database: {hasattr(repo, 'initialize_database')}")
     print()
-    
+
     # Test bot initialization
     print("2. Testing bot initialization...")
     from src.core.discord import BotSalinhaBot
-    
+
     bot = BotSalinhaBot()
-    print(f"   Bot created successfully")
+    print("   Bot created successfully")
     print(f"   Repository: {type(bot.repository).__name__}")
     print(f"   Agent: {type(bot.agent).__name__}")
     print()
-    
+
     # Test repository operations
     print("3. Testing repository operations...")
     from src.models.conversation import ConversationCreate
-    
+
     conversation = await repo.create_conversation(
         ConversationCreate(
             user_id="test_user",
@@ -55,12 +55,12 @@ async def test():
         )
     )
     print(f"   Created conversation: {conversation.id}")
-    
+
     # Cleanup
     await repo.delete_conversation(conversation.id)
-    print(f"   Deleted conversation")
+    print("   Deleted conversation")
     print()
-    
+
     print("=" * 60)
     print("✅ ALL TESTS PASSED!")
     print("=" * 60)

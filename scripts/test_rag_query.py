@@ -11,7 +11,6 @@ Este script irá:
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -39,10 +38,12 @@ async def main() -> None:
 
     settings = get_settings()
 
-    # Verificar se OPENAI_API_KEY está configurada
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.startswith("sk-"):
-        print(f"❌ OPENAI_API_KEY não configurada ou inválida")
+    # Obter API key via settings (suporta formato canônico e legado)
+    api_key = settings.get_openai_api_key()
+    if not api_key:
+        print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
+        print("💡 Defina BOTSALINHA_OPENAI__API_KEY no .env")
+        print("   (ou use OPENAI_API_KEY para compatibilidade legada)")
         sys.exit(1)
 
     # Conectar ao banco
@@ -95,7 +96,7 @@ async def main() -> None:
                     print(f"      Texto: {chunk.texto[:100]}...")
 
                 if result.fontes:
-                    print(f"\n  📎 Fontes:")
+                    print("\n  📎 Fontes:")
                     for fonte in result.fontes:
                         print(f"      • {fonte}")
 

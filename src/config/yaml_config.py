@@ -18,7 +18,7 @@ from ..utils.errors import ConfigurationError
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from ..utils.errors import ConfigurationError, ValidationError
+from ..utils.errors import ValidationError
 
 log = structlog.get_logger()
 

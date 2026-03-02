@@ -12,7 +12,6 @@ Este script irá:
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -28,10 +27,8 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config.settings import get_settings
-from src.models.rag_models import DocumentORM, ChunkORM
 from src.rag.services.ingestion_service import IngestionService
 from src.rag.services.embedding_service import EmbeddingService
-from src.storage.sqlite_repository import SQLiteRepository
 
 
 async def main() -> None:
@@ -42,12 +39,12 @@ async def main() -> None:
 
     settings = get_settings()
 
-    # Verificar se OPENAI_API_KEY está configurada (ler diretamente do ambiente)
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.startswith("sk-"):
-        print(f"❌ OPENAI_API_KEY não configurada ou inválida")
-        print(f"💡 Defina OPENAI_API_KEY no .env ou export OPENAI_API_KEY=...")
-        print(f"   Valor atual: {api_key[:20] if api_key else 'None'}...")
+    # Obter API key via settings (suporta formato canônico e legado)
+    api_key = settings.get_openai_api_key()
+    if not api_key:
+        print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
+        print("💡 Defina BOTSALINHA_OPENAI__API_KEY no .env")
+        print("   (ou use OPENAI_API_KEY para compatibilidade legada)")
         sys.exit(1)
 
     # Conectar ao banco
@@ -129,7 +126,7 @@ async def main() -> None:
         print()
         print(f"✅ {success_count}/{len(docx_files)} documentos ingeridos com sucesso")
         print()
-        print(f"📊 Estatísticas:")
+        print("📊 Estatísticas:")
         print(f"   • Total de chunks: {total_chunks}")
         print(f"   • Total de tokens: {total_tokens:,}")
         print(f"   • Custo estimado: ${total_tokens * 0.02 / 1_000_000:.4f} USD")

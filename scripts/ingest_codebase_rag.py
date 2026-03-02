@@ -12,7 +12,6 @@ Este script irá:
 """
 
 import asyncio
-import os
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -53,10 +52,12 @@ async def main() -> None:
     args = parser.parse_args()
 
     # Verificar se OPENAI_API_KEY está configurada
-    api_key = os.getenv("OPENAI_API_KEY")
+    settings = get_settings()
+    api_key = settings.get_openai_api_key()
     if not api_key:
-        print("❌ OPENAI_API_KEY not configured")
-        print("💡 Set OPENAI_API_KEY in .env or export OPENAI_API_KEY=...")
+        print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
+        print("💡 Defina BOTSALINHA_OPENAI__API_KEY no .env")
+        print("   (ou use OPENAI_API_KEY para compatibilidade legada)")
         sys.exit(1)
 
     # Conectar ao banco

@@ -545,7 +545,8 @@ uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "meu-proj
 
 ```bash
 # .env
-OPENAI_API_KEY=sk-...  # Necessária para embeddings
+BOTSALINHA_OPENAI__API_KEY=sk-...  # Necessária para embeddings (formato canônico)
+# OPENAI_API_KEY=sk-...             # Formato legado (funciona via fallback)
 BOTSALINHA_DATABASE__URL=sqlite:///data/botsalinha.db
 ```
 

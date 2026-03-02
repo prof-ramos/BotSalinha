@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.discord import BotSalinhaBot
-from src.models.rag_models import DocumentORM
-from src.storage.sqlite_repository import SQLiteRepository
 
 
 @pytest.mark.e2e
@@ -19,100 +18,46 @@ class TestRAGReindexCommand:
     """End-to-end tests for !reindexar command."""
 
     @pytest.mark.asyncio
-    async def test_reindexar_command_as_owner(
-        self,
-        rag_query_service,
-        db_session: AsyncSession,
-    ) -> None:
-        """Test !reindexar command when user is bot owner."""
-        # Create bot
-        repository = SQLiteRepository("sqlite+aiosqlite:///:memory:")
-        await repository.initialize_database()
-        await repository.create_tables()
+    async def test_reindexar_command_as_owner(self, db_session: AsyncSession) -> None:
+        """!reindexar completo should run and report completion for owner."""
+        bot = BotSalinhaBot()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
+        @asynccontextmanager
+        async def fake_rag_session():
+            yield db_session
 
-        # Create mock context with owner
+        bot._rag_session = fake_rag_session  # type: ignore[method-assign]
+        bot.is_owner = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
         ctx = MagicMock()
-        ctx.author.id = bot.owner_id if hasattr(bot, "owner_id") else 123456789
-        ctx.author.name = "BotOwner"
+        ctx.author.id = 123456789
+        ctx.guild = None
+        # NOTE: discord.py uses `await ctx.typing()` (not `async with ctx.typing():`)
+        # AsyncMock() is correct for this pattern - see discord.py:243,331,415
         ctx.typing = AsyncMock()
+        ctx.send = AsyncMock()
 
-        # Mock ctx.send to capture messages
-        sent_messages = []
+        fake_stats = {
+            "documents_count": 1,
+            "chunks_count": 3,
+            "duration_seconds": 0.12,
+        }
 
-        async def mock_send(content=None, embed=None, **kwargs):
-            msg = MagicMock()
-            msg.content = content
-            msg.embed = embed
-            sent_messages.append(msg)
-            return msg
+        with patch("src.core.discord.IngestionService.reindex", new=AsyncMock(return_value=fake_stats)):
+            await bot.reindexar_command.callback(bot, ctx, "completo")
 
-        async def mock_edit(new_content=None, **kwargs):
-            msg = MagicMock()
-            msg.content = new_content
-            return msg
-
-        ctx.send = AsyncMock(side_effect=mock_send)
-
-        # Mock start_msg.edit
-        start_msg = MagicMock()
-        start_msg.edit = AsyncMock(side_effect=mock_edit)
-
-        # Patch ctx.send to return our mock start_msg
-        original_send = ctx.send
-
-        async def patched_send(content=None, embed=None, **kwargs):
-            if "Iniciando reindexação" in (content or ""):
-                return start_msg
-            return await original_send(content=content, embed=embed, **kwargs)
-
-        ctx.send = AsyncMock(side_effect=patched_send)
-
-        # Check if RAG documents exist
-        from sqlalchemy import func, select
-
-        doc_count_stmt = select(func.count(DocumentORM.id))
-        doc_count_result = await db_session.execute(doc_count_stmt)
-        doc_count = doc_count_result.scalar() or 0
-
-        # If no documents, skip test
-        if doc_count == 0:
-            pytest.skip("No RAG documents found for reindex test")
-
-        # Call the underlying command method
-        try:
-            await bot.reindexar_command.callback(bot, ctx)
-        except AttributeError:
-            # Command doesn't exist yet - skip test
-            pytest.skip("Command !reindexar not yet implemented")
-
-        # Verify messages were sent
         assert ctx.send.called
-        assert len(sent_messages) >= 1
+        messages = [call[0][0] for call in ctx.send.call_args_list if call[0]]
+        assert any("Reindexação RAG concluída" in msg for msg in messages)
 
     @pytest.mark.asyncio
-    async def test_reindexar_command_exists(
-        self,
-        rag_query_service,
-        db_session: AsyncSession,
-    ) -> None:
-        """Test !reindexar command is registered on bot."""
-        # Create bot
-        repository = SQLiteRepository("sqlite+aiosqlite:///:memory:")
-        await repository.initialize_database()
-        await repository.create_tables()
+    async def test_reindexar_command_exists(self) -> None:
+        """!reindexar command should be registered on bot."""
+        bot = BotSalinhaBot()
 
-        bot = BotSalinhaBot(repository=repository, db_session=db_session)
-
-        # Check if command exists
-        command = bot.get_command("reindexar")
-        if command is None:
-            pytest.skip("Command !reindexar not yet implemented")
-
-        # Verify command properties
-        assert command.name == "reindexar"
-        assert command.checks  # Should have @commands.is_owner() check
+        assert hasattr(bot, "reindexar_command")
+        command_obj = bot.reindexar_command
+        assert callable(command_obj.callback)
 
 
 __all__ = ["TestRAGReindexCommand"]

@@ -14,7 +14,6 @@ import pytest
 import pytest_asyncio
 from faker import Faker
 from freezegun import freeze_time
-from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -61,6 +60,7 @@ def test_settings(monkeypatch) -> Settings:
     """
     monkeypatch.setenv("BOTSALINHA_DISCORD__TOKEN", "test_token_12345")
     monkeypatch.setenv("BOTSALINHA_GOOGLE__API_KEY", "test_api_key")
+    monkeypatch.setenv("BOTSALINHA_OPENAI__API_KEY", "test_openai_key")
     monkeypatch.setenv("BOTSALINHA_DATABASE__URL", TEST_DATABASE_URL)
     monkeypatch.setenv("BOTSALINHA_APP__ENV", "testing")
     monkeypatch.setenv("BOTSALINHA_RATE__LIMIT__REQUESTS", "100")
@@ -264,9 +264,9 @@ def mock_gemini_api():
     without making actual API calls.
     """
     from unittest.mock import AsyncMock, patch
-    
+
     mock_response = "Esta é uma resposta de teste do BotSalinha sobre direito brasileiro. No Brasil, o princípio da legalidade é fundamental e está estabelecido no artigo 37 da Constituição Federal."
-    
+
     with patch("src.core.agent.AgentWrapper.generate_response", new=AsyncMock(return_value=mock_response)):
         yield
 

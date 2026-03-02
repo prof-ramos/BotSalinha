@@ -232,5 +232,7 @@ Limpa o histórico de conversa do usuário no canal atual.
 
 Credenciais esperadas no `.env`:
 
-- `OPENAI_API_KEY` (quando provider = `openai`)
-- `GOOGLE_API_KEY` (quando provider = `google`)
+- `BOTSALINHA_OPENAI__API_KEY` (quando provider = `openai`) - formato canônico
+  - `OPENAI_API_KEY` também funciona via fallback (compatibilidade legada)
+- `BOTSALINHA_GOOGLE__API_KEY` (quando provider = `google`) - formato canônico
+  - `GOOGLE_API_KEY` também funciona via fallback (compatibilidade legada)

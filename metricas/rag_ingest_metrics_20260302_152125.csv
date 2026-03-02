@@ -1,0 +1,23 @@
+timestamp,mode,document,status,chunks,tokens,error
+2026-03-02T15:21:40.099907,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/cdc_material_lei_seca_questoes.docx,failed,0,0,Failed to ingest document cdc_material_lei_seca_questoes: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:22:13.222067,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/cf_de_1988_atualiz_ate_ec_138.docx,failed,0,0,Failed to ingest document cf_de_1988_atualiz_ate_ec_138: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:22:43.426334,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/codigo_civil_atualizado_ate_01_de_janeiro.docx,failed,0,0,Failed to ingest document codigo_civil_atualizado_ate_01_de_janeiro: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:22:49.559410,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/codigo_eleitoral.docx,updated,254,130622,
+2026-03-02T15:23:12.515677,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/codigo_penal_atualizado_ate_27_de_dezembro.docx,failed,0,0,Failed to ingest document codigo_penal_atualizado_ate_27_de_dezembro: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:24:12.005074,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/cpc_de_2015_atualiz_31_de_dezembro.docx,updated,1728,1072684,
+2026-03-02T15:24:32.097813,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/cpp_atualiz_27_de_dezembro.docx,failed,0,0,Failed to ingest document cpp_atualiz_27_de_dezembro: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:24:33.943693,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/crimes_hediondos_lei_8072.docx,updated,25,13601,
+2026-03-02T15:24:42.025378,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/ctn_atualizado_em_08_de_dezembro.docx,updated,349,247393,
+2026-03-02T15:24:50.889676,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/drogas_lei_11_343.docx,failed,0,0,Failed to ingest document drogas_lei_11_343: Operation 'embed_batch' failed after 3 attempts
+2026-03-02T15:25:02.492355,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/eca_atualizado_lei_8069.docx,updated,592,329743,
+2026-03-02T15:25:05.395501,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/estatuto_da_pessoa_com_deficiencia_lei_13146.docx,updated,112,51510,
+2026-03-02T15:25:07.591318,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/estatuto_da_pessoa_idosa_lei_10_741.docx,updated,123,57311,
+2026-03-02T15:25:16.432821,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/falencia_atualizada_lei_11_101.docx,updated,360,179044,
+2026-03-02T15:25:19.236604,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/improbidade_administrativa_lei_8429.docx,updated,126,86618,
+2026-03-02T15:25:29.215742,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/lei_de_licitacoes_e_contratos_administrativos_lei_14133.docx,updated,292,135470,
+2026-03-02T15:25:35.157368,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/lei_de_responsabilidade_fiscal_lc_101.docx,updated,210,100754,
+2026-03-02T15:25:39.940353,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/lep_lei_7210.docx,updated,213,114881,
+2026-03-02T15:25:42.207323,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/maria_da_penha_lei_11_340.docx,updated,82,52941,
+2026-03-02T15:25:48.216108,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/regime_juridico_dos_servidores_civis_da_uniao_lei_8112.docx,updated,159,74132,
+2026-03-02T15:25:48.648192,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/sumulas_stm_atualizado.docx,updated,1,1565,
+2026-03-02T15:25:49.598752,incremental,/Users/gabrielramos/BotSalinha/docs/plans/RAG/sumulas_tse_atualizado.docx,updated,11,13084,

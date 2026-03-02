@@ -8,10 +8,9 @@ import os
 
 import structlog
 
-from ..config.convex_config import ConvexConfig
 from .convex_repository import ConvexRepository
 from .repository import ConversationRepository, MessageRepository
-from .sqlite_repository import SQLiteRepository, get_repository
+from .sqlite_repository import get_repository
 
 log = structlog.get_logger()
 
@@ -26,7 +25,7 @@ def get_configured_repository() -> ConversationRepository | MessageRepository:
     # Check if Convex is enabled
     convex_enabled = os.getenv('BOTSALINHA_CONVEX__ENABLED', 'false').lower() == 'true'
     convex_url = os.getenv('BOTSALINHA_CONVEX__URL')
-    
+
     if convex_enabled and convex_url:
         log.info("using_convex_backend", url=convex_url)
         return ConvexRepository(convex_url)

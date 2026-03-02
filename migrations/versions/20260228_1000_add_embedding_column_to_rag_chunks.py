@@ -1,7 +1,7 @@
 """add embedding column to rag_chunks
 
 Revision ID: 20260228_1000
-Revises: 20260228_0236_203b07bc02cc
+Revises: 203b07bc02cc
 Create Date: 2026-02-28 01:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '20260228_1000'
-down_revision: Union[str, None] = '20260228_0236_203b07bc02cc'
+down_revision: Union[str, None] = '203b07bc02cc'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -9,7 +9,7 @@ BotSalinha is a Discord bot specialized in **Brazilian law and public contest pr
 - **Language:** Python 3.12+
 - **Framework:** discord.py + [Agno](https://github.com/agno-agi/agno) AI agent framework
 - **AI Backend:** Multi-model support (OpenAI default, Google Gemini alternative)
-- **Database:** SQLite via SQLAlchemy async ORM (Supabase optional)
+- **Database:** SQLite via SQLAlchemy async ORM
 - **RAG:** Document + codebase ingestion with vector search
 - **Package Manager:** `uv`
 
@@ -53,8 +53,7 @@ BotSalinha/
 │   ├── storage/
 │   │   ├── factory.py            # Repository factory (DI pattern)
 │   │   ├── repository.py         # Abstract repository interfaces
-│   │   ├── sqlite_repository.py  # SQLite implementation (default)
-│   │   └── supabase_repository.py # Supabase implementation (optional)
+│   │   └── sqlite_repository.py  # SQLite implementation
 │   ├── tools/                    # Integrations (MCP manager, etc.)
 │   ├── middleware/
 │   │   └── rate_limiter.py       # Token bucket rate limiter (per-user/per-guild)
@@ -241,18 +240,18 @@ uv run python scripts/gerar_relatorio_rag.py
 
 Copy `.env.example` to `.env` and fill in the required values:
 
-| Variable | Default | Required | Description |
-|---|---|---|---|
-| `BOTSALINHA_DISCORD__TOKEN` | — | **Yes** | Discord bot token |
-| `BOTSALINHA_DISCORD__MESSAGE_CONTENT_INTENT` | `true` | No | Enable message content intent |
-| `BOTSALINHA_GOOGLE__API_KEY` | — | **Yes** | Google Gemini API key |
-| `BOTSALINHA_GOOGLE__MODEL_ID` | `gemini-2.5-flash-lite` | No | Gemini model to use |
-| `BOTSALINHA_HISTORY__RUNS` | `3` | No | Conversation history pairs |
-| `BOTSALINHA_RATE_LIMIT__REQUESTS` | `10` | No | Max requests per window |
-| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS` | `60` | No | Rate limit time window |
-| `BOTSALINHA_DATABASE__URL` | `sqlite:///data/botsalinha.db` | No | SQLite database path |
-| `BOTSALINHA_LOG_LEVEL` | `INFO` | No | Log level |
-| `BOTSALINHA_LOG_FORMAT` | `json` | No | `json` or `text` |
+| Variable                                     | Default                        | Required | Description                   |
+| -------------------------------------------- | ------------------------------ | -------- | ----------------------------- |
+| `BOTSALINHA_DISCORD__TOKEN`                  | —                              | **Yes**  | Discord bot token             |
+| `BOTSALINHA_DISCORD__MESSAGE_CONTENT_INTENT` | `true`                         | No       | Enable message content intent |
+| `BOTSALINHA_GOOGLE__API_KEY`                 | —                              | **Yes**  | Google Gemini API key         |
+| `BOTSALINHA_GOOGLE__MODEL_ID`                | `gemini-2.5-flash-lite`        | No       | Gemini model to use           |
+| `BOTSALINHA_HISTORY__RUNS`                   | `3`                            | No       | Conversation history pairs    |
+| `BOTSALINHA_RATE_LIMIT__REQUESTS`            | `10`                           | No       | Max requests per window       |
+| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS`      | `60`                           | No       | Rate limit time window        |
+| `BOTSALINHA_DATABASE__URL`                   | `sqlite:///data/botsalinha.db` | No       | SQLite database path          |
+| `BOTSALINHA_LOG_LEVEL`                       | `INFO`                         | No       | Log level                     |
+| `BOTSALINHA_LOG_FORMAT`                      | `json`                         | No       | `json` or `text`              |
 
 All env vars use the `BOTSALINHA_` prefix. Nested configs use double underscores (e.g., `BOTSALINHA_DISCORD__TOKEN`).
 
@@ -266,11 +265,12 @@ BotSalinha supports multiple AI providers via Agno framework. Provider selection
 
 ```yaml
 model:
-  provider: openai  # Options: openai (default), google
-  id: gpt-4o-mini     # OpenAI: gpt-4o-mini, Google: gemini-2.5-flash-lite
+  provider: openai # Options: openai (default), google
+  id: gpt-4o-mini # OpenAI: gpt-4o-mini, Google: gemini-2.5-flash-lite
 ```
 
 Environment variables (`.env`):
+
 - `BOTSALINHA_OPENAI__API_KEY` - Required for OpenAI provider
 - `BOTSALINHA_GOOGLE__API_KEY` - Required for Google provider
 
@@ -289,7 +289,7 @@ RAG Layer (QueryService → EmbeddingService → VectorStore)
          ↓
 Data Access Layer (Repository Pattern — abstract interfaces)
          ↓
-Database Layer (SQLite default, Supabase optional)
+Database Layer (SQLite via SQLAlchemy async)
 ```
 
 ### RAG (Retrieval-Augmented Generation)
@@ -297,12 +297,14 @@ Database Layer (SQLite default, Supabase optional)
 BotSalinha implements a complete RAG pipeline in `src/rag/`:
 
 **Components:**
+
 - **Parsers** (`src/rag/parser/`): DOCX, XML (Repomix), code chunking
 - **Services** (`src/rag/services/`): Query, Ingestion (documents + codebase), Embeddings (OpenAI)
 - **Storage** (`src/rag/storage/`): Vector store with cosine similarity
 - **Utils** (`src/rag/utils/`): Confidence calculator, metadata extraction, retrieval ranking
 
 **Flow:**
+
 1. Document ingestion → Chunking → Embedding → SQLite storage
 2. Query → Embedding → Vector search → Context injection → AI response
 
@@ -310,7 +312,7 @@ BotSalinha implements a complete RAG pipeline in `src/rag/`:
 
 ### Key Design Patterns
 
-- **Repository Pattern with Factory:** `src/storage/factory.py` provides `create_repository()` context manager that returns `SQLiteRepository` or `SupabaseRepository` based on settings. **Always use this pattern** for database access — never instantiate repositories directly.
+- **Repository Pattern with Factory:** `src/storage/factory.py` provides `create_repository()` context manager that always returns a `SQLiteRepository`. **Always use this pattern** for database access — never instantiate repositories directly.
 - **Pydantic Settings:** `src/config/settings.py` uses `pydantic-settings` with `@lru_cache` for a singleton. Never call `Settings()` directly; use `get_settings()` or the `settings` instance.
 - **YAML Config:** Agent and model settings live in `config.yaml`, parsed by `src/config/yaml_config.py` with Pydantic validation. The active prompt file is specified here (`prompt_v1.md` by default).
 - **Async Throughout:** All I/O-bound operations use `async/await`. Never call blocking functions from async context.
@@ -322,14 +324,14 @@ BotSalinha implements a complete RAG pipeline in `src/rag/`:
 
 ### Naming
 
-| Item | Convention | Example |
-|---|---|---|
-| Classes | PascalCase | `BotSalinhaBot`, `ConversationORM` |
-| Functions/Methods | snake_case | `run_discord_bot`, `check_rate_limit` |
-| Private members | `_underscore` prefix | `_ready_event`, `_initialized` |
-| Constants | UPPER_SNAKE_CASE | `MAX_RETRIES` |
-| Async functions | `async def` | `async def generate_response()` |
-| Type hints | Always present | `str | None` (not `Optional[str]`) |
+| Item              | Convention           | Example                               |
+| ----------------- | -------------------- | ------------------------------------- | ------------------------- |
+| Classes           | PascalCase           | `BotSalinhaBot`, `ConversationORM`    |
+| Functions/Methods | snake_case           | `run_discord_bot`, `check_rate_limit` |
+| Private members   | `_underscore` prefix | `_ready_event`, `_initialized`        |
+| Constants         | UPPER_SNAKE_CASE     | `MAX_RETRIES`                         |
+| Async functions   | `async def`          | `async def generate_response()`       |
+| Type hints        | Always present       | `str                                  | None`(not`Optional[str]`) |
 
 ### Import Order (enforced by Ruff/isort)
 
@@ -370,6 +372,7 @@ except SpecificError as e:
 ```
 
 Exception types:
+
 - `APIError` — External API failures
 - `RateLimitError` — Rate limit exceeded
 - `ValidationError` — Input validation failures
@@ -425,13 +428,13 @@ async def call_external_api() -> str:
 
 ### Key Fixtures (from `tests/conftest.py`)
 
-| Fixture | Description |
-|---|---|
-| `test_settings` | Pydantic settings configured for test environment |
-| `test_engine` | Async SQLAlchemy engine (in-memory SQLite) |
-| `test_session` | Scoped async database session |
-| `test_repository` | In-memory `SQLiteRepository` instance |
-| `rate_limiter` | `RateLimiter` instance |
+| Fixture           | Description                                       |
+| ----------------- | ------------------------------------------------- |
+| `test_settings`   | Pydantic settings configured for test environment |
+| `test_engine`     | Async SQLAlchemy engine (in-memory SQLite)        |
+| `test_session`    | Scoped async database session                     |
+| `test_repository` | In-memory `SQLiteRepository` instance             |
+| `rate_limiter`    | `RateLimiter` instance                            |
 
 ### Testing Patterns
 
@@ -447,13 +450,13 @@ async def call_external_api() -> str:
 
 The GitHub Actions workflow (`.github/workflows/test.yml`) runs on push to `main`/`develop` and on pull requests:
 
-| Job | What it does |
-|---|---|
-| **Lint** | `ruff check`, `ruff format --check`, `mypy src/` |
-| **Unit Tests** | `pytest tests/unit` with coverage upload |
-| **Integration Tests** | `pytest tests/integration` |
-| **E2E Tests** | `pytest tests/e2e` (needs Discord/Gemini secrets) |
-| **All Tests** | Full parallel run, enforces 70% coverage threshold |
+| Job                   | What it does                                       |
+| --------------------- | -------------------------------------------------- |
+| **Lint**              | `ruff check`, `ruff format --check`, `mypy src/`   |
+| **Unit Tests**        | `pytest tests/unit` with coverage upload           |
+| **Integration Tests** | `pytest tests/integration`                         |
+| **E2E Tests**         | `pytest tests/e2e` (needs Discord/Gemini secrets)  |
+| **All Tests**         | Full parallel run, enforces 70% coverage threshold |
 
 ---
 
@@ -461,11 +464,11 @@ The GitHub Actions workflow (`.github/workflows/test.yml`) runs on push to `main
 
 System prompts live in `prompt/`. The active prompt is configured in `config.yaml`:
 
-| File | Style | Status |
-|---|---|---|
-| `prompt_v1.md` | Simple, direct | **Active (default)** |
-| `prompt_v2.json` | Few-shot with examples | Available |
-| `prompt_v3.md` | Advanced chain-of-thought | Available |
+| File             | Style                     | Status               |
+| ---------------- | ------------------------- | -------------------- |
+| `prompt_v1.md`   | Simple, direct            | **Active (default)** |
+| `prompt_v2.json` | Few-shot with examples    | Available            |
+| `prompt_v3.md`   | Advanced chain-of-thought | Available            |
 
 To switch prompts, update `config.yaml` → `prompt.file`.
 
@@ -473,30 +476,30 @@ To switch prompts, update `config.yaml` → `prompt.file`.
 
 ## Discord Bot Commands
 
-| Command | Description |
-|---|---|
+| Command           | Description                                           |
+| ----------------- | ----------------------------------------------------- |
 | `!ask <question>` | Ask the AI a question about Brazilian law or contests |
-| `!ping` | Health check |
-| `!ajuda` | Show help message |
-| `!info` | Show bot information |
-| `!limpar` | Clear conversation history for the user |
+| `!ping`           | Health check                                          |
+| `!ajuda`          | Show help message                                     |
+| `!info`           | Show bot information                                  |
+| `!limpar`         | Clear conversation history for the user               |
 
 ---
 
 ## Important Files to Know
 
-| File | Why it matters |
-|---|---|
-| `src/config/settings.py` | All configuration with defaults and validation (Pydantic Settings singleton) |
-| `src/config/yaml_config.py` | Agent/model configuration (provider selection, prompt file, parameters) |
-| `src/core/agent.py` | AI response generation with RAG integration and multi-model support |
-| `src/core/discord.py` | All bot commands and Discord event handlers |
-| `src/rag/` | Complete RAG implementation (parsers, services, storage, utils) |
-| `src/storage/factory.py` | Repository factory for DI pattern — **use this for database access** |
-| `src/storage/repository.py` | Abstract repository interfaces |
-| `src/storage/sqlite_repository.py` | SQLite implementation (default database) |
-| `src/utils/errors.py` | Exception hierarchy — use these, don't use bare exceptions |
-| `config.yaml` | Model provider selection (openai/google), prompt file, agent behavior |
-| `.env.example` | Canonical list of all supported environment variables |
-| `docs/architecture.md` | Comprehensive system architecture documentation |
-| `docs/CODE_DOCUMENTATION.md` | Detailed module-by-module technical documentation |
+| File                               | Why it matters                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `src/config/settings.py`           | All configuration with defaults and validation (Pydantic Settings singleton) |
+| `src/config/yaml_config.py`        | Agent/model configuration (provider selection, prompt file, parameters)      |
+| `src/core/agent.py`                | AI response generation with RAG integration and multi-model support          |
+| `src/core/discord.py`              | All bot commands and Discord event handlers                                  |
+| `src/rag/`                         | Complete RAG implementation (parsers, services, storage, utils)              |
+| `src/storage/factory.py`           | Repository factory for DI pattern — **use this for database access**         |
+| `src/storage/repository.py`        | Abstract repository interfaces                                               |
+| `src/storage/sqlite_repository.py` | SQLite implementation (default database)                                     |
+| `src/utils/errors.py`              | Exception hierarchy — use these, don't use bare exceptions                   |
+| `config.yaml`                      | Model provider selection (openai/google), prompt file, agent behavior        |
+| `.env.example`                     | Canonical list of all supported environment variables                        |
+| `docs/architecture.md`             | Comprehensive system architecture documentation                              |
+| `docs/CODE_DOCUMENTATION.md`       | Detailed module-by-module technical documentation                            |

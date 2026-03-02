@@ -217,7 +217,9 @@ async def main() -> None:
 
     api_key = settings.get_openai_api_key()
     if not api_key:
-        print("❌ OPENAI_API_KEY não configurada")
+        print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
+        print("💡 Defina BOTSALINHA_OPENAI__API_KEY no .env")
+        print("   (ou use OPENAI_API_KEY para compatibilidade legada)")
         raise SystemExit(1)
 
     docs_dir = args.docs_dir.resolve()

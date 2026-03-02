@@ -35,7 +35,7 @@ uv run python scripts/ingest_rag.py
 ```
 - Reads from `docs/plans/RAG/` directory
 - Ingests all `.docx` files found
-- Requires `OPENAI_API_KEY` environment variable
+- Requires `BOTSALINHA_OPENAI__API_KEY` (or `OPENAI_API_KEY` for legacy compatibility)
 
 **Ingest codebase into RAG (from repomix XML):**
 ```bash
@@ -364,10 +364,10 @@ docker-compose logs | grep -i "openai"
    docker-compose exec botsalinha python scripts/ingest_rag.py
    ```
 
-2. **OpenAI API key issues**: Verify `OPENAI_API_KEY` in `.env`
+2. **OpenAI API key issues**: Verify `BOTSALINHA_OPENAI__API_KEY` in `.env`
    ```bash
    docker-compose exec botsalinha env | grep OPENAI
-   # Should show: OPENAI_API_KEY=sk-...
+   # Should show: BOTSALINHA_OPENAI__API_KEY=sk-... (or OPENAI_API_KEY for legacy)
    ```
 
 3. **Embedding generation failures**: Check logs for rate limiting

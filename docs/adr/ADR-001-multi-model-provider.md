@@ -17,8 +17,8 @@ O provider ativo será definido exclusivamente em `config.yaml` no campo `model.
 - Valores válidos: `openai`, `google`
 - Valor padrão: `openai`
 - Credenciais ficam apenas no `.env`:
-  - `OPENAI_API_KEY`
-  - `GOOGLE_API_KEY`
+  - `BOTSALINHA_OPENAI__API_KEY` (canônico) ou `OPENAI_API_KEY` (legado, com fallback)
+  - `BOTSALINHA_GOOGLE__API_KEY` (canônico) ou `GOOGLE_API_KEY` (legado, com fallback)
 - Não haverá variável de ambiente para escolher provider.
 
 ## Consequences
