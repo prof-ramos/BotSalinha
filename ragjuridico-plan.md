@@ -41,9 +41,11 @@ T9 ─────────────────────┘
 - **location**: `tests/integration/rag/`, `metricas/`, `scripts/analizar_qualidade_rag.py`, `scripts/gerar_relatorio_rag.py`
 - **description**: Criar baseline offline de retrieval com métricas `Recall@k`, `MRR`, `nDCG` e taxa de citação correta (artigo/parágrafo/inciso), separando retrieval de geração.
 - **validation**: Script gera relatório versionado com métricas por tipo de consulta (`artigo`, `jurisprudencia`, `concurso`, `geral`) e salva snapshot comparável.
-- **status**: Not Completed
+- **status**: Blocked (2026-03-02)
 - **log**:
+  - Execução iniciada via super-swarm, mas interrompida por instabilidade de ambiente (`Too many open files (os error 24)`), sem entrega validada.
 - **files edited/created**:
+  - N/A (sem entrega consolidada)
 
 ### T2: Parser DOCX Jurídico Orientado à Estrutura Legal
 - **depends_on**: []
@@ -132,9 +134,11 @@ T9 ─────────────────────┘
 - **location**: `src/rag/utils/retrieval_ranker.py`, `src/rag/services/query_service.py`, `tests/unit/rag/test_query_service.py`
 - **description**: Refinar pesos do rerank por tipo de consulta e normalizar `retrieval_meta` como estrutura tipada (sem serialização em string), habilitando tuning orientado a dados com compatibilidade retroativa (dual-read/dual-write temporário).
 - **validation**: Melhor `MRR` por intenção, metadados estruturados em logs/debug e compatibilidade mantida durante janela de depreciação.
-- **status**: Not Completed
+- **status**: Blocked (2026-03-02)
 - **log**:
+  - Task iniciada via super-swarm, porém interrompida durante saturação de descritores (`Too many open files (os error 24)`), sem pacote final validado.
 - **files edited/created**:
+  - N/A (sem entrega consolidada)
 
 ### T8: Montagem de Contexto e Orçamento de Tokens
 - **depends_on**: [T4]
@@ -160,27 +164,33 @@ T9 ─────────────────────┘
 - **location**: `src/rag/services/ingestion_service.py`, `src/rag/services/code_ingestion_service.py`, `src/models/rag_models.py`, `migrations/versions/`
 - **description**: Trocar deduplicação por hash de caminho/nome para hash de conteúdo real (documento/chunk), com migração + backfill de legado (`hash` nulo/antigo), atualização incremental e reindex seletivo idempotente.
 - **validation**: Alterar conteúdo sem alterar path dispara re-embed apenas dos chunks afetados; sem duplicação incorreta; backfill mantém unicidade e reindex repetido não cria divergência.
-- **status**: Not Completed
+- **status**: Blocked (2026-03-02)
 - **log**:
+  - Não foi possível avançar: subagente reportou falha generalizada de execução (`Too many open files (os error 24)`), impedindo edição/validação/commit.
 - **files edited/created**:
+  - N/A (sem alterações consolidadas)
 
 ### T10: Avaliação Integrada (Retrieval + Resposta Final)
 - **depends_on**: [T1, T7, T8, T9]
 - **location**: `tests/e2e/test_rag_search.py`, `tests/integration/rag/test_recall.py`, `metricas/`
 - **description**: Criar suíte de avaliação completa com métricas de retrieval e de resposta fundamentada (citação correta, cobertura normativa, taxa de “sem base”).
 - **validation**: Pipeline CI produz relatório comparando baseline e candidato; critérios mínimos de aprovação definidos com SLOs (`P95` latência, custo por consulta e taxa de timeout/erro).
-- **status**: Not Completed
+- **status**: Blocked (2026-03-02)
 - **log**:
+  - Task interrompida durante instabilidade de ambiente por saturação de descritores (`Too many open files (os error 24)`), sem entrega validada.
 - **files edited/created**:
+  - N/A (sem entrega consolidada)
 
 ### T11: Operação, Comandos de Administração e Runbooks
 - **depends_on**: [T10]
 - **location**: `src/core/discord.py`, `scripts/ingest_all_rag.py`, `docs/features/rag.md`, `docs/backup_restore.md`
 - **description**: Consolidar comandos de operação (`!fontes`, `!reindexar`, reindex incremental), observabilidade e runbooks de recuperação para produção.
 - **validation**: Comandos funcionam em ambiente de teste e documentação operacional cobre cenários de falha e rollback.
-- **status**: Not Completed
+- **status**: Blocked (2026-03-02)
 - **log**:
+  - Subagente não conseguiu iniciar execução (erro imediato `Too many open files (os error 24)`), sem mudanças aplicadas.
 - **files edited/created**:
+  - N/A (sem alterações consolidadas)
 
 ## Parallel Execution Groups
 
