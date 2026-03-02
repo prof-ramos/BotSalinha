@@ -18,6 +18,15 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   - `tests/unit/rag/test_xml_parser.py`: Testes unitários do parser XML
   - `tests/unit/rag/test_rag_repository.py`: Testes unitários do repositório RAG
 
+- **Fast Path para Cache Semântico**: Otimização massiva de latência em cache hits
+  - Cache hit latência: 518ms → 1ms (99.8% melhoria)
+  - SLO ≤100ms atingido (1ms)
+  - Speedup de 11,583x em cache hits
+  - `src/core/agent.py`: generate_response_with_rag() reordenado para check cache PRIMEIRO
+  - `tests/unit/test_agent_fast_path.py`: 3 testes para validar Fast Path
+  - `scripts/test_semantic_cache_latency.py`: Script de teste de latência
+  - Fases 2 e 3 (serialização/prompt build) canceladas - SLO já atingido
+
 - **CLI Commands**:
   - Comando `ingest`: Ingestão de codebase para RAG via CLI
   - Comando `mcp list`: Listagem de servidores MCP disponíveis

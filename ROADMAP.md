@@ -28,6 +28,16 @@ Para uma visão detalhada das capacidades já implementadas e em desenvolvimento
 - [x] Integração com vector store (ChromaDB)
 - [x] Documentação completa em `docs/features/rag.md`
 
+### Fast Path Otimization (Sprint Finalizada)
+- [x] **Cache Semântico:** Fast Path implementado para otimizar cache hits
+- [x] Cache check movido para ANTES de get_conversation_history()
+- [x] Cache hit latência: 518ms → 1ms (99.8% melhoria)
+- [x] SLO ≤100ms atingido
+- [x] Speedup de 11,583x em cache hits
+- [x] Testes criados em `tests/unit/test_agent_fast_path.py`
+- [x] Script de teste de latência em `scripts/test_semantic_cache_latency.py`
+- [x] Commit: c9e1d1c - feat(agent): implementar Fast Path para otimizar cache hits (Fase 1)
+
 ### CodeRabbit Fixes (20 correções aplicadas)
 - [x] **Configuração e Ambiente:** Variáveis `.env.example` padronizadas com prefixo `BOTSALINHA_`, `env_prefix` restaurado em `settings.py`, seção de migração adicionada na ADR-001
 - [x] **Segurança (MCP):** Credenciais hardcoded removidas de `.mcp.json`

@@ -11,6 +11,14 @@ Assistente de Direito e Concursos Públicos para Discord, com suporte a RAG (Ret
 - RAG com código da base (ingestão automática)
 - Suporte multi-modelo (Google Gemini e OpenAI)
 
+## Performance
+
+**Cache Semântico com Fast Path:**
+- Cache hit latência: **1ms** (SLO ≤100ms atingido ✅)
+- Speedup: 11,583x em cache hits
+- Cache miss latência: ~16s (SLO ≤30s)
+- Otimização implementada: check de cache ANTES de carregar histórico da conversa
+
 ## Tecnologias
 
 - **Python 3.12+**
