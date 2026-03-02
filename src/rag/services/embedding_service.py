@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import re
+
 import structlog
+import tiktoken
 from openai import AsyncOpenAI
 
 from ...config.settings import get_settings
+from ...config.yaml_config import yaml_config
 from ...utils.errors import APIError
 from ...utils.log_events import LogEvents
 from ...utils.retry import async_retry_decorator
@@ -43,9 +47,12 @@ class EmbeddingService:
         self._model = model or settings.rag.embedding_model
         self._client = AsyncOpenAI(api_key=self._api_key)
 
+        provider, generation_model = self.get_generation_model_strategy()
         log.debug(
             "rag_embedding_service_initialized",
             model=self._model,
+            generation_provider=provider,
+            generation_model=generation_model,
             event_name="rag_embedding_service_initialized",
         )
 
@@ -69,7 +76,7 @@ class EmbeddingService:
             )
             return [0.0] * EMBEDDING_DIM
 
-        token_estimate = self._estimate_tokens(text)
+        token_count = self.count_tokens(text, provider="openai", model=self._model)
 
         try:
             embedding = await self._create_embedding(text)
@@ -77,7 +84,7 @@ class EmbeddingService:
             log.info(
                 "rag_embedding_created",
                 model=self._model,
-                token_estimate=token_estimate,
+                token_count=token_count,
                 embedding_dim=len(embedding),
                 event_name="rag_embedding_created",
             )
@@ -121,7 +128,9 @@ class EmbeddingService:
             return [[0.0] * EMBEDDING_DIM for _ in texts]
 
         # Estimate total tokens
-        total_tokens = sum(self._estimate_tokens(t) for _, t in valid_texts)
+        total_tokens = sum(
+            self.count_tokens(text=t, provider="openai", model=self._model) for _, t in valid_texts
+        )
 
         # OpenAI limit: 300000 tokens per request for text-embedding-3-small
         # Use 200000 as safe limit to account for estimation errors
@@ -157,7 +166,7 @@ class EmbeddingService:
                 current_batch_tokens = 0
 
                 for idx, text in zip(indices, texts_to_embed, strict=True):
-                    text_tokens = self._estimate_tokens(text)
+                    text_tokens = self.count_tokens(text=text, provider="openai", model=self._model)
 
                     # Check if adding this text would exceed limit
                     if (
@@ -215,21 +224,67 @@ class EmbeddingService:
             )
             raise APIError(f"Failed to generate batch embeddings: {e}") from e
 
-    def _estimate_tokens(self, text: str) -> int:
+    @classmethod
+    def get_generation_model_strategy(cls) -> tuple[str, str]:
         """
-        Estimate token count for text (approximately 4 characters per token).
-
-        This is a rough estimate suitable for Brazilian Portuguese text.
-        For accurate counting, use tiktoken library.
-
-        Args:
-            text: Text to estimate
-
-        Returns:
-            Estimated token count
+        Resolve provider/model from runtime YAML config for prompt generation.
         """
-        # Rough estimate: ~4 characters per token for Portuguese
-        return max(1, len(text) // 4)
+        try:
+            provider = (yaml_config.model.provider or "openai").strip().lower()
+            model = (yaml_config.model.model_id or "gpt-4o-mini").strip()
+            return provider, model
+        except Exception:
+            return "openai", "gpt-4o-mini"
+
+    @classmethod
+    def count_tokens(cls, text: str, provider: str, model: str | None = None) -> int:
+        """
+        Count tokens using strategy based on provider/model.
+
+        OpenAI: uses tiktoken model encoding.
+        Gemini/others: uses token-like lexical units (words + punctuation).
+        """
+        clean_text = (text or "").strip()
+        if not clean_text:
+            return 0
+
+        normalized_provider = (provider or "openai").strip().lower()
+        model_name = (model or "").strip()
+
+        if normalized_provider == "openai":
+            return cls._count_tokens_openai(clean_text, model_name)
+
+        return cls._count_tokens_lexical(clean_text)
+
+    @classmethod
+    def count_tokens_for_generation(cls, text: str) -> int:
+        """
+        Count tokens using configured generation provider/model.
+        """
+        provider, model = cls.get_generation_model_strategy()
+        return cls.count_tokens(text=text, provider=provider, model=model)
+
+    @staticmethod
+    def _count_tokens_openai(text: str, model: str) -> int:
+        """
+        Count tokens with tiktoken using model-specific encoding.
+        """
+        try:
+            if model:
+                encoding = tiktoken.encoding_for_model(model)
+            else:
+                encoding = tiktoken.get_encoding("o200k_base")
+        except KeyError:
+            encoding = tiktoken.get_encoding("o200k_base")
+        return len(encoding.encode(text))
+
+    @staticmethod
+    def _count_tokens_lexical(text: str) -> int:
+        """
+        Provider-agnostic fallback token count (words + punctuation units).
+        """
+        units = re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
+        return len(units)
 
     async def _create_embedding(self, text: str) -> list[float]:
         """

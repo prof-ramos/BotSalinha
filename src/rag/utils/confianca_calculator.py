@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import structlog
 
 from ...utils.log_events import LogEvents
@@ -191,6 +193,49 @@ class ConfiancaCalculator:
             fontes.append(", ".join(partes))
 
         return fontes
+
+    @staticmethod
+    def calculate_redundancy(candidate_text: str, selected_texts: list[str]) -> float:
+        """
+        Estimate lexical redundancy against already selected chunks.
+
+        Returns:
+            Value in [0, 1], where 1 means highly redundant.
+        """
+        if not selected_texts:
+            return 0.0
+
+        candidate_terms = set(re.findall(r"\w+", candidate_text.lower()))
+        if not candidate_terms:
+            return 0.0
+
+        best_overlap = 0.0
+        for selected_text in selected_texts:
+            selected_terms = set(re.findall(r"\w+", selected_text.lower()))
+            if not selected_terms:
+                continue
+            intersection = len(candidate_terms & selected_terms)
+            union = len(candidate_terms | selected_terms)
+            overlap = (intersection / union) if union else 0.0
+            best_overlap = max(best_overlap, overlap)
+
+        return best_overlap
+
+    @staticmethod
+    def calculate_marginal_utility(
+        *,
+        similarity: float,
+        token_count: int,
+        redundancy: float,
+        rank: int,
+    ) -> float:
+        """
+        Compute marginal utility balancing relevance, redundancy and budget impact.
+        """
+        normalized_tokens = max(token_count, 1)
+        rank_decay = 1.0 / (1.0 + (rank * 0.12))
+        novelty_factor = max(0.0, 1.0 - redundancy)
+        return (max(similarity, 0.0) * novelty_factor * rank_decay) / normalized_tokens
 
 
 __all__ = ["ConfiancaCalculator"]

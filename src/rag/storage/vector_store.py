@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models.rag_models import ChunkORM
+from ...models.rag_models import RAG_CHUNKS_FTS_TABLE_NAME, ChunkORM
 from ...utils.errors import APIError, BotSalinhaError
 from ...utils.log_events import LogEvents
 from ..models import Chunk, ChunkMetadata
@@ -20,6 +21,7 @@ log = structlog.get_logger(__name__)
 # Candidate multiplier for SQL pre-filtering
 # We fetch limit * CANDIDATE_MULTIPLIER candidates before computing similarities
 CANDIDATE_MULTIPLIER = 10
+LEXICAL_CANDIDATE_MULTIPLIER = 3
 
 
 def serialize_embedding(embedding: list[float]) -> bytes:
@@ -157,6 +159,7 @@ class VectorStore:
             session: SQLAlchemy async session
         """
         self._session = session
+        self._fts5_capability_cache: bool | None = None
 
     async def add_embeddings(self, chunks_with_embeddings: list[tuple[Chunk, list[float]]]) -> None:
         """
@@ -210,6 +213,7 @@ class VectorStore:
     async def search(
         self,
         query_embedding: list[float],
+        query_text: str | None = None,
         limit: int = 5,
         min_similarity: float = 0.6,
         documento_id: int | None = None,
@@ -221,6 +225,7 @@ class VectorStore:
 
         Args:
             query_embedding: Query vector
+            query_text: Original query text for lexical retrieval stage
             limit: Maximum number of results
             min_similarity: Minimum similarity threshold
             documento_id: Optional filter by document ID
@@ -253,14 +258,9 @@ class VectorStore:
             if filters:
                 stmt = self._apply_metadata_filters(stmt, filters)
 
-            # OPTIMIZATION 1: SQL pre-filtering with candidate limit
-            # Fetch limit * CANDIDATE_MULTIPLIER to reduce data transfer
-            # while still having enough candidates to find top matches
-            effective_candidate_limit = candidate_limit or (limit * CANDIDATE_MULTIPLIER)
-            effective_candidate_limit = max(limit, effective_candidate_limit)
-            stmt = stmt.limit(effective_candidate_limit)
-
-            # Execute query to get candidate chunks (limited subset)
+            # Execute query for all eligible chunks.
+            # Candidate limiting is applied after semantic scoring to avoid
+            # losing relevant chunks due to physical table order.
             result = await self._session.execute(stmt)
             chunk_orms = result.scalars().all()
 
@@ -288,13 +288,47 @@ class VectorStore:
             # Vectorized cosine similarity computation
             similarities = batch_cosine_similarity(query_embedding, embedding_matrix)
 
-            # Filter by min_similarity and collect results with scores
-            results: list[tuple[ChunkORM, float]] = []
-            for idx, similarity in enumerate(similarities):
-                if similarity >= min_similarity:
-                    results.append((valid_chunk_orms[idx], float(similarity)))
+            semantic_candidate_limit = candidate_limit or (limit * CANDIDATE_MULTIPLIER)
+            semantic_candidate_limit = max(1, semantic_candidate_limit)
 
-            # Sort by similarity descending and apply limit
+            # Rank all eligible chunks semantically (no physical-order bias)
+            semantic_ranked: list[tuple[ChunkORM, float]] = []
+            for idx, similarity in enumerate(similarities):
+                semantic_ranked.append((valid_chunk_orms[idx], float(similarity)))
+            semantic_ranked.sort(key=lambda x: x[1], reverse=True)
+            semantic_score_map_all = {
+                chunk_orm.id: score for chunk_orm, score in semantic_ranked
+            }
+
+            # Stage-1 semantic candidates
+            candidate_scores: dict[str, float] = {
+                chunk_orm.id: score
+                for chunk_orm, score in semantic_ranked[:semantic_candidate_limit]
+            }
+
+            # Stage-1 lexical candidates (FTS5 when available, fallback otherwise)
+            lexical_candidate_limit = max(limit, limit * LEXICAL_CANDIDATE_MULTIPLIER)
+            if query_text and query_text.strip():
+                lexical_ids = await self._fetch_lexical_candidate_ids(
+                    query_text=query_text,
+                    limit=lexical_candidate_limit,
+                )
+                for lexical_id in lexical_ids:
+                    # Respect semantic score map from full scan and avoid adding
+                    # rows outside current structured filters.
+                    if lexical_id in candidate_scores:
+                        continue
+                    score = semantic_score_map_all.get(lexical_id)
+                    if score is not None:
+                        candidate_scores[lexical_id] = score
+
+            # Final ranking by semantic similarity from hybrid candidate union
+            result_map = {chunk_orm.id: chunk_orm for chunk_orm in valid_chunk_orms}
+            results = [
+                (result_map[chunk_id], score)
+                for chunk_id, score in candidate_scores.items()
+                if score >= min_similarity and chunk_id in result_map
+            ]
             results.sort(key=lambda x: x[1], reverse=True)
             results = results[:limit]
 
@@ -318,7 +352,8 @@ class VectorStore:
                 LogEvents.RAG_BUSCA_CONCLUIDA,
                 results_count=len(chunks_with_scores),
                 top_score=chunks_with_scores[0][1] if chunks_with_scores else 0,
-                candidate_limit=effective_candidate_limit,
+                candidate_limit=semantic_candidate_limit,
+                lexical_enabled=bool(query_text and query_text.strip()),
                 event_name="rag_vector_store_search_success",
             )
 
@@ -331,6 +366,107 @@ class VectorStore:
                 query_embedding_dim=len(query_embedding),
             )
             raise APIError(f"Vector search failed: {e}") from e
+
+    async def has_fts5_capability(self) -> bool:
+        """Detect whether current SQLite database supports and has FTS5 index ready."""
+        if self._fts5_capability_cache is not None:
+            return self._fts5_capability_cache
+
+        bind = self._session.get_bind()
+        if bind is None or bind.dialect.name != "sqlite":
+            self._fts5_capability_cache = False
+            return False
+
+        try:
+            compile_support_result = await self._session.execute(
+                text("SELECT sqlite_compileoption_used('ENABLE_FTS5')"),
+            )
+            compile_support_value = compile_support_result.scalar()
+            compile_support = bool(compile_support_value)
+        except Exception:
+            compile_support = False
+
+        if not compile_support:
+            self._fts5_capability_cache = False
+            return False
+
+        table_result = await self._session.execute(
+            text(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type='table' AND name=:table_name
+                LIMIT 1
+                """
+            ),
+            {"table_name": RAG_CHUNKS_FTS_TABLE_NAME},
+        )
+        has_table = table_result.scalar_one_or_none() is not None
+        self._fts5_capability_cache = has_table
+        return has_table
+
+    async def _fetch_lexical_candidate_ids(self, query_text: str, limit: int) -> list[str]:
+        """Fetch lexical candidates using FTS5 when available, otherwise LIKE fallback."""
+        if await self.has_fts5_capability():
+            fts_ids = await self._fetch_lexical_candidate_ids_fts5(
+                query_text=query_text,
+                limit=limit,
+            )
+            if fts_ids:
+                return fts_ids
+
+        return await self._fetch_lexical_candidate_ids_fallback(
+            query_text=query_text,
+            limit=limit,
+        )
+
+    async def _fetch_lexical_candidate_ids_fts5(self, query_text: str, limit: int) -> list[str]:
+        """Fetch lexical candidates via FTS5 BM25 ranking."""
+        terms = self._tokenize_lexical_query(query_text)
+        if not terms:
+            return []
+
+        fts_query = " OR ".join(terms)
+        stmt = text(
+            """
+            SELECT c.id
+            FROM rag_chunks_fts AS f
+            JOIN rag_chunks AS c ON c.rowid = f.rowid
+            WHERE f.texto MATCH :fts_query
+              AND c.embedding IS NOT NULL
+            ORDER BY bm25(rag_chunks_fts), c.id
+            LIMIT :limit
+            """
+        )
+        result = await self._session.execute(
+            stmt,
+            {"fts_query": fts_query, "limit": limit},
+        )
+        return [str(chunk_id) for chunk_id in result.scalars().all()]
+
+    async def _fetch_lexical_candidate_ids_fallback(self, query_text: str, limit: int) -> list[str]:
+        """Fallback lexical retrieval using LIKE scoring when FTS5 is unavailable."""
+        terms = self._tokenize_lexical_query(query_text)
+        if not terms:
+            return []
+
+        score_expr = sum(
+            case((ChunkORM.texto.ilike(f"%{term}%"), 1), else_=0) for term in terms
+        )
+        stmt = (
+            select(ChunkORM.id)
+            .where(ChunkORM.embedding.isnot(None))
+            .where(score_expr > 0)
+            .order_by(score_expr.desc(), ChunkORM.id.asc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [str(chunk_id) for chunk_id in result.scalars().all()]
+
+    def _tokenize_lexical_query(self, query_text: str) -> list[str]:
+        """Tokenize query text for lexical retrieval, ignoring low-signal tokens."""
+        terms = [token.lower() for token in re.findall(r"[a-zA-Z0-9_]+", query_text)]
+        return [term for term in terms if len(term) >= 3]
 
     def _apply_metadata_filters(self, stmt: Any, filters: dict[str, Any]) -> Any:
         """

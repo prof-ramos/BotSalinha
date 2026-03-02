@@ -25,6 +25,33 @@ def test_embedding_service_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider", "model_id"),
+    [
+        ("openai", "gpt-4o-mini"),
+        ("google", "gemini-2.5-flash-lite"),
+    ],
+)
+async def test_count_tokens_for_provider_model(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model_id: str,
+) -> None:
+    """Token counting should be available for both OpenAI and Gemini strategies."""
+    monkeypatch.setattr(
+        "src.rag.services.embedding_service.EmbeddingService.get_generation_model_strategy",
+        classmethod(lambda _cls: (provider, model_id)),
+    )
+
+    token_count = EmbeddingService.count_tokens_for_generation(
+        "Art. 5º Todos são iguais perante a lei."
+    )
+
+    assert token_count > 0
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_embed_text_empty_returns_zero_vector(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty text should return zero vector and skip OpenAI call."""
     service = EmbeddingService(api_key="test-key")
@@ -65,7 +92,9 @@ async def test_embed_batch_preserves_positions_for_empty_texts() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_embed_batch_splits_requests_when_token_estimate_is_high() -> None:
+async def test_embed_batch_splits_requests_when_token_estimate_is_high(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Batch embedding should split requests when token estimate exceeds limit."""
     service = EmbeddingService(api_key="test-key")
 
@@ -76,7 +105,10 @@ async def test_embed_batch_splits_requests_when_token_estimate_is_high() -> None
 
     create_mock = AsyncMock(side_effect=fake_create)
     service._client = SimpleNamespace(embeddings=SimpleNamespace(create=create_mock))
-    service._estimate_tokens = lambda _text: 150_000
+    monkeypatch.setattr(
+        "src.rag.services.embedding_service.EmbeddingService.count_tokens",
+        classmethod(lambda _cls, text, provider, model=None: 150_000),
+    )
 
     texts = ["a", "bb", "ccc"]
     embeddings = await service.embed_batch(texts)

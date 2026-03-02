@@ -12,6 +12,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .conversation import Base
 
+RAG_CHUNKS_TABLE_NAME = "rag_chunks"
+RAG_CHUNKS_FTS_TABLE_NAME = "rag_chunks_fts"
+
 
 class DocumentORM(Base):
     """
@@ -58,7 +61,7 @@ class ChunkORM(Base):
     Represents a chunk of text from a document with metadata for retrieval.
     """
 
-    __tablename__ = "rag_chunks"
+    __tablename__ = RAG_CHUNKS_TABLE_NAME
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     documento_id: Mapped[int] = mapped_column(
@@ -93,4 +96,6 @@ class ChunkORM(Base):
 __all__ = [
     "DocumentORM",
     "ChunkORM",
+    "RAG_CHUNKS_TABLE_NAME",
+    "RAG_CHUNKS_FTS_TABLE_NAME",
 ]

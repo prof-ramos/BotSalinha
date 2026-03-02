@@ -23,6 +23,7 @@ class _FakeVectorStore:
     async def search(
         self,
         query_embedding: list[float],
+        query_text: str | None = None,
         limit: int = 5,
         min_similarity: float = 0.4,
         documento_id: int | None = None,
@@ -32,6 +33,7 @@ class _FakeVectorStore:
         self.calls.append(
             {
                 "query_embedding": query_embedding,
+                "query_text": query_text,
                 "limit": limit,
                 "min_similarity": min_similarity,
                 "documento_id": documento_id,
@@ -57,6 +59,7 @@ def _fake_settings() -> SimpleNamespace:
         retrieval_candidate_cap=120,
         min_similarity_fallback_delta=0.08,
         min_similarity_floor=0.30,
+        max_context_tokens=2000,
     )
     return SimpleNamespace(rag=rag)
 
@@ -107,6 +110,51 @@ async def test_query_service_applies_hybrid_rerank(monkeypatch: pytest.MonkeyPat
     assert context.chunks_usados[0].chunk_id == "b"
     assert context.retrieval_meta.get("rerank_applied") is True
     assert context.query_normalized == "art. 5 direitos fundamentais"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider", "model_id", "expected_provider"),
+    [
+        ("openai", "gpt-4o-mini", "openai"),
+        ("google", "gemini-2.5-flash-lite", "google"),
+    ],
+)
+async def test_query_service_context_budget_is_provider_aware(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model_id: str,
+    expected_provider: str,
+) -> None:
+    """Context budget metadata should reflect active provider/model strategy."""
+    monkeypatch.setattr("src.rag.services.query_service.get_settings", _fake_settings)
+    monkeypatch.setattr(
+        "src.rag.services.query_service.EmbeddingService.get_generation_model_strategy",
+        classmethod(lambda _cls: (provider, model_id)),
+    )
+
+    candidates = [
+        (_chunk("c1", "texto util 1", token_count=400), 0.90),
+        (_chunk("c2", "texto util 2", token_count=400), 0.85),
+        (_chunk("c3", "texto util 3", token_count=400), 0.80),
+    ]
+    vector_store = _FakeVectorStore(candidates=candidates)
+    service = QueryService(
+        session=SimpleNamespace(),
+        embedding_service=_FakeEmbeddingService(),
+        vector_store=vector_store,
+    )
+
+    context = await service.query("consulta sobre artigo", top_k=3)
+
+    assert context.retrieval_meta["context_provider"] == expected_provider
+    assert context.retrieval_meta["context_model"] == model_id
+    assert context.retrieval_meta["context_budget_tokens"] > 0
+    assert (
+        context.retrieval_meta["context_tokens_used"]
+        <= context.retrieval_meta["context_budget_tokens"]
+    )
 
 
 @pytest.mark.unit

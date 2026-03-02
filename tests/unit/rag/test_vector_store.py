@@ -6,6 +6,7 @@ import json
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -321,3 +322,194 @@ class TestVectorStore:
 
         result_ids = {chunk.chunk_id for chunk, _ in results}
         assert result_ids == {"chunk-stf", "chunk-stj"}
+
+    @pytest.mark.asyncio
+    async def test_search_does_not_lose_relevant_chunk_by_physical_order(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Relevant chunk must survive even when inserted after many low-quality rows."""
+        vector_store = VectorStore(session=db_session)
+
+        doc = DocumentORM(
+            nome="ORDEM-FISICA",
+            arquivo_origem="ordem.docx",
+            chunk_count=11,
+            token_count=110,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        for idx in range(10):
+            db_session.add(
+                ChunkORM(
+                    id=f"chunk-noise-{idx}",
+                    documento_id=doc.id,
+                    texto=f"Ruido {idx}",
+                    metadados=json.dumps({"documento": "NOISE"}),
+                    token_count=10,
+                    embedding=serialize_embedding([1.0, 0.0, 0.0]),
+                )
+            )
+
+        db_session.add(
+            ChunkORM(
+                id="chunk-relevante",
+                documento_id=doc.id,
+                texto="Conteudo juridico realmente relevante",
+                metadados=json.dumps({"documento": "RELEVANTE"}),
+                token_count=10,
+                embedding=serialize_embedding([0.0, 1.0, 0.0]),
+            )
+        )
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[0.0, 1.0, 0.0],
+            limit=1,
+            min_similarity=0.0,
+            candidate_limit=3,
+        )
+
+        assert len(results) == 1
+        assert results[0][0].chunk_id == "chunk-relevante"
+
+    @pytest.mark.asyncio
+    async def test_search_hybrid_with_fts5(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Hybrid stage-1 should include lexical candidates via FTS5 when available."""
+        vector_store = VectorStore(session=db_session)
+        fts5_enabled = await self._create_fts5_table(db_session)
+        if not fts5_enabled:
+            pytest.skip("SQLite build sem FTS5 disponível para o teste")
+
+        doc = DocumentORM(
+            nome="HIBRIDO-FTS",
+            arquivo_origem="hibrido-fts.docx",
+            chunk_count=3,
+            token_count=30,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        db_session.add_all(
+            [
+                ChunkORM(
+                    id="chunk-semantico-top",
+                    documento_id=doc.id,
+                    texto="Texto generico sem token raro",
+                    metadados=json.dumps({"documento": "TEST"}),
+                    token_count=10,
+                    embedding=serialize_embedding([1.0, 0.0, 0.0]),
+                ),
+                ChunkORM(
+                    id="chunk-lexical-raro",
+                    documento_id=doc.id,
+                    texto="Contem termo extraordinariojurexclusivo de busca",
+                    metadados=json.dumps({"documento": "TEST"}),
+                    token_count=10,
+                    embedding=serialize_embedding([0.0, 1.0, 0.0]),
+                ),
+                ChunkORM(
+                    id="chunk-semantico-2",
+                    documento_id=doc.id,
+                    texto="Outro texto comum sem termo especial",
+                    metadados=json.dumps({"documento": "TEST"}),
+                    token_count=10,
+                    embedding=serialize_embedding([0.9, 0.0, 0.0]),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO rag_chunks_fts(rowid, texto)
+                SELECT rowid, texto FROM rag_chunks
+                """
+            )
+        )
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[1.0, 0.0, 0.0],
+            query_text="extraordinariojurexclusivo",
+            limit=2,
+            min_similarity=0.0,
+            candidate_limit=1,
+        )
+
+        result_ids = [chunk.chunk_id for chunk, _ in results]
+        assert "chunk-lexical-raro" in result_ids
+        assert await vector_store.has_fts5_capability() is True
+
+    @pytest.mark.asyncio
+    async def test_search_hybrid_without_fts5_fallback(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Hybrid stage-1 should fallback to LIKE lexical retrieval when FTS5 is unavailable."""
+        vector_store = VectorStore(session=db_session)
+
+        doc = DocumentORM(
+            nome="HIBRIDO-NO-FTS",
+            arquivo_origem="hibrido-no-fts.docx",
+            chunk_count=2,
+            token_count=20,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        db_session.add_all(
+            [
+                ChunkORM(
+                    id="chunk-top-semantic",
+                    documento_id=doc.id,
+                    texto="texto comum sem termo único",
+                    metadados=json.dumps({"documento": "TEST"}),
+                    token_count=10,
+                    embedding=serialize_embedding([1.0, 0.0, 0.0]),
+                ),
+                ChunkORM(
+                    id="chunk-lexical-fallback",
+                    documento_id=doc.id,
+                    texto="conteudo com palavrachavesuperrara para busca lexical",
+                    metadados=json.dumps({"documento": "TEST"}),
+                    token_count=10,
+                    embedding=serialize_embedding([0.0, 1.0, 0.0]),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[1.0, 0.0, 0.0],
+            query_text="palavrachavesuperrara",
+            limit=2,
+            min_similarity=0.0,
+            candidate_limit=1,
+        )
+
+        result_ids = [chunk.chunk_id for chunk, _ in results]
+        assert "chunk-lexical-fallback" in result_ids
+        assert await vector_store.has_fts5_capability() is False
+
+    async def _create_fts5_table(self, db_session: AsyncSession) -> bool:
+        """Try to create FTS5 table for tests; return False when not supported."""
+        try:
+            await db_session.execute(
+                text(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS rag_chunks_fts
+                    USING fts5(texto, tokenize='unicode61 remove_diacritics 2')
+                    """
+                )
+            )
+            await db_session.commit()
+            return True
+        except Exception:
+            await db_session.rollback()
+            return False

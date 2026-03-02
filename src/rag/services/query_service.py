@@ -56,12 +56,16 @@ class QueryService:
         self._confianca_calculator = confianca_calculator or ConfiancaCalculator(
             alta_threshold=self._settings.rag.confidence_threshold,
         )
+        self._context_strategy = self._resolve_context_strategy()
 
         log.debug(
             "rag_query_service_initialized",
             top_k=self._settings.rag.top_k,
             min_similarity=self._settings.rag.min_similarity,
             confidence_threshold=self._settings.rag.confidence_threshold,
+            context_provider=self._context_strategy["provider"],
+            context_model=self._context_strategy["model"],
+            context_budget_tokens=self._context_strategy["context_budget_tokens"],
             event_name="rag_query_service_initialized",
         )
 
@@ -197,7 +201,10 @@ class QueryService:
                     for chunk, breakdown in reranked[:top_k]
                 }
 
-            chunks_with_scores = chunks_with_scores[:top_k]
+            chunks_with_scores, context_budget_meta = self._select_context_chunks(
+                chunks_with_scores=chunks_with_scores,
+                top_k=top_k,
+            )
 
             # Step 3: Calculate confidence
             confidence = self._confianca_calculator.calculate(chunks_with_scores)
@@ -223,6 +230,14 @@ class QueryService:
                 "effective_min_similarity": effective_min_similarity,
                 "query_type_detected": query_type,
                 "retrieval_mode": retrieval_mode,
+                "context_provider": str(self._context_strategy["provider"]),
+                "context_model": str(self._context_strategy["model"]),
+                "context_budget_tokens": int(self._context_strategy["context_budget_tokens"]),
+                "context_tokens_used": int(context_budget_meta["tokens_used"]),
+                "context_chunks_selected": int(context_budget_meta["selected_count"]),
+                "context_chunks_skipped_budget": int(context_budget_meta["skipped_budget"]),
+                "context_chunks_skipped_redundant": int(context_budget_meta["skipped_redundant"]),
+                "context_chunks_skipped_marginal": int(context_budget_meta["skipped_marginal"]),
             }
             if debug and rerank_components:
                 retrieval_meta["rerank_components"] = str(rerank_components)
@@ -251,6 +266,14 @@ class QueryService:
                 fallback_applied=fallback_applied,
                 effective_min_similarity=effective_min_similarity,
                 query_type=query_type,
+                context_provider=self._context_strategy["provider"],
+                context_model=self._context_strategy["model"],
+                context_budget_tokens=self._context_strategy["context_budget_tokens"],
+                context_tokens_used=context_budget_meta["tokens_used"],
+                context_chunks_selected=context_budget_meta["selected_count"],
+                context_chunks_skipped_budget=context_budget_meta["skipped_budget"],
+                context_chunks_skipped_redundant=context_budget_meta["skipped_redundant"],
+                context_chunks_skipped_marginal=context_budget_meta["skipped_marginal"],
                 sources_count=len(fontes),
                 event_name="rag_query_service_success",
             )
@@ -450,6 +473,129 @@ class QueryService:
         floor = self._settings.rag.retrieval_candidate_min
         cap = self._settings.rag.retrieval_candidate_cap
         return min(max(top_k * multiplier, floor), cap)
+
+    def _resolve_context_strategy(self) -> dict[str, str | int | float]:
+        """
+        Resolve context assembly strategy based on provider/model.
+        """
+        base_budget = self._settings.rag.max_context_tokens
+        provider, model = EmbeddingService.get_generation_model_strategy()
+        normalized_provider = (provider or "openai").strip().lower()
+        normalized_model = (model or "unknown").strip()
+
+        strategy: dict[str, str | int | float] = {
+            "provider": normalized_provider,
+            "model": normalized_model,
+            "context_budget_tokens": base_budget,
+            "redundancy_threshold": 0.86,
+            "min_marginal_utility": 0.0010,
+        }
+
+        if normalized_provider == "google":
+            strategy["context_budget_tokens"] = max(200, int(base_budget * 0.9))
+            strategy["redundancy_threshold"] = 0.82
+            strategy["min_marginal_utility"] = 0.0009
+
+        if normalized_provider == "openai" and "gpt-4o-mini" in normalized_model:
+            strategy["redundancy_threshold"] = 0.85
+            strategy["min_marginal_utility"] = 0.0011
+        elif normalized_provider == "google" and "gemini-2.5-flash-lite" in normalized_model:
+            strategy["context_budget_tokens"] = max(200, int(base_budget * 0.88))
+            strategy["redundancy_threshold"] = 0.80
+
+        return strategy
+
+    def _count_chunk_tokens(self, chunk: Any) -> int:
+        """
+        Count chunk tokens with unified provider/model-aware strategy.
+        """
+        if getattr(chunk, "token_count", 0):
+            return int(chunk.token_count)
+
+        if hasattr(self._embedding_service, "count_tokens_for_generation"):
+            return int(self._embedding_service.count_tokens_for_generation(chunk.texto))
+
+        return int(EmbeddingService.count_tokens_for_generation(chunk.texto))
+
+    def _select_context_chunks(
+        self,
+        *,
+        chunks_with_scores: list[tuple[Any, float]],
+        top_k: int,
+    ) -> tuple[list[tuple[Any, float]], dict[str, int]]:
+        """
+        Select chunks under token budget using marginal relevance and redundancy.
+        """
+        if not chunks_with_scores:
+            return [], {
+                "tokens_used": 0,
+                "selected_count": 0,
+                "skipped_budget": 0,
+                "skipped_redundant": 0,
+                "skipped_marginal": 0,
+            }
+
+        context_budget_tokens = int(self._context_strategy["context_budget_tokens"])
+        redundancy_threshold = float(self._context_strategy["redundancy_threshold"])
+        min_marginal_utility = float(self._context_strategy["min_marginal_utility"])
+
+        selected: list[tuple[Any, float]] = []
+        selected_texts: list[str] = []
+        used_tokens = 0
+        skipped_budget = 0
+        skipped_redundant = 0
+        skipped_marginal = 0
+
+        for rank, (chunk, score) in enumerate(chunks_with_scores, start=1):
+            chunk_tokens = self._count_chunk_tokens(chunk)
+            redundancy = self._confianca_calculator.calculate_redundancy(chunk.texto, selected_texts)
+            marginal_utility = self._confianca_calculator.calculate_marginal_utility(
+                similarity=score,
+                token_count=chunk_tokens,
+                redundancy=redundancy,
+                rank=rank,
+            )
+
+            if selected and redundancy >= redundancy_threshold:
+                skipped_redundant += 1
+                continue
+
+            if selected and marginal_utility < min_marginal_utility:
+                skipped_marginal += 1
+                continue
+
+            if used_tokens + chunk_tokens > context_budget_tokens:
+                skipped_budget += 1
+                continue
+
+            selected.append((chunk, score))
+            selected_texts.append(chunk.texto)
+            used_tokens += chunk_tokens
+
+            if len(selected) >= top_k:
+                break
+
+        log.info(
+            "rag_context_budget_applied",
+            provider=self._context_strategy["provider"],
+            model=self._context_strategy["model"],
+            budget_tokens=context_budget_tokens,
+            tokens_used=used_tokens,
+            selected_count=len(selected),
+            skipped_budget=skipped_budget,
+            skipped_redundant=skipped_redundant,
+            skipped_marginal=skipped_marginal,
+            candidate_count=len(chunks_with_scores),
+            event_name="rag_context_budget_applied",
+        )
+
+        return selected, {
+            "tokens_used": used_tokens,
+            "selected_count": len(selected),
+            "skipped_budget": skipped_budget,
+            "skipped_redundant": skipped_redundant,
+            "skipped_marginal": skipped_marginal,
+        }
 
     @staticmethod
     def _merge_candidates(

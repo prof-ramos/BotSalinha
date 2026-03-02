@@ -141,9 +141,19 @@ T9 ─────────────────────┘
 - **location**: `src/rag/services/query_service.py`, `src/rag/services/embedding_service.py`, `src/rag/utils/confianca_calculator.py`
 - **description**: Unificar contagem de tokens (remover heurística `len/4`), controlar budget de contexto por relevância marginal e reduzir redundância entre chunks próximos, com estratégia explícita por provider/modelo (OpenAI/Gemini).
 - **validation**: Contexto final respeita limite de tokens com menor perda de evidência relevante; logs mostram budget e motivo de corte; testes parametrizados por provider/modelo.
-- **status**: Not Completed
+- **status**: Completed (2026-03-02)
 - **log**:
+  - Unificada contagem de tokens no `EmbeddingService` com estratégia por provider/modelo (OpenAI via `tiktoken`; Gemini via fallback lexical determinístico).
+  - `QueryService` passou a selecionar contexto por orçamento de tokens com utilidade marginal e filtro de redundância.
+  - `retrieval_meta` enriquecido com métricas de budget (`tokens_used`, `skipped_*`, provider/modelo/context budget).
+  - `ConfiancaCalculator` ganhou utilitários para cálculo de redundância e utilidade marginal.
+  - Testes unitários parametrizados por provider/modelo e cobertura do novo budget de contexto.
 - **files edited/created**:
+  - `src/rag/services/embedding_service.py`
+  - `src/rag/services/query_service.py`
+  - `src/rag/utils/confianca_calculator.py`
+  - `tests/unit/rag/test_embedding_service.py`
+  - `tests/unit/rag/test_query_service.py`
 
 ### T9: Refresh Incremental de Embeddings por Conteúdo
 - **depends_on**: []
