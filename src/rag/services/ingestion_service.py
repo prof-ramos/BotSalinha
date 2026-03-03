@@ -24,6 +24,10 @@ from .embedding_service import EMBEDDING_DIM, EmbeddingService
 
 log = structlog.get_logger(__name__)
 
+RAG_SCHEMA_VERSION = 2
+RAG_METADATA_VERSION = 2
+RAG_PARSER_VERSION = "docx_parser_v2"
+
 
 class IngestionError(BotSalinhaError):
     """Error during document ingestion."""
@@ -260,15 +264,23 @@ class IngestionService:
                 await self._session.flush()
             document_by_hash.nome = document_name
             document_by_hash.arquivo_origem = file_path
+            document_by_hash.schema_version = RAG_SCHEMA_VERSION
             await self._session.flush()
-            return document_by_hash, document_by_hash.chunk_count > 0
+            is_unchanged = (
+                document_by_hash.chunk_count > 0
+                and document_by_hash.schema_version == RAG_SCHEMA_VERSION
+            )
+            return document_by_hash, is_unchanged
 
         if document_by_path is not None:
             is_unchanged = (
-                document_by_path.content_hash == content_hash and document_by_path.chunk_count > 0
+                document_by_path.content_hash == content_hash
+                and document_by_path.chunk_count > 0
+                and document_by_path.schema_version == RAG_SCHEMA_VERSION
             )
             document_by_path.nome = document_name
             document_by_path.content_hash = content_hash
+            document_by_path.schema_version = RAG_SCHEMA_VERSION
             await self._session.flush()
             return document_by_path, is_unchanged
 
@@ -332,7 +344,11 @@ class IngestionService:
         reused_chunks = 0
 
         for index, chunk in enumerate(chunks):
-            metadata_payload = chunk.metadados.model_dump_json()
+            metadata_dict = chunk.metadados.model_dump()
+            metadata_dict["parser_version"] = RAG_PARSER_VERSION
+            metadata_dict["schema_version"] = RAG_SCHEMA_VERSION
+            metadata_dict["embedding_model"] = self._embedding_service.model
+            metadata_payload = json.dumps(metadata_dict, ensure_ascii=False, sort_keys=True)
             chunk_hash = self._compute_chunk_content_hash(chunk.texto, metadata_payload)
             new_chunk_hashes.append(chunk_hash)
             new_metadata_payloads.append(metadata_payload)
@@ -410,6 +426,7 @@ class IngestionService:
             nome=document_name,
             arquivo_origem=file_path,
             content_hash=content_hash,
+            schema_version=RAG_SCHEMA_VERSION,
             chunk_count=0,
             token_count=0,
             created_at=datetime.now(UTC),
@@ -484,6 +501,7 @@ class IngestionService:
             texto=chunk.texto,
             metadados=metadados_json,
             content_hash=content_hash,
+            metadata_version=RAG_METADATA_VERSION,
             token_count=chunk.token_count,
             embedding=embedding_blob,
             created_at=datetime.now(UTC),

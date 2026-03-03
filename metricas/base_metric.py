@@ -6,9 +6,7 @@ reducing code duplication and ensuring consistency across metrics.
 """
 
 import argparse
-import csv
 from abc import ABC, abstractmethod
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 

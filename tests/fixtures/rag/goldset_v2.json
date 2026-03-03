@@ -1,0 +1,46 @@
+{
+  "version": "2026-03-03",
+  "description": "Gold set juridico para avaliacao de RAG com foco em temporalidade e citacao normativa.",
+  "cases": [
+    {
+      "id": "GS-REV-001",
+      "scenario": "revogacao",
+      "query": "O art. 1494 do Codigo Civil ainda esta vigente?",
+      "expected": {
+        "must_signal": ["revogado"],
+        "must_cite": ["Lei 10.406/2002", "Art. 1494"],
+        "forbidden": ["vigente sem ressalva"]
+      }
+    },
+    {
+      "id": "GS-VETO-001",
+      "scenario": "veto",
+      "query": "O que diz o art. 17-A da Lei de Improbidade?",
+      "expected": {
+        "must_signal": ["vetado"],
+        "must_cite": ["Lei 8.429/1992", "Art. 17-A"],
+        "forbidden": ["texto integral como vigente"]
+      }
+    },
+    {
+      "id": "GS-TEMP-001",
+      "scenario": "conflito_temporal",
+      "query": "Na improbidade, ainda cabe culpa ou agora exige dolo?",
+      "expected": {
+        "must_signal": ["Lei 14.230/2021", "dolo", "entendimento anterior"],
+        "must_cite": ["Lei 8.429/1992", "Lei 14.230/2021"],
+        "forbidden": ["afirmacao sem recorte temporal"]
+      }
+    },
+    {
+      "id": "GS-CIT-001",
+      "scenario": "citacao_obrigatoria",
+      "query": "Quais os meios de prova do art. 212 do Codigo Civil?",
+      "expected": {
+        "must_signal": ["meios de prova"],
+        "must_cite": ["Lei 10.406/2002", "Art. 212"],
+        "forbidden": ["resposta sem citacao de lei/artigo"]
+      }
+    }
+  ]
+}

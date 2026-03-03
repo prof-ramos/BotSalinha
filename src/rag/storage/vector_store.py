@@ -121,13 +121,27 @@ class VectorStore:
     _ALLOWED_FILTER_KEYS = {
         # Legal document fields
         "documento",
+        "law_name",
+        "law_number",
         "titulo",
         "capitulo",
         "secao",
         "artigo",
+        "article",
         "paragrafo",
         "inciso",
         "tipo",
+        "content_type",
+        "is_exam_focus",
+        "valid_from",
+        "valid_to",
+        "updated_by_law",
+        "is_revoked",
+        "is_vetoed",
+        "revocation_scope",
+        "veto_scope",
+        "temporal_confidence",
+        "effective_text_version",
         "marca_atencao",
         "marca_stf",
         "marca_stj",
@@ -149,7 +163,13 @@ class VectorStore:
         "imports",
         "is_test",
     }
-    _RESERVED_FILTER_KEYS = {"__or__"}
+    _RESERVED_FILTER_KEYS = {
+        "__or__",
+        "valid_from_gte",
+        "valid_from_lte",
+        "valid_to_gte",
+        "valid_to_lte",
+    }
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -512,6 +532,32 @@ class VectorStore:
             if key in self._RESERVED_FILTER_KEYS:
                 continue
             stmt = stmt.where(self._build_filter_condition(key=key, value=value))
+
+        # Temporal range filters
+        stmt = self._apply_temporal_filters(stmt, filters)
+
+        return stmt
+
+    def _apply_temporal_filters(self, stmt: Any, filters: dict[str, Any]) -> Any:
+        """Apply optional temporal range filters in ISO date format."""
+        valid_from = func.json_extract(ChunkORM.metadados, "$.valid_from")
+        valid_to = func.json_extract(ChunkORM.metadados, "$.valid_to")
+
+        valid_from_gte = filters.get("valid_from_gte")
+        if isinstance(valid_from_gte, str):
+            stmt = stmt.where(valid_from >= valid_from_gte)
+
+        valid_from_lte = filters.get("valid_from_lte")
+        if isinstance(valid_from_lte, str):
+            stmt = stmt.where(valid_from <= valid_from_lte)
+
+        valid_to_gte = filters.get("valid_to_gte")
+        if isinstance(valid_to_gte, str):
+            stmt = stmt.where(valid_to >= valid_to_gte)
+
+        valid_to_lte = filters.get("valid_to_lte")
+        if isinstance(valid_to_lte, str):
+            stmt = stmt.where(valid_to <= valid_to_lte)
 
         return stmt
 

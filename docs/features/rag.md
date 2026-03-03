@@ -123,7 +123,7 @@ INSTRUÇÕES:
 - `ALTA`: usar contexto como base principal da resposta e citar fontes.
 - `MEDIA`: usar contexto como base principal, com alerta breve de validação complementar.
 - `BAIXA`: usar contexto como referência parcial e recomendar confirmação em fontes oficiais.
-- `SEM_RAG`: responder com conhecimento geral, explicitando ausência de base específica recuperada.
+- `SEM_RAG`: não inventar base jurídica; informar limitação de fonte e solicitar delimitação normativa ao usuário.
 
 ## Comandos Discord
 
@@ -224,6 +224,9 @@ BOTSALINHA_RAG__EXPERIMENTAL_RETRIEVAL_MODE=hybrid_lite_v2
 BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_RERANK=false
 BOTSALINHA_RAG__RERANK_PROFILE=stable_v1
 BOTSALINHA_RAG__EXPERIMENTAL_RERANK_PROFILE=intent_aware_v1
+BOTSALINHA_RAG__ROLLOUT_CANARY_PERCENTAGE=5
+BOTSALINHA_RAG__ROLLOUT_STEP_PERCENTAGE=25
+BOTSALINHA_RAG__ROLLOUT_AUTO_ROLLBACK=true
 ```
 
 Fallback rápido:

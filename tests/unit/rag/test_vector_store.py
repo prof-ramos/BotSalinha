@@ -19,6 +19,7 @@ from src.rag.storage.vector_store import (
     deserialize_embedding,
     serialize_embedding,
 )
+from src.utils.errors import BotSalinhaError
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -322,6 +323,71 @@ class TestVectorStore:
 
         result_ids = {chunk.chunk_id for chunk, _ in results}
         assert result_ids == {"chunk-stf", "chunk-stj"}
+
+    @pytest.mark.asyncio
+    async def test_search_rejects_invalid_filter_key(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Unknown filter keys must raise a controlled domain error."""
+        vector_store = VectorStore(session=db_session)
+
+        with pytest.raises(BotSalinhaError):
+            await vector_store.search(
+                query_embedding=[0.2, 0.2, 0.2],
+                limit=5,
+                min_similarity=0.0,
+                filters={"drop_table": "now"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_search_temporal_filters(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Temporal range filters should constrain valid_from/valid_to."""
+        vector_store = VectorStore(session=db_session)
+
+        doc = DocumentORM(
+            nome="TEMPORAL",
+            arquivo_origem="temporal.docx",
+            chunk_count=2,
+            token_count=20,
+        )
+        db_session.add(doc)
+        await db_session.flush()
+
+        chunk_old = ChunkORM(
+            id="chunk-old",
+            documento_id=doc.id,
+            texto="Texto antigo",
+            metadados=json.dumps(
+                {"documento": "LIA", "valid_from": "2018-01-01", "valid_to": "2020-12-31"}
+            ),
+            token_count=10,
+            embedding=serialize_embedding([0.4, 0.1, 0.2]),
+        )
+        chunk_new = ChunkORM(
+            id="chunk-new",
+            documento_id=doc.id,
+            texto="Texto novo",
+            metadados=json.dumps(
+                {"documento": "LIA", "valid_from": "2021-10-26", "valid_to": "9999-12-31"}
+            ),
+            token_count=10,
+            embedding=serialize_embedding([0.4, 0.1, 0.2]),
+        )
+        db_session.add_all([chunk_old, chunk_new])
+        await db_session.commit()
+
+        results = await vector_store.search(
+            query_embedding=[0.4, 0.1, 0.2],
+            limit=10,
+            min_similarity=0.0,
+            filters={"valid_from_gte": "2021-01-01"},
+        )
+        result_ids = {chunk.chunk_id for chunk, _ in results}
+        assert result_ids == {"chunk-new"}
 
     @pytest.mark.asyncio
     async def test_search_does_not_lose_relevant_chunk_by_physical_order(

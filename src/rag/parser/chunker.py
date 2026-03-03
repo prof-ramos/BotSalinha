@@ -107,10 +107,14 @@ class ChunkExtractor:
 
         semantic_blocks = self._build_semantic_blocks(parsed_doc)
         chunks: list[Chunk] = []
+        chunks_by_id: dict[str, Chunk] = {}
+        children_by_parent: dict[str, list[str]] = {}
         current_chunk: list[dict[str, Any]] = []
         current_tokens = 0
         chunk_sequence = 0
         total_paragraphs = len(parsed_doc)
+        current_parent_chunk_id: str | None = None
+        current_parent_article: str | None = None
 
         log.info(
             "rag_chunk_progress",
@@ -138,7 +142,14 @@ class ChunkExtractor:
                     total_paragraphs=total_paragraphs,
                     start_idx=self._get_paragraph_index(parsed_doc, current_chunk[0]),
                 )
+                chunk, current_parent_chunk_id, current_parent_article = self._annotate_parent_child(
+                    chunk=chunk,
+                    current_parent_chunk_id=current_parent_chunk_id,
+                    current_parent_article=current_parent_article,
+                    children_by_parent=children_by_parent,
+                )
                 chunks.append(chunk)
+                chunks_by_id[chunk.chunk_id] = chunk
                 chunk_sequence += 1
 
                 current_chunk, current_tokens = self._create_overlap_chunk(current_chunk)
@@ -168,7 +179,22 @@ class ChunkExtractor:
                 total_paragraphs=total_paragraphs,
                 start_idx=self._get_paragraph_index(parsed_doc, current_chunk[0]),
             )
+            chunk, current_parent_chunk_id, current_parent_article = self._annotate_parent_child(
+                chunk=chunk,
+                current_parent_chunk_id=current_parent_chunk_id,
+                current_parent_article=current_parent_article,
+                children_by_parent=children_by_parent,
+            )
             chunks.append(chunk)
+            chunks_by_id[chunk.chunk_id] = chunk
+
+        for parent_id, child_ids in children_by_parent.items():
+            parent_chunk = chunks_by_id.get(parent_id)
+            if parent_chunk is None:
+                continue
+            parent_chunk.metadados = parent_chunk.metadados.model_copy(
+                update={"child_chunk_ids": child_ids}
+            )
 
         log.info(
             "rag_chunk_progress",
@@ -179,6 +205,45 @@ class ChunkExtractor:
         )
 
         return chunks
+
+    def _annotate_parent_child(
+        self,
+        *,
+        chunk: Chunk,
+        current_parent_chunk_id: str | None,
+        current_parent_article: str | None,
+        children_by_parent: dict[str, list[str]],
+    ) -> tuple[Chunk, str | None, str | None]:
+        """Mark parent-child relationships for legal chunking."""
+        metadata = chunk.metadados
+        content_type = metadata.content_type or metadata.tipo or "legal_text"
+
+        if content_type == "exam_question":
+            chunk.metadados = metadata.model_copy(
+                update={"parent_chunk_id": None, "is_parent_chunk": False}
+            )
+            return chunk, current_parent_chunk_id, current_parent_article
+
+        is_parent = bool(metadata.tipo == "artigo" or (metadata.artigo and metadata.inciso is None))
+        if is_parent:
+            chunk.metadados = metadata.model_copy(
+                update={"is_parent_chunk": True, "parent_chunk_id": None}
+            )
+            return chunk, chunk.chunk_id, metadata.artigo
+
+        if (
+            current_parent_chunk_id
+            and metadata.artigo
+            and (not current_parent_article or metadata.artigo == current_parent_article)
+        ):
+            children_by_parent.setdefault(current_parent_chunk_id, []).append(chunk.chunk_id)
+            chunk.metadados = metadata.model_copy(
+                update={"parent_chunk_id": current_parent_chunk_id, "is_parent_chunk": False}
+            )
+            return chunk, current_parent_chunk_id, current_parent_article
+
+        chunk.metadados = metadata.model_copy(update={"is_parent_chunk": False})
+        return chunk, current_parent_chunk_id, current_parent_article
 
     def _create_chunk(
         self,

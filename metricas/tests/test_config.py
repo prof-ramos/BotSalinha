@@ -5,17 +5,17 @@ Unit tests for metricas.config module.
 import pytest
 
 from metricas.config import (
-    METRICS_DIR,
-    PROJECT_ROOT,
-    SCRIPT_TIMEOUT_SECONDS,
-    DEFAULT_RAG_MIN_SIMILARITY,
-    DEFAULT_RAG_SEARCH_LIMIT,
+    CHART_MAX_ENTRIES,
     DEFAULT_NUM_INSERTS,
     DEFAULT_NUM_READS,
-    TABLE_MAX_ROWS,
-    CHART_MAX_ENTRIES,
     DEFAULT_OUTPUT_PATHS,
+    DEFAULT_RAG_MIN_SIMILARITY,
+    DEFAULT_RAG_SEARCH_LIMIT,
+    METRICS_DIR,
     METRICS_METADATA,
+    PROJECT_ROOT,
+    SCRIPT_TIMEOUT_SECONDS,
+    TABLE_MAX_ROWS,
     MetricsConfig,
     get_metrics_config,
 )

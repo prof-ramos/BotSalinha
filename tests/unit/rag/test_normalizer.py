@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from src.rag.utils.normalizer import (
     LEGAL_ABBREVIATIONS,
+    LEGAL_QUERY_SYNONYMS,
     expand_legal_abbreviations,
+    extract_legal_filters_from_query,
     normalize_encoding,
     normalize_query_text,
+    rewrite_legal_query,
 )
 
 
@@ -173,3 +176,40 @@ class TestLegalAbbreviationsDictionary:
         for abbr, expanded in LEGAL_ABBREVIATIONS.items():
             assert abbr
             assert expanded
+
+
+class TestLegalQueryRewrite:
+    """Testes para reescrita de consultas jurídicas."""
+
+    def test_rewrite_legal_synonyms(self):
+        rewritten, meta = rewrite_legal_query("mudancas na LIA")
+        assert "Lei 8.429/1992" in rewritten
+        assert meta["applied"] is True
+        assert meta["matches"]
+
+    def test_rewrite_no_change(self):
+        original = "qual o entendimento sobre responsabilidade civil"
+        rewritten, meta = rewrite_legal_query(original)
+        assert rewritten == original
+        assert meta["applied"] is False
+
+    def test_synonyms_dictionary_has_expected_keys(self):
+        assert "lia" in LEGAL_QUERY_SYNONYMS
+        assert "nova lei de licitacoes" in LEGAL_QUERY_SYNONYMS
+
+
+class TestExtractLegalFiltersFromQuery:
+    """Testes para extração de filtros estruturados."""
+
+    def test_extract_article_and_law_number(self):
+        filters = extract_legal_filters_from_query("art 17-a lei 14.133/2021")
+        assert filters["artigo"] == "17-A"
+        assert filters["law_number"] == "14133/2021"
+
+    def test_extract_content_type_and_court_markers(self):
+        filters = extract_legal_filters_from_query("jurisprudencia stj sobre tema x")
+        assert filters["content_type"] == "jurisprudence"
+        assert filters["marca_stj"] is True
+
+    def test_extract_empty_query(self):
+        assert extract_legal_filters_from_query("") == {}

@@ -4,27 +4,24 @@ Unit tests for metricas.utils module.
 
 import csv
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
 from metricas.utils import (
+    calculate_stats,
     configure_logging,
-    get_logger,
+    escape_html,
+    format_duration,
+    format_percentile,
+    format_timestamp,
+    generate_html_table,
     get_base_parser,
+    get_logger,
+    load_csv,
+    print_summary_box,
+    read_csv_dict,
     save_results_csv,
     save_summary_csv,
-    load_csv,
-    read_csv_dict,
-    escape_html,
-    generate_html_table,
-    format_duration,
-    format_timestamp,
-    calculate_stats,
-    format_percentile,
-    print_summary_box,
-    print_progress,
-    Timer,
 )
 
 

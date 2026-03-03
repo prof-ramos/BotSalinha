@@ -544,14 +544,21 @@ class AgentWrapper:
         if rag_context.confianca.value == "sem_rag":
             lines.extend([
                 "",
-                "INSTRUÇÃO: Nenhum documento relevante foi encontrado. ",
-                "Responda apenas com seu conhecimento geral.",
+                "INSTRUÇÃO: Nenhum documento relevante foi encontrado.",
+                "Não invente base jurídica. Informe limitação de fonte e peça delimitação legal.",
             ])
         elif rag_context.confianca.value == "baixa":
             lines.extend([
                 "",
-                "INSTRUÇÃO: Os documentos encontrados têm baixa relevância. ",
-                "Use-os como referência complementar, mas priorize seu conhecimento geral.",
+                "INSTRUÇÃO: Os documentos encontrados têm baixa relevância.",
+                "Use apenas o que está recuperado e sinalize necessidade de validação oficial.",
+            ])
+        else:
+            lines.extend([
+                "",
+                "INSTRUÇÃO: Responda apenas com base no contexto recuperado.",
+                "Cite sempre Lei e Artigo quando disponíveis.",
+                "Se houver conflito temporal (pré/pós alteração), explicite na resposta.",
             ])
         # For "media" and "alta", no explicit instruction needed
 

@@ -237,6 +237,16 @@ def _metadata_boost(query_text: str, chunk: Chunk) -> float:
     if ("concurso" in normalized_query or "banca" in normalized_query) and metadata.banca:
         boost += 0.15
 
+    # Temporal/legal update alignment boosts.
+    if ("apos" in normalized_query or "depois" in normalized_query) and metadata.updated_by_law:
+        boost += 0.15
+    if ("antes" in normalized_query or "anterior" in normalized_query) and metadata.is_revoked:
+        boost += 0.10
+    if ("revog" in normalized_query) and metadata.is_revoked:
+        boost += 0.20
+    if ("vetad" in normalized_query) and metadata.is_vetoed:
+        boost += 0.20
+
     return min(boost, 1.0)
 
 

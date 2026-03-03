@@ -34,6 +34,7 @@ class DocumentORM(Base):
         index=True,
         unique=True,
     )
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -77,6 +78,7 @@ class ChunkORM(Base):
         nullable=True,
         index=True,
     )
+    metadata_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True, default=None

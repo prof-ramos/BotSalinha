@@ -131,7 +131,7 @@ if __name__ == "__main__":
         help="Number of prompts to test (default: all available prompts)",
     )
     args = parser.parse_args()
-    
+
     output_file = args.output or "metricas/performance_geral.csv"
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     asyncio.run(check_performance(output_file=output_file, num_prompts=args.prompts))

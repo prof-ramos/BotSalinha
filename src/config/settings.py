@@ -204,6 +204,22 @@ class RAGConfig(BaseModel):
         default="intent_aware_v1",
         description="Rerank profile used when experimental rerank rollout is enabled",
     )
+    rollout_canary_percentage: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Initial canary percentage for progressive RAG rollout",
+    )
+    rollout_step_percentage: int = Field(
+        default=25,
+        ge=1,
+        le=100,
+        description="Step percentage for progressive rollout increments",
+    )
+    rollout_auto_rollback: bool = Field(
+        default=True,
+        description="Automatically rollback rollout when SLOs regress",
+    )
     # Code-specific RAG settings
     code_chunk_max_tokens: int = Field(
         default=300,

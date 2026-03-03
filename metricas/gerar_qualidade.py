@@ -122,7 +122,7 @@ async def check_quality(
         for conf_level in ["ALTA", "MEDIA", "BAIXA", "SEM_RAG", "erro"]:
             if conf_level in confidence_dist:
                 metrics.append((f"  {conf_level}:", f"{confidence_dist[conf_level]:.1f}%"))
-        
+
         metrics.extend([
             (None, None), # Spacer
             ("Similaridade Média Agregada:", f"{mean_similarity:.4f}"),
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     parser = get_base_parser("Generate RAG quality metrics")
     parser.add_argument("-n", "--queries", type=int, default=None, help="Number of queries to test")
     args = parser.parse_args()
-    
+
     output_file = args.output or "metricas/qualidade_rag.csv"
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     asyncio.run(check_quality(output_file=output_file, num_queries=args.queries))

@@ -56,6 +56,9 @@ class DOCXParser:
         r"^\s*(nota(?:\s+de\s+rodap[eé])?|observa[cç][ãa]o|coment[aá]rio|n\.?\s*b\.?)\s*[:\-]",
         re.IGNORECASE,
     )
+    _LEGAL_VETO_RE = re.compile(r"\bvetad[oa]\b|\bVETADO\b", re.IGNORECASE)
+    _LEGAL_REVOGACAO_PARCIAL_RE = re.compile(r"\brevogad[oa]\s+parcialmente\b", re.IGNORECASE)
+    _LEGAL_VETO_PARCIAL_RE = re.compile(r"\bvetad[oa]\s+parcialmente\b", re.IGNORECASE)
 
     def __init__(self, file_path: str | Path) -> None:
         """
@@ -216,9 +219,22 @@ class DOCXParser:
 
         is_heading, heading_level = self._get_heading_level(style_name)
         legal_structure = self._extract_legal_structure(text)
+        revoked = bool(self._LEGAL_REVOGACAO_RE.search(text))
+        vetoed = bool(self._LEGAL_VETO_RE.search(text))
         legal_flags = {
-            "is_revogacao": bool(self._LEGAL_REVOGACAO_RE.search(text)),
+            "is_revogacao": revoked,
+            "is_vetado": vetoed,
             "is_nota": bool(self._LEGAL_NOTA_RE.search(text)),
+            "revocation_scope": (
+                "partial"
+                if self._LEGAL_REVOGACAO_PARCIAL_RE.search(text)
+                else ("total" if revoked else "none")
+            ),
+            "veto_scope": (
+                "partial"
+                if self._LEGAL_VETO_PARCIAL_RE.search(text)
+                else ("total" if vetoed else "none")
+            ),
         }
 
         legal_heading_level = legal_structure.get("heading_level") if legal_structure else None

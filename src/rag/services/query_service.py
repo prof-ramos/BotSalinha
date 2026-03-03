@@ -15,7 +15,11 @@ from ...utils.log_events import LogEvents
 from ..models import RAGContext
 from ..storage.vector_store import VectorStore
 from ..utils.confianca_calculator import ConfiancaCalculator
-from ..utils.normalizer import normalize_query_text
+from ..utils.normalizer import (
+    extract_legal_filters_from_query,
+    normalize_query_text,
+    rewrite_legal_query,
+)
 from ..utils.retrieval_ranker import (
     detect_query_type,
     rerank_hybrid_lite,
@@ -120,7 +124,10 @@ class QueryService:
                 else self._settings.rag.rerank_enabled
             )
 
-            normalized_query = normalize_query_text(query_text)
+            rewritten_query, rewrite_meta = rewrite_legal_query(query_text)
+            normalized_query = normalize_query_text(rewritten_query)
+            extracted_filters = extract_legal_filters_from_query(normalized_query)
+            merged_filters = self._merge_filters(filters, extracted_filters)
             query_type = detect_query_type(normalized_query)
             candidate_pool_size = self._compute_candidate_pool_size(top_k=top_k)
 
@@ -132,7 +139,8 @@ class QueryService:
                 min_similarity=min_similarity,
                 candidate_pool_size=candidate_pool_size,
                 documento_id=documento_id,
-                filters=list(filters.keys()) if filters else None,
+                filters=list(merged_filters.keys()) if merged_filters else None,
+                rewrite_applied=bool(rewrite_meta.get("applied")),
                 retrieval_mode=retrieval_mode,
                 rerank_enabled=rerank_enabled,
                 query_type=query_type,
@@ -151,10 +159,11 @@ class QueryService:
             search_start = time.perf_counter()
             chunks_with_scores = await self._vector_store.search(
                 query_embedding=query_embedding,
+                query_text=normalized_query,
                 limit=candidate_pool_size,
                 min_similarity=min_similarity,
                 documento_id=documento_id,
-                filters=filters,
+                filters=merged_filters,
             )
             vector_search_duration_ms = (time.perf_counter() - search_start) * 1000
 
@@ -171,10 +180,11 @@ class QueryService:
                 if fallback_min_similarity < min_similarity:
                     fallback_candidates = await self._vector_store.search(
                         query_embedding=query_embedding,
+                        query_text=normalized_query,
                         limit=candidate_pool_size,
                         min_similarity=fallback_min_similarity,
                         documento_id=documento_id,
-                        filters=filters,
+                        filters=merged_filters,
                     )
                     chunks_with_scores = self._merge_candidates(
                         primary=chunks_with_scores,
@@ -259,6 +269,7 @@ class QueryService:
                 "fallback_applied": fallback_applied,
                 "effective_min_similarity": effective_min_similarity,
                 "query_type_detected": query_type,
+                "filters_applied": sorted(merged_filters.keys()) if merged_filters else [],
                 "retrieval_mode": retrieval_mode,
                 "context_provider": str(self._context_strategy["provider"]),
                 "context_model": str(self._context_strategy["model"]),
@@ -277,6 +288,13 @@ class QueryService:
                         "rerank_weight_metadata": float(rerank_weights.gamma),
                     }
                 )
+            retrieval_meta.update(
+                {
+                    "query_rewrite_applied": bool(rewrite_meta.get("applied")),
+                    "query_rewrite_matches": len(rewrite_meta.get("matches", [])),
+                    "query_rewrite_text": str(rewrite_meta.get("rewritten", query_text)),
+                }
+            )
             if debug and rerank_components:
                 retrieval_meta.update(self._build_rerank_debug_meta(rerank_components))
 
@@ -561,6 +579,20 @@ class QueryService:
         floor = self._settings.rag.retrieval_candidate_min
         cap = self._settings.rag.retrieval_candidate_cap
         return min(max(top_k * multiplier, floor), cap)
+
+    @staticmethod
+    def _merge_filters(
+        provided_filters: dict[str, Any] | None,
+        extracted_filters: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Merge explicit filters with query-derived filters without overriding explicit values."""
+        if not provided_filters and not extracted_filters:
+            return None
+
+        merged = dict(provided_filters or {})
+        for key, value in extracted_filters.items():
+            merged.setdefault(key, value)
+        return merged
 
     def _resolve_context_strategy(self) -> dict[str, str | int | float]:
         """

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from typing import Any
 
 _MULTISPACE_RE = re.compile(r"\s+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
@@ -26,6 +27,23 @@ LEGAL_ABBREVIATIONS: dict[str, str] = {
     "RTF": "Recurso de Extraordinário Federal",
     "REsp": "Recurso Especial",
 }
+
+LEGAL_QUERY_SYNONYMS: dict[str, str] = {
+    "lia": "Lei 8.429/1992",
+    "lei de improbidade": "Lei 8.429/1992",
+    "improbidade administrativa": "Lei 8.429/1992",
+    "nova lei de licitacoes": "Lei 14.133/2021",
+    "lei de licitacoes nova": "Lei 14.133/2021",
+    "lei de licitações nova": "Lei 14.133/2021",
+    "codigo civil": "Lei 10.406/2002",
+    "código civil": "Lei 10.406/2002",
+}
+
+ARTICLE_PATTERN = re.compile(r"\bart(?:igo)?\.?\s*(\d+(?:-[a-z])?)\b", re.IGNORECASE)
+LAW_PATTERN = re.compile(
+    r"\blei\s*(?:n[º°o]\.?\s*)?(\d{1,5}(?:\.\d{3})?)(?:/(\d{2,4}))?\b",
+    re.IGNORECASE,
+)
 
 
 def normalize_encoding(text: str) -> str:
@@ -114,4 +132,78 @@ def normalize_query_text(text: str) -> str:
     return normalized
 
 
-__all__ = ["normalize_encoding", "expand_legal_abbreviations", "normalize_query_text"]
+def rewrite_legal_query(text: str) -> tuple[str, dict[str, Any]]:
+    """
+    Reescreve consultas jurídicas com base em dicionário de sinônimos controlado.
+
+    Returns:
+        Tupla (texto_reescrito, metadata_da_reescrita)
+    """
+    if not text:
+        return "", {"applied": False, "matches": [], "original": text, "rewritten": ""}
+
+    rewritten = text
+    matches: list[dict[str, str]] = []
+    lowered = rewritten.casefold()
+
+    for source, target in sorted(LEGAL_QUERY_SYNONYMS.items(), key=lambda item: -len(item[0])):
+        source_lower = source.casefold()
+        if source_lower not in lowered:
+            continue
+        pattern = re.compile(rf"\b{re.escape(source)}\b", re.IGNORECASE)
+        rewritten, count = pattern.subn(target, rewritten)
+        if count > 0:
+            lowered = rewritten.casefold()
+            matches.append({"term": source, "target": target, "count": str(count)})
+
+    return rewritten, {
+        "applied": bool(matches),
+        "matches": matches,
+        "original": text,
+        "rewritten": rewritten,
+    }
+
+
+def extract_legal_filters_from_query(normalized_query: str) -> dict[str, Any]:
+    """Extrai filtros jurídicos estruturados a partir da query normalizada."""
+    filters: dict[str, Any] = {}
+    if not normalized_query:
+        return filters
+
+    article_match = ARTICLE_PATTERN.search(normalized_query)
+    if article_match:
+        filters["artigo"] = article_match.group(1).upper()
+
+    law_match = LAW_PATTERN.search(normalized_query)
+    if law_match:
+        law_number = law_match.group(1).replace(".", "")
+        law_year = law_match.group(2)
+        filters["law_number"] = (
+            f"{law_number}/{law_year}" if law_year else law_number
+        )
+
+    if "stf" in normalized_query or "supremo tribunal federal" in normalized_query:
+        filters["marca_stf"] = True
+    if "stj" in normalized_query or "superior tribunal de justica" in normalized_query:
+        filters["marca_stj"] = True
+
+    if any(term in normalized_query for term in ("jurisprudencia", "sumula", "acordao")):
+        filters["content_type"] = "jurisprudence"
+    elif any(term in normalized_query for term in ("concurso", "questao", "prova")):
+        filters["content_type"] = "exam_question"
+    elif any(term in normalized_query for term in ("doutrina", "manual", "comentario")):
+        filters["content_type"] = "doctrine"
+    elif any(term in normalized_query for term in ("artigo", "lei", "caput", "inciso")):
+        filters["content_type"] = "legal_text"
+
+    return filters
+
+
+__all__ = [
+    "normalize_encoding",
+    "expand_legal_abbreviations",
+    "normalize_query_text",
+    "rewrite_legal_query",
+    "extract_legal_filters_from_query",
+    "LEGAL_QUERY_SYNONYMS",
+]

@@ -68,6 +68,24 @@ Se algo der errado:
 - **Fallback Count:** Número de fallbacks para SQLite
 - **Dual-Write Count:** Número de operações dual-write
 - **Query Latency:** Latência média das buscas
+- **Citação Correta:** Taxa de respostas com `Lei + Artigo`
+- **Erro Temporal:** Taxa de respostas sem distinção pré/pós alteração legal
+
+## Rollout Canário
+
+1. Iniciar em 5%:
+   ```bash
+   BOTSALINHA_RAG__ROLLOUT_CANARY_PERCENTAGE=5
+   BOTSALINHA_RAG__ROLLOUT_STEP_PERCENTAGE=25
+   BOTSALINHA_RAG__ROLLOUT_AUTO_ROLLBACK=true
+   ```
+2. Validar SLOs por 24h (latência, erro temporal e citação correta).
+3. Subir para 25%, depois 50%, depois 100% se não houver regressão.
+4. Se houver regressão, rollback automático (ou manual):
+   ```bash
+   BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_RETRIEVAL=false
+   BOTSALINHA_RAG__ENABLE_EXPERIMENTAL_RERANK=false
+   ```
 
 ### Verificação de Saúde
 

@@ -240,7 +240,8 @@ async def test_query_by_tipo_uses_or_filter_for_jurisprudencia(
 
     assert len(context.chunks_usados) == 1
     assert vector_store.calls[0]["filters"] == {
-        "__or__": [{"marca_stf": True}, {"marca_stj": True}]
+        "__or__": [{"marca_stf": True}, {"marca_stj": True}],
+        "content_type": "jurisprudence",
     }
 
 

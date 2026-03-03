@@ -129,7 +129,7 @@ if __name__ == "__main__":
     parser = get_base_parser("Generate RAG component performance metrics")
     parser.add_argument("-t", "--texts", type=int, default=None, help="Number of texts to test")
     args = parser.parse_args()
-    
+
     output_file = args.output or "metricas/performance_rag_componentes.csv"
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     asyncio.run(check_rag_performance(output_file=output_file, num_texts=args.texts))

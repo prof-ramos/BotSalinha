@@ -41,6 +41,14 @@ BANCA_PATTERN = r"\b(CEBRASPE|FCC|VUNESP|FGV|CESGRANRIO|CEPEC|IADES|CESPE|MP[A-Z
 
 # Year pattern for exams
 ANO_PATTERN = r"\b(19\d{2}|20\d{2})\b"
+LAW_NUMBER_PATTERN = r"\b(?:Lei|LC|EC)\s*(?:n[ºo°]\s*)?(\d{1,5}(?:\.\d{3})*(?:/\d{2,4})?)\b"
+UPDATED_BY_LAW_PATTERN = (
+    r"(?:inclu[ií]do|alterad[oa]|reda[cç][ãa]o dada)\s+pela\s+Lei\s*(?:n[ºo°]\s*)?"
+    r"(\d{1,5}(?:\.\d{3})*(?:/\d{2,4})?)"
+)
+DATE_DDMMYYYY_PATTERN = r"\b([0-3]\d/[01]\d/(?:19|20)\d{2})\b"
+EXAM_REFERENCE_PATTERN = r"\(([A-Z0-9]{2,10})-(19\d{2}|20\d{2})\)"
+JURIS_LINK_PATTERN = r"\b(?:Info(?:rmativo)?\s*\d+|S[uú]mula\s+[A-Z]?\d+)\b"
 
 
 class MetadataExtractor:
@@ -68,6 +76,11 @@ class MetadataExtractor:
         self._militar_re = re.compile(MARCA_MILITAR, re.IGNORECASE)
         self._banca_re = re.compile(BANCA_PATTERN, re.IGNORECASE)
         self._ano_re = re.compile(ANO_PATTERN)
+        self._law_number_re = re.compile(LAW_NUMBER_PATTERN, re.IGNORECASE)
+        self._updated_by_law_re = re.compile(UPDATED_BY_LAW_PATTERN, re.IGNORECASE)
+        self._date_ddmmyyyy_re = re.compile(DATE_DDMMYYYY_PATTERN)
+        self._exam_reference_re = re.compile(EXAM_REFERENCE_PATTERN)
+        self._juris_link_re = re.compile(JURIS_LINK_PATTERN, re.IGNORECASE)
 
         log.debug("rag_metadata_extractor_initialized")
 
@@ -105,9 +118,46 @@ class MetadataExtractor:
 
         # Extract exam info (banca, ano)
         banca, ano = self._extract_banca_ano(text)
+        exam_references = self._extract_exam_references(text)
+        law_number = self._extract_law_number(text, context)
+        updated_by_law = self._extract_updated_by_law(text)
+        valid_from = self._extract_valid_from(text)
+        jurisprudence_linked = self._extract_jurisprudence_links(text)
+        content_type = self._classify_content_type(
+            text=text,
+            context=context,
+            marca_concurso=marca_concurso,
+            marca_stf=marca_stf,
+            marca_stj=marca_stj,
+        )
+        is_revoked = "revogad" in text.lower()
+        is_vetoed = "vetad" in text.lower()
+        revocation_scope = "partial" if "revogad" in text.lower() and "parcial" in text.lower() else (
+            "total" if is_revoked else "none"
+        )
+        veto_scope = "partial" if "vetad" in text.lower() and "parcial" in text.lower() else (
+            "total" if is_vetoed else "none"
+        )
+        temporal_confidence = 0.1
+        if valid_from and updated_by_law:
+            temporal_confidence = 0.9
+        elif valid_from or updated_by_law:
+            temporal_confidence = 0.6
+        elif is_revoked or is_vetoed:
+            temporal_confidence = 0.4
+        is_exam_focus = marca_concurso or bool(exam_references)
+        effective_text_version = (
+            "pos_lei_" + updated_by_law.replace(".", "").replace("/", "_")
+            if updated_by_law
+            else "current"
+        )
 
         metadata = ChunkMetadata(
             documento=documento,
+            law_name=context.get("law_name"),
+            law_number=law_number,
+            article=artigo,
+            content_type=content_type,
             titulo=context.get("titulo"),
             capitulo=context.get("capitulo"),
             secao=context.get("secao"),
@@ -126,6 +176,19 @@ class MetadataExtractor:
             marca_militar=marca_militar,
             banca=banca,
             ano=ano,
+            exam_source=banca,
+            exam_year=int(ano) if ano else None,
+            exam_references=exam_references,
+            valid_from=valid_from,
+            updated_by_law=updated_by_law,
+            is_revoked=is_revoked,
+            is_vetoed=is_vetoed,
+            revocation_scope=revocation_scope,
+            veto_scope=veto_scope,
+            temporal_confidence=temporal_confidence,
+            effective_text_version=effective_text_version,
+            is_exam_focus=is_exam_focus,
+            jurisprudence_linked=jurisprudence_linked,
         )
 
         log.info(
@@ -140,6 +203,14 @@ class MetadataExtractor:
             marca_concurso=marca_concurso,
             banca=banca,
             ano=ano,
+            content_type=content_type,
+            law_number=law_number,
+            updated_by_law=updated_by_law,
+            valid_from=valid_from,
+            temporal_confidence=temporal_confidence,
+            exam_references=len(exam_references),
+            is_revoked=is_revoked,
+            is_vetoed=is_vetoed,
             event_name="rag_metadata_extracted",
         )
 
@@ -264,6 +335,69 @@ class MetadataExtractor:
         ano = anos[-1] if anos else None
 
         return banca, ano
+
+    def _extract_exam_references(self, text: str) -> list[dict[str, Any]]:
+        """Extract structured exam references such as (PCPR-2013)."""
+        seen: set[tuple[str, int]] = set()
+        refs: list[dict[str, Any]] = []
+
+        for source, year_str in self._exam_reference_re.findall(text):
+            year = int(year_str)
+            key = (source, year)
+            if key in seen:
+                continue
+            seen.add(key)
+            refs.append({"source": source, "year": year})
+
+        return refs
+
+    def _extract_law_number(self, text: str, context: dict[str, Any]) -> str | None:
+        """Extract law number from text or fallback context."""
+        match = self._law_number_re.search(text)
+        if match:
+            return match.group(1)
+        law_number = context.get("law_number")
+        return str(law_number) if law_number else None
+
+    def _extract_updated_by_law(self, text: str) -> str | None:
+        """Extract explicit legal update marker."""
+        match = self._updated_by_law_re.search(text)
+        if not match:
+            return None
+        return f"Lei {match.group(1)}"
+
+    def _extract_valid_from(self, text: str) -> str | None:
+        """Extract validity start date from legal notes."""
+        match = self._date_ddmmyyyy_re.search(text)
+        if not match:
+            return None
+        day, month, year = match.group(1).split("/")
+        return f"{year}-{month}-{day}"
+
+    def _extract_jurisprudence_links(self, text: str) -> list[str]:
+        """Extract jurisprudence mentions such as informativos and súmulas."""
+        links = self._juris_link_re.findall(text)
+        return sorted({link.strip() for link in links})
+
+    def _classify_content_type(
+        self,
+        text: str,
+        context: dict[str, Any],
+        marca_concurso: bool,
+        marca_stf: bool,
+        marca_stj: bool,
+    ) -> str:
+        """Classify content type for legal RAG routing."""
+        lowered = text.lower()
+        if marca_concurso or bool(self._exam_reference_re.search(text)):
+            return "exam_question"
+        if marca_stf or marca_stj or bool(self._juris_link_re.search(text)):
+            return "jurisprudence"
+        if any(token in lowered for token in ["doutrina", "entendimento doutrin", "autor"]):
+            return "doctrine"
+        if context.get("artigo") or self._artigo_re.search(text):
+            return "legal_text"
+        return "legal_text"
 
 
 __all__ = ["MetadataExtractor"]

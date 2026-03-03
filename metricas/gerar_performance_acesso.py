@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--inserts", type=int, default=50, help="Number of insert operations")
     parser.add_argument("-r", "--reads", type=int, default=100, help="Number of read operations")
     args = parser.parse_args()
-    
+
     output_file = args.output or "metricas/performance_acesso.csv"
     configure_logging(verbose=args.verbose, quiet=args.quiet)
     asyncio.run(check_access_performance(output_file=output_file, num_inserts=args.inserts, num_reads=args.reads))

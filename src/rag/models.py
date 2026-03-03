@@ -6,8 +6,16 @@ including chunks, documents, and RAG context structures.
 """
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
+
+
+class ExamReference(BaseModel):
+    """Reference to an exam source where a legal excerpt was charged."""
+
+    source: str = Field(..., description="Exam or institution source (e.g., TRF3, PCPR)")
+    year: int | None = Field(default=None, description="Exam year")
 
 
 class ChunkMetadata(BaseModel):
@@ -23,10 +31,45 @@ class ChunkMetadata(BaseModel):
         default_factory=list,
         description="Normative hierarchy path for legal chunks",
     )
+    law_name: str | None = Field(None, description="Law name (e.g., Código Civil)")
+    law_number: str | None = Field(None, description="Law number (e.g., 10.406/2002)")
     artigo: str | None = Field(None, description="Article number")
+    article: str | None = Field(None, description="Alias for article number")
     paragrafo: str | None = Field(None, description="Paragraph number")
     inciso: str | None = Field(None, description="Inciso/Item number")
     tipo: str | None = Field(None, description="Type of text (e.g., 'caput', 'inciso')")
+    content_type: str | None = Field(
+        None,
+        description="One of: legal_text, jurisprudence, exam_question, doctrine",
+    )
+    exam_source: str | None = Field(None, description="Single detected exam source")
+    exam_year: int | None = Field(None, description="Single detected exam year")
+    exam_references: list[ExamReference] = Field(
+        default_factory=list,
+        description="Detected exam references list [{source, year}]",
+    )
+    is_exam_focus: bool = Field(False, description="Whether this chunk is exam-oriented/high-yield")
+    valid_from: str | None = Field(None, description="ISO date for validity start")
+    valid_to: str | None = Field(None, description="ISO date for validity end")
+    updated_by_law: str | None = Field(None, description="Law reference that updated this text")
+    is_revoked: bool = Field(False, description="Whether the legal text is revoked")
+    is_vetoed: bool = Field(False, description="Whether the legal text is vetoed")
+    revocation_scope: str | None = Field(None, description="Revocation scope: total, partial, none")
+    veto_scope: str | None = Field(None, description="Veto scope: total, partial, none")
+    temporal_confidence: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for temporal extraction",
+    )
+    effective_text_version: str | None = Field(
+        None,
+        description="Human-readable legal version marker (e.g., pos_lei_14230_2021)",
+    )
+    jurisprudence_linked: list[str] = Field(
+        default_factory=list,
+        description="Linked jurisprudence references (info/sumula/etc.)",
+    )
     marca_atencao: bool = Field(False, description="Marked as important attention point")
     marca_stf: bool = Field(False, description="Marked as STF (Supreme Federal Court) relevant")
     marca_stj: bool = Field(False, description="Marked as STJ (Superior Court of Justice) relevant")
@@ -48,6 +91,20 @@ class ChunkMetadata(BaseModel):
     classes: list[str] = Field(default_factory=list, description="Class names found in code")
     imports: list[str] = Field(default_factory=list, description="Imported modules")
     is_test: bool = Field(False, description="Whether this is a test file")
+
+    @model_validator(mode="after")
+    def sync_legacy_aliases(self) -> "ChunkMetadata":
+        """Keep legacy and canonical aliases synchronized."""
+        if self.article and not self.artigo:
+            self.artigo = self.article
+        if self.artigo and not self.article:
+            self.article = self.artigo
+
+        if self.content_type and not self.tipo:
+            self.tipo = self.content_type
+        if self.tipo and not self.content_type:
+            self.content_type = self.tipo
+        return self
 
 
 class Chunk(BaseModel):
@@ -95,7 +152,7 @@ class RAGContext(BaseModel):
     )
     confianca: ConfiancaLevel = Field(..., description="Overall confidence level")
     fontes: list[str] = Field(default_factory=list, description="Formatted source citations")
-    retrieval_meta: dict[str, float | int | bool | str] = Field(
+    retrieval_meta: dict[str, Any] = Field(
         default_factory=dict,
         description="Retrieval telemetry and ranking metadata",
     )
@@ -116,6 +173,7 @@ class RAGContext(BaseModel):
 
 
 __all__ = [
+    "ExamReference",
     "ChunkMetadata",
     "Chunk",
     "Document",

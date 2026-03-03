@@ -50,6 +50,7 @@ CREATE TABLE rag_documents (
     id           INTEGER  PRIMARY KEY AUTOINCREMENT,
     nome         VARCHAR(255) NOT NULL,
     arquivo_origem VARCHAR(500) NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1,    -- versão do schema RAG
     chunk_count  INTEGER  NOT NULL DEFAULT 0,
     token_count  INTEGER  NOT NULL DEFAULT 0,
     file_hash    VARCHAR(64)  DEFAULT NULL,       -- SHA-256 hex (64 chars)
@@ -71,6 +72,7 @@ CREATE UNIQUE INDEX uq_rag_documents_file_hash ON rag_documents (file_hash)
 | `id`             | INTEGER      | NÃO     | auto   | Chave primária                                    |
 | `nome`           | VARCHAR(255) | NÃO     | —      | Nome legível do documento (ex.: `"CF/88"`)        |
 | `arquivo_origem` | VARCHAR(500) | NÃO     | —      | Caminho do arquivo de origem                      |
+| `schema_version` | INTEGER      | NÃO     | 1      | Versão do schema lógico aplicado ao documento     |
 | `chunk_count`    | INTEGER      | NÃO     | 0      | Número de chunks indexados                        |
 | `token_count`    | INTEGER      | NÃO     | 0      | Total de tokens estimados                         |
 | `file_hash`      | VARCHAR(64)  | SIM     | NULL   | SHA-256 hex do arquivo (deduplicação)             |
@@ -86,6 +88,7 @@ CREATE TABLE rag_chunks (
     documento_id INTEGER  NOT NULL REFERENCES rag_documents(id) ON DELETE CASCADE,
     texto        TEXT     NOT NULL,
     metadados    TEXT     NOT NULL,            -- JSON serializado de ChunkMetadata
+    metadata_version INTEGER NOT NULL DEFAULT 1,  -- versão de metadados do chunk
     token_count  INTEGER  NOT NULL,
     embedding    BLOB     DEFAULT NULL,        -- float32[1536] serializado
     created_at   DATETIME NOT NULL
@@ -102,6 +105,7 @@ CREATE INDEX ix_rag_chunks_documento_id ON rag_chunks (documento_id);
 | `documento_id` | INTEGER     | NÃO     | —      | FK → `rag_documents.id` (CASCADE DELETE)           |
 | `texto`        | TEXT        | NÃO     | —      | Conteúdo textual do chunk                          |
 | `metadados`    | TEXT        | NÃO     | —      | JSON de `ChunkMetadata` (artigo, marcadores, etc.) |
+| `metadata_version` | INTEGER | NÃO     | 1      | Versão da estrutura de metadados do chunk          |
 | `token_count`  | INTEGER     | NÃO     | —      | Tokens estimados (`len(texto) / 4`)                |
 | `embedding`    | BLOB        | SIM     | NULL   | 1536 × float32 = 6.144 bytes                       |
 | `created_at`   | DATETIME    | NÃO     | —      | Timestamp UTC da criação                           |
@@ -144,7 +148,7 @@ CREATE INDEX ix_rag_chunks_documento_id ON rag_chunks (documento_id);
 | -------------------------------------------------- | -------------------------------------------------- |
 | `20260228_0236_…_add_rag_documents_and_chunks`     | Cria as tabelas `rag_documents` e `rag_chunks`     |
 | `20260228_1000_add_embedding_column_to_rag_chunks` | Adiciona coluna `embedding BLOB` em `rag_chunks`   |
-| `20260228_1100_add_file_hash_to_rag_documents`     | Adiciona `file_hash VARCHAR(64)` com UNIQUE e índice |
+| `20260303_0915_add_rag_schema_metadata_versions`   | Adiciona `schema_version` em documentos e `metadata_version` em chunks |
 
 ---
 
@@ -163,10 +167,14 @@ class ChunkMetadata(BaseModel):
     titulo:       str | None    # Título de seção
     capitulo:     str | None    # Capítulo
     secao:        str | None    # Seção
-    artigo:       str | None    # ex.: "5"
+    artigo:       str | None    # ex.: "5" (legado)
+    article:      str | None    # campo canônico v2
+    law_name:     str | None    # ex.: "Lei de Improbidade Administrativa"
+    law_number:   str | None    # ex.: "8.429/1992"
     paragrafo:    str | None    # ex.: "único" ou "1"
     inciso:       str | None    # ex.: "I", "II", "III"
-    tipo:         str | None    # "caput" | "inciso" | "heading" | "content"
+    tipo:         str | None    # legado
+    content_type: str | None    # "legal_text" | "jurisprudence" | "exam_question" | "doctrine"
 
     # Marcadores de atenção (extraídos por regex)
     marca_atencao:    bool = False   # Texto marcado com #Atenção:
@@ -180,8 +188,16 @@ class ChunkMetadata(BaseModel):
     marca_militar:    bool = False   # Código Penal Militar / legislação militar
 
     # Informações de prova/questão
-    banca: str | None    # ex.: "CEBRASPE", "FCC", "VUNESP", "FGV"
-    ano:   str | None    # ex.: "2024"
+    banca: str | None    # legado
+    ano:   str | None    # legado
+    exam_references: list[ExamReference]  # [{"source":"TRF3","year":2011}]
+    is_exam_focus: bool
+    valid_from: str | None
+    valid_to: str | None
+    updated_by_law: str | None
+    is_revoked: bool
+    is_vetoed: bool
+    jurisprudence_linked: list[str]
 ```
 
 ### 3.2 `Chunk`

@@ -6,9 +6,11 @@ fundamentada e SLOs operacionais para comparação baseline vs candidato.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from statistics import mean
 from typing import Any, Literal
 
@@ -345,6 +347,46 @@ def compare_baseline_candidate(
     }
 
 
+def load_goldset_v2_cases(
+    file_path: str = "tests/fixtures/rag/goldset_v2.json",
+) -> list[RetrievalBenchmarkCase]:
+    """Load goldset v2 JSON and convert entries to retrieval benchmark cases."""
+    payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
+    cases: list[RetrievalBenchmarkCase] = []
+
+    for entry in payload.get("cases", []):
+        scenario = str(entry.get("scenario", "geral")).lower()
+        expected = entry.get("expected", {})
+
+        query_type: QueryType = "geral"
+        if scenario in {"revogacao", "veto", "citacao_obrigatoria"}:
+            query_type = "artigo"
+        elif scenario == "conflito_temporal":
+            query_type = "jurisprudencia"
+
+        must_cite = expected.get("must_cite", [])
+        expected_doc = str(must_cite[0]) if must_cite else None
+        expected_artigo = None
+        for candidate in must_cite:
+            match = re.search(r"Art\\.\\s*([0-9]+(?:-[A-Za-z])?)", str(candidate), re.IGNORECASE)
+            if match:
+                expected_artigo = match.group(1)
+                break
+
+        cases.append(
+            RetrievalBenchmarkCase(
+                case_id=str(entry.get("id", "")),
+                tipo=query_type,
+                query=str(entry.get("query", "")),
+                expected_doc=expected_doc,
+                expected_artigo=expected_artigo,
+                expected_keywords=tuple(expected.get("must_signal", [])),
+            )
+        )
+
+    return cases
+
+
 __all__ = [
     "CostModel",
     "IntegratedSLOs",
@@ -354,4 +396,5 @@ __all__ = [
     "estimate_query_cost_usd",
     "evaluate_integrated_case",
     "evaluate_slos",
+    "load_goldset_v2_cases",
 ]
