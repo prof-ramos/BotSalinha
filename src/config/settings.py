@@ -116,6 +116,49 @@ class ChromaConfig(BaseModel):
     )
 
 
+class SupabaseRAGConfig(BaseModel):
+    """Supabase vector store configuration for RAG migration."""
+
+    enabled: bool = Field(default=False, description="Enable Supabase vector backend")
+    url: str | None = Field(default=None, description="Supabase project URL")
+    service_key: str | None = Field(default=None, description="Supabase service role key")
+    table_name: str = Field(default="rag_chunks", description="Supabase chunks table name")
+    rpc_search_function: str = Field(
+        default="match_rag_chunks",
+        description="RPC function used for vector similarity search",
+    )
+    dual_write_enabled: bool = Field(
+        default=False,
+        description="Write embeddings to Supabase in parallel with SQLite",
+    )
+    read_preference: str = Field(
+        default="sqlite",
+        description="Read preference: sqlite|supabase|auto",
+    )
+    fallback_to_sqlite: bool = Field(default=True, description="Fallback to SQLite on Supabase error")
+    fallback_timeout_ms: int = Field(
+        default=250,
+        ge=50,
+        le=2000,
+        description="Timeout for Supabase operations in milliseconds",
+    )
+
+    @field_validator("read_preference")
+    @classmethod
+    def validate_read_preference(cls, value: str) -> str:
+        """Validate read preference."""
+        normalized = value.strip().lower()
+        allowed = {"sqlite", "supabase", "auto"}
+        if normalized not in allowed:
+            raise ValidationError(
+                "RAG config inválida: supabase.read_preference fora do conjunto suportado.",
+                field="rag.supabase.read_preference",
+                value=value,
+                details={"allowed": sorted(allowed)},
+            )
+        return normalized
+
+
 class RAGConfig(BaseModel):
     """
     RAG (Retrieval-Augmented Generation) configuration.
@@ -255,6 +298,11 @@ class RAGConfig(BaseModel):
     chroma: ChromaConfig = Field(
         default_factory=ChromaConfig,
         description="ChromaDB vector store configuration",
+    )
+    # Supabase configuration
+    supabase: SupabaseRAGConfig = Field(
+        default_factory=SupabaseRAGConfig,
+        description="Supabase vector store configuration",
     )
 
     @model_validator(mode="after")

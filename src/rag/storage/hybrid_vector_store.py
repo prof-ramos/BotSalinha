@@ -12,6 +12,7 @@ from ...config.settings import get_settings
 from ...utils.errors import APIError
 from ..models import Chunk
 from .chroma_store import ChromaStore
+from .supabase_store import SupabaseStore
 from .vector_store import VectorStore
 
 log = structlog.get_logger(__name__)
@@ -41,6 +42,7 @@ class HybridVectorStore:
         # Initialize both stores
         self._sqlite_store = VectorStore(session)
         self._chroma_store = ChromaStore(session)
+        self._supabase_store = SupabaseStore(session)
 
         # Statistics
         self._fallback_count = 0
@@ -77,6 +79,23 @@ class HybridVectorStore:
                     count=len(chunks_with_embeddings),
                 )
 
+        # Dual-write to Supabase if enabled
+        if self._settings.rag.supabase.enabled and self._settings.rag.supabase.dual_write_enabled:
+            try:
+                await self._supabase_store.add_embeddings(chunks_with_embeddings)
+                self._dual_write_count += len(chunks_with_embeddings)
+                log.debug(
+                    "hybrid_dual_write_supabase",
+                    count=len(chunks_with_embeddings),
+                    total_dual_writes=self._dual_write_count,
+                )
+            except Exception as e:
+                log.warning(
+                    "hybrid_dual_write_supabase_failed",
+                    error=str(e),
+                    count=len(chunks_with_embeddings),
+                )
+
     async def search(
         self,
         query_embedding: list[float],
@@ -102,6 +121,35 @@ class HybridVectorStore:
         Returns:
             List of (chunk, similarity_score) tuples
         """
+        supabase_enabled = self._settings.rag.supabase.enabled
+        read_preference = self._settings.rag.supabase.read_preference
+
+        if supabase_enabled and read_preference in {"supabase", "auto"}:
+            try:
+                timeout_ms = self._settings.rag.supabase.fallback_timeout_ms
+                return await asyncio.wait_for(
+                    self._supabase_store.search(
+                        query_embedding=query_embedding,
+                        query_text=query_text,
+                        limit=limit,
+                        min_similarity=min_similarity,
+                        documento_id=documento_id,
+                        filters=filters,
+                        candidate_limit=candidate_limit,
+                    ),
+                    timeout=timeout_ms / 1000.0,
+                )
+            except Exception as e:
+                self._fallback_count += 1
+                log.warning(
+                    "hybrid_fallback_from_supabase",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    fallback_count=self._fallback_count,
+                )
+                if not self._settings.rag.supabase.fallback_to_sqlite and read_preference == "supabase":
+                    raise APIError(f"Supabase search failed and fallback disabled: {e}") from e
+
         if self._should_use_chroma():
             return await self._search_chroma_with_fallback(
                 query_embedding=query_embedding,
@@ -113,7 +161,7 @@ class HybridVectorStore:
                 candidate_limit=candidate_limit,
             )
 
-        # Fallback to SQLite
+        # Default fallback to SQLite
         return await self._sqlite_store.search(
             query_embedding=query_embedding,
             query_text=query_text,

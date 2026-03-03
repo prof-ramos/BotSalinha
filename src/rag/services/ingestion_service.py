@@ -12,7 +12,7 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...models.rag_models import ChunkORM, DocumentORM
+from ...models.rag_models import ChunkORM, ContentLinkORM, DocumentORM
 from ...utils.errors import BotSalinhaError
 from ...utils.log_events import LogEvents
 from ..models import Chunk, Document
@@ -24,9 +24,9 @@ from .embedding_service import EMBEDDING_DIM, EmbeddingService
 
 log = structlog.get_logger(__name__)
 
-RAG_SCHEMA_VERSION = 2
-RAG_METADATA_VERSION = 2
-RAG_PARSER_VERSION = "docx_parser_v2"
+RAG_SCHEMA_VERSION = 3
+RAG_METADATA_VERSION = 3
+RAG_PARSER_VERSION = "docx_parser_v3"
 
 
 class IngestionError(BotSalinhaError):
@@ -347,7 +347,12 @@ class IngestionService:
             metadata_dict = chunk.metadados.model_dump()
             metadata_dict["parser_version"] = RAG_PARSER_VERSION
             metadata_dict["schema_version"] = RAG_SCHEMA_VERSION
-            metadata_dict["embedding_model"] = self._embedding_service.model
+            embedding_model = getattr(
+                self._embedding_service,
+                "model",
+                getattr(self._embedding_service, "_model", "unknown"),
+            )
+            metadata_dict["embedding_model"] = embedding_model
             metadata_payload = json.dumps(metadata_dict, ensure_ascii=False, sort_keys=True)
             chunk_hash = self._compute_chunk_content_hash(chunk.texto, metadata_payload)
             new_chunk_hashes.append(chunk_hash)
@@ -398,6 +403,9 @@ class IngestionService:
             )
             self._session.add(chunk_orm)
 
+        for link in self._build_content_links(chunks):
+            self._session.add(link)
+
         await self._session.flush()
         return {
             "deleted_chunks": len(existing_chunks),
@@ -405,6 +413,42 @@ class IngestionService:
             "reused_chunks": reused_chunks,
             "backfilled_hashes": backfilled_hashes,
         }
+
+    def _build_content_links(self, chunks: list[Chunk]) -> list[ContentLinkORM]:
+        """Build explicit content links from parent-child metadata relationships."""
+        chunk_ids = {chunk.chunk_id for chunk in chunks}
+        links: list[ContentLinkORM] = []
+        seen: set[tuple[str, str, str]] = set()
+
+        for chunk in chunks:
+            metadata = chunk.metadados
+            parent_chunk_id = metadata.parent_chunk_id
+            if not parent_chunk_id or parent_chunk_id not in chunk_ids:
+                continue
+
+            content_type = (metadata.content_type or metadata.tipo or "").lower()
+            source_type = (metadata.source_type or "").lower()
+
+            if content_type == "exam_question" or source_type == "exam_question":
+                link_type = "charged_in"
+            elif source_type == "emenda_constitucional" or bool(metadata.updated_by_law):
+                link_type = "updates"
+            else:
+                link_type = "interprets"
+
+            key = (parent_chunk_id, chunk.chunk_id, link_type)
+            if key in seen:
+                continue
+            seen.add(key)
+            links.append(
+                ContentLinkORM(
+                    article_chunk_id=parent_chunk_id,
+                    linked_chunk_id=chunk.chunk_id,
+                    link_type=link_type,
+                )
+            )
+
+        return links
 
     def _create_document_orm(
         self,

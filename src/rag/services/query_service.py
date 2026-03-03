@@ -13,6 +13,7 @@ from ...config.settings import get_settings
 from ...utils.errors import APIError
 from ...utils.log_events import LogEvents
 from ..models import RAGContext
+from ..storage.hybrid_vector_store import HybridVectorStore
 from ..storage.vector_store import VectorStore
 from ..utils.confianca_calculator import ConfiancaCalculator
 from ..utils.normalizer import (
@@ -45,7 +46,7 @@ class QueryService:
         self,
         session: AsyncSession,
         embedding_service: EmbeddingService | None = None,
-        vector_store: VectorStore | None = None,
+        vector_store: VectorStore | HybridVectorStore | None = None,
         confianca_calculator: ConfiancaCalculator | None = None,
     ) -> None:
         """
@@ -62,7 +63,7 @@ class QueryService:
 
         # Initialize components
         self._embedding_service = embedding_service or EmbeddingService()
-        self._vector_store = vector_store or VectorStore(session)
+        self._vector_store = vector_store or HybridVectorStore(session)
         self._confianca_calculator = confianca_calculator or ConfiancaCalculator(
             alta_threshold=self._settings.rag.confidence_threshold,
         )

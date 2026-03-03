@@ -91,3 +91,38 @@ class TestMetadataExtractorLegalPatterns:
         assert metadata.is_vetoed is True
         assert metadata.is_revoked is True
         assert "Info 722" in metadata.jurisprudence_linked
+
+    def test_extract_source_type_for_exam_and_commentary(self) -> None:
+        """Should classify source_type for exam and commentary-like fragments."""
+        extractor = MetadataExtractor()
+
+        exam_metadata = extractor.extract(
+            "(MPPR-2021-CESPE): Julgue o item sobre organização do Estado.",
+            {"documento": "CF/88"},
+        )
+        commentary_metadata = extractor.extract(
+            "# Atenção: esse ponto costuma confundir em prova.",
+            {"documento": "CF/88"},
+        )
+
+        assert exam_metadata.source_type == "exam_question"
+        assert commentary_metadata.source_type == "commentary"
+
+    def test_extract_exam_marks_from_annotation_block(self) -> None:
+        """Should parse structured exam marks from hash annotations."""
+        extractor = MetadataExtractor()
+
+        metadata = extractor.extract(
+            "# MPPR-2021-CESPE: # TRF3-2016-CESPE: item de concurso.",
+            {"documento": "CF/88"},
+        )
+
+        concursos = {mark.concurso for mark in metadata.exam_marks}
+        anos = {mark.ano for mark in metadata.exam_marks}
+        bancas = {mark.banca for mark in metadata.exam_marks}
+
+        assert "MPPR" in concursos
+        assert "TRF3" in concursos
+        assert 2021 in anos
+        assert 2016 in anos
+        assert "CESPE" in bancas

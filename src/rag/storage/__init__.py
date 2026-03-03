@@ -2,6 +2,7 @@
 
 from .chroma_store import ChromaStore, bm25_score
 from .hybrid_vector_store import HybridVectorStore
+from .supabase_store import SupabaseStore
 from .vector_store import (
     VectorStore,
     cosine_similarity,
@@ -17,4 +18,5 @@ __all__ = [
     "deserialize_embedding",
     "bm25_score",
     "HybridVectorStore",
+    "SupabaseStore",
 ]

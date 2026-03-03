@@ -132,7 +132,11 @@ class VectorStore:
         "inciso",
         "tipo",
         "content_type",
+        "source_type",
         "is_exam_focus",
+        "exam_marks",
+        "parent_chunk_id",
+        "is_parent_chunk",
         "valid_from",
         "valid_to",
         "updated_by_law",
@@ -170,6 +174,7 @@ class VectorStore:
         "valid_to_gte",
         "valid_to_lte",
     }
+    _LEGACY_DOCUMENT_KEYS = ("fonte", "nome", "arquivo_origem")
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -357,8 +362,7 @@ class VectorStore:
             # Convert to Pydantic models
             chunks_with_scores: list[tuple[Chunk, float]] = []
             for chunk_orm, score in results:
-                metadata_dict = json.loads(chunk_orm.metadados)
-                metadata = ChunkMetadata(**metadata_dict)
+                metadata = self._build_chunk_metadata(chunk_orm.metadados)
 
                 chunk = Chunk(
                     chunk_id=chunk_orm.id,
@@ -592,6 +596,27 @@ class VectorStore:
             return json_value.is_(None)
         return json_value == value
 
+    def _build_chunk_metadata(self, metadata_raw: str) -> ChunkMetadata:
+        """
+        Parse metadata with backward compatibility for legacy payloads.
+
+        Historical chunks may use `fonte` as the document field instead of
+        canonical `documento`.
+        """
+        metadata_dict = json.loads(metadata_raw)
+
+        if "documento" not in metadata_dict or not metadata_dict.get("documento"):
+            for key in self._LEGACY_DOCUMENT_KEYS:
+                value = metadata_dict.get(key)
+                if isinstance(value, str) and value.strip():
+                    metadata_dict["documento"] = value.strip()
+                    break
+
+        if "documento" not in metadata_dict or not metadata_dict.get("documento"):
+            metadata_dict["documento"] = "Documento Desconhecido"
+
+        return ChunkMetadata(**metadata_dict)
+
     async def get_chunk_by_id(self, chunk_id: str) -> Chunk | None:
         """
         Retrieve a chunk by ID.
@@ -610,8 +635,7 @@ class VectorStore:
             if not chunk_orm:
                 return None
 
-            metadata_dict = json.loads(chunk_orm.metadados)
-            metadata = ChunkMetadata(**metadata_dict)
+            metadata = self._build_chunk_metadata(chunk_orm.metadados)
 
             return Chunk(
                 chunk_id=chunk_orm.id,

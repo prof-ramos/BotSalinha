@@ -18,6 +18,15 @@ class ExamReference(BaseModel):
     year: int | None = Field(default=None, description="Exam year")
 
 
+class ExamMark(BaseModel):
+    """Structured exam marker extracted from annotation blocks."""
+
+    concurso: str = Field(..., description="Exam institution or concurso identifier")
+    ano: int | None = Field(default=None, description="Exam year if available")
+    banca: str | None = Field(default=None, description="Exam board name if available")
+    orgao: str | None = Field(default=None, description="Optional organization/body tag")
+
+
 class ChunkMetadata(BaseModel):
     """Metadata for a document chunk."""
 
@@ -42,11 +51,22 @@ class ChunkMetadata(BaseModel):
         None,
         description="One of: legal_text, jurisprudence, exam_question, doctrine",
     )
+    source_type: str | None = Field(
+        None,
+        description=(
+            "One of: lei_cf, emenda_constitucional, jurisprudence, "
+            "commentary, exam_question"
+        ),
+    )
     exam_source: str | None = Field(None, description="Single detected exam source")
     exam_year: int | None = Field(None, description="Single detected exam year")
     exam_references: list[ExamReference] = Field(
         default_factory=list,
         description="Detected exam references list [{source, year}]",
+    )
+    exam_marks: list[ExamMark] = Field(
+        default_factory=list,
+        description="Structured exam tags [{concurso, ano, banca, orgao}]",
     )
     is_exam_focus: bool = Field(False, description="Whether this chunk is exam-oriented/high-yield")
     valid_from: str | None = Field(None, description="ISO date for validity start")
@@ -70,6 +90,17 @@ class ChunkMetadata(BaseModel):
         default_factory=list,
         description="Linked jurisprudence references (info/sumula/etc.)",
     )
+    linked_chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="Linked chunk IDs populated at retrieval time when available",
+    )
+    link_types: list[str] = Field(
+        default_factory=list,
+        description="Link types associated with linked_chunk_ids",
+    )
+    is_parent_chunk: bool = Field(False, description="Marks chunk as parent in parent-child hierarchy")
+    parent_chunk_id: str | None = Field(None, description="Parent chunk ID when this is a child chunk")
+    child_chunk_ids: list[str] = Field(default_factory=list, description="Child chunk IDs when this is a parent")
     marca_atencao: bool = Field(False, description="Marked as important attention point")
     marca_stf: bool = Field(False, description="Marked as STF (Supreme Federal Court) relevant")
     marca_stj: bool = Field(False, description="Marked as STJ (Superior Court of Justice) relevant")
@@ -104,6 +135,29 @@ class ChunkMetadata(BaseModel):
             self.tipo = self.content_type
         if self.tipo and not self.content_type:
             self.content_type = self.tipo
+
+        if self.content_type:
+            normalized_content = self.content_type.strip().lower()
+            content_aliases = {
+                "jurisprudencia": "jurisprudence",
+                "questao_prova": "exam_question",
+                "questao": "exam_question",
+                "comentario": "doctrine",
+                "doutrina": "doctrine",
+            }
+            self.content_type = content_aliases.get(normalized_content, normalized_content)
+
+        if self.source_type:
+            normalized_source = self.source_type.strip().lower()
+            source_aliases = {
+                "lei": "lei_cf",
+                "lei_cf88": "lei_cf",
+                "emenda_constitucional": "emenda_constitucional",
+                "jurisprudencia": "jurisprudence",
+                "comentario": "commentary",
+                "questao_prova": "exam_question",
+            }
+            self.source_type = source_aliases.get(normalized_source, normalized_source)
         return self
 
 
@@ -174,6 +228,7 @@ class RAGContext(BaseModel):
 
 __all__ = [
     "ExamReference",
+    "ExamMark",
     "ChunkMetadata",
     "Chunk",
     "Document",

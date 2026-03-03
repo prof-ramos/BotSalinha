@@ -5,6 +5,7 @@ Este diretório concentra os documentos operacionais e técnicos do BotSalinha.
 ## Principais documentos
 
 - [docs/architecture.md](architecture.md): Arquitetura completa do sistema (1002 linhas, diagramas, glossário)
+- [docs/architecture_overview_2026.md](architecture_overview_2026.md): Visão arquitetural executiva (alto nível, fluxos e limitações)
 - [docs/CODE_DOCUMENTATION.md](CODE_DOCUMENTATION.md): Documentação técnica módulo a módulo (2135 linhas, 99 diagramas, 66 exemplos)
 - [docs/api.md](api.md): Referência dos comandos Discord
 - [docs/deployment.md](deployment.md): Guia de deploy
@@ -15,6 +16,7 @@ Este diretório concentra os documentos operacionais e técnicos do BotSalinha.
 ## Suporte à documentação
 
 - [docs/plans/mcp-integration.md](plans/mcp-integration.md): plano ativo de integração MCP
+- [docs/operations/supabase-ingestion-runbook.md](operations/supabase-ingestion-runbook.md): runbook de carga contínua para Supabase com checkpoint
 - `docs/reports/`: relatórios e artefatos de análise
 
 ## Templates de documentação

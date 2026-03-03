@@ -70,7 +70,14 @@ dmypy.json
 # Data and backups
 data/*.db-shm
 data/*.db-wal
+data/*.db-journal
+!data/botsalinha.db
+data/ingest_supabase_*.pid
+data/ingest_supabase_*.jsonl
+data/ingest_supabase_*.log
 data/chroma/
+data/legislacao_grifada_e_anotada_atualiz_em_01_01_2026/
+data/sumulas_tse_stj_stf_e_tnu_atualiz_01_01_2026_2/
 backups/
 logs/
 

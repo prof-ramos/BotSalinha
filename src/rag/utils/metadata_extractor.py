@@ -49,6 +49,9 @@ UPDATED_BY_LAW_PATTERN = (
 DATE_DDMMYYYY_PATTERN = r"\b([0-3]\d/[01]\d/(?:19|20)\d{2})\b"
 EXAM_REFERENCE_PATTERN = r"\(([A-Z0-9]{2,10})-(19\d{2}|20\d{2})\)"
 JURIS_LINK_PATTERN = r"\b(?:Info(?:rmativo)?\s*\d+|S[uú]mula\s+[A-Z]?\d+)\b"
+EXAM_MARK_PATTERN = (
+    r"(?:#\s*)?([A-Z]{2,10})[-/\s]?(19\d{2}|20\d{2})?(?:[-/\s]+([A-Z]{3,12}))?(?:\s*[:)])?"
+)
 
 
 class MetadataExtractor:
@@ -81,6 +84,7 @@ class MetadataExtractor:
         self._date_ddmmyyyy_re = re.compile(DATE_DDMMYYYY_PATTERN)
         self._exam_reference_re = re.compile(EXAM_REFERENCE_PATTERN)
         self._juris_link_re = re.compile(JURIS_LINK_PATTERN, re.IGNORECASE)
+        self._exam_mark_re = re.compile(EXAM_MARK_PATTERN)
 
         log.debug("rag_metadata_extractor_initialized")
 
@@ -119,6 +123,7 @@ class MetadataExtractor:
         # Extract exam info (banca, ano)
         banca, ano = self._extract_banca_ano(text)
         exam_references = self._extract_exam_references(text)
+        exam_marks = self._extract_exam_marks(text)
         law_number = self._extract_law_number(text, context)
         updated_by_law = self._extract_updated_by_law(text)
         valid_from = self._extract_valid_from(text)
@@ -129,6 +134,11 @@ class MetadataExtractor:
             marca_concurso=marca_concurso,
             marca_stf=marca_stf,
             marca_stj=marca_stj,
+        )
+        source_type = self._classify_source_type(
+            text=text,
+            context=context,
+            content_type=content_type,
         )
         is_revoked = "revogad" in text.lower()
         is_vetoed = "vetad" in text.lower()
@@ -179,6 +189,7 @@ class MetadataExtractor:
             exam_source=banca,
             exam_year=int(ano) if ano else None,
             exam_references=exam_references,
+            exam_marks=exam_marks,
             valid_from=valid_from,
             updated_by_law=updated_by_law,
             is_revoked=is_revoked,
@@ -189,6 +200,7 @@ class MetadataExtractor:
             effective_text_version=effective_text_version,
             is_exam_focus=is_exam_focus,
             jurisprudence_linked=jurisprudence_linked,
+            source_type=source_type,
         )
 
         log.info(
@@ -209,6 +221,7 @@ class MetadataExtractor:
             valid_from=valid_from,
             temporal_confidence=temporal_confidence,
             exam_references=len(exam_references),
+            exam_marks=len(exam_marks),
             is_revoked=is_revoked,
             is_vetoed=is_vetoed,
             event_name="rag_metadata_extracted",
@@ -351,6 +364,35 @@ class MetadataExtractor:
 
         return refs
 
+    def _extract_exam_marks(self, text: str) -> list[dict[str, Any]]:
+        """Extract broad exam marker patterns from annotation-heavy blocks."""
+        if not text:
+            return []
+
+        marks: list[dict[str, Any]] = []
+        seen: set[tuple[str, int | None, str | None]] = set()
+
+        for concurso, year_str, banca in self._exam_mark_re.findall(text):
+            concurso_clean = concurso.strip().upper()
+            if concurso_clean in {"STF", "STJ", "INFO", "ART"}:
+                continue
+            year = int(year_str) if year_str else None
+            banca_clean = banca.strip().upper() if banca else None
+            key = (concurso_clean, year, banca_clean)
+            if key in seen:
+                continue
+            seen.add(key)
+            marks.append(
+                {
+                    "concurso": concurso_clean,
+                    "ano": year,
+                    "banca": banca_clean,
+                    "orgao": None,
+                }
+            )
+
+        return marks
+
     def _extract_law_number(self, text: str, context: dict[str, Any]) -> str | None:
         """Extract law number from text or fallback context."""
         match = self._law_number_re.search(text)
@@ -395,9 +437,35 @@ class MetadataExtractor:
             return "jurisprudence"
         if any(token in lowered for token in ["doutrina", "entendimento doutrin", "autor"]):
             return "doctrine"
+        if any(token in lowered for token in ["atenção", "comentário", "# atenção", "dica"]):
+            return "doctrine"
         if context.get("artigo") or self._artigo_re.search(text):
             return "legal_text"
         return "legal_text"
+
+    def _classify_source_type(
+        self,
+        text: str,
+        context: dict[str, Any],
+        content_type: str,
+    ) -> str:
+        """Classify source granularity for legal corpora."""
+        lowered = text.lower()
+
+        if content_type == "jurisprudence":
+            return "jurisprudence"
+        if content_type == "exam_question":
+            return "exam_question"
+        if content_type == "doctrine":
+            return "commentary"
+
+        if re.search(r"\bec\s*(?:n[ºo°]\s*)?\d+", lowered):
+            return "emenda_constitucional"
+
+        doc = str(context.get("documento", "")).lower()
+        if "cf" in doc or "constitui" in doc:
+            return "lei_cf"
+        return "lei_cf"
 
 
 __all__ = ["MetadataExtractor"]

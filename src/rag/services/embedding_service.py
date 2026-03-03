@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 
 import structlog
@@ -18,6 +19,8 @@ log = structlog.get_logger(__name__)
 
 # OpenAI text-embedding-3-small dimension
 EMBEDDING_DIM = 1536
+MAX_EMBED_INPUT_TOKENS = 6000
+EMBED_CHUNK_OVERLAP_TOKENS = 100
 
 
 class EmbeddingService:
@@ -76,10 +79,9 @@ class EmbeddingService:
             )
             return [0.0] * EMBEDDING_DIM
 
-        token_count = self.count_tokens(text, provider="openai", model=self._model)
-
         try:
-            embedding = await self._create_embedding(text)
+            embedding = await self._embed_text_with_auto_split(text)
+            token_count = self.count_tokens(text, provider="openai", model=self._model)
 
             log.info(
                 "rag_embedding_created",
@@ -128,52 +130,86 @@ class EmbeddingService:
             return [[0.0] * EMBEDDING_DIM for _ in texts]
 
         # Estimate total tokens
-        total_tokens = sum(
-            self.count_tokens(text=t, provider="openai", model=self._model) for _, t in valid_texts
-        )
+        token_counts_by_index = {
+            i: self.count_tokens(text=t, provider="openai", model=self._model)
+            for i, t in valid_texts
+        }
+        total_tokens = sum(token_counts_by_index.values())
+        oversized_texts = [
+            (idx, text)
+            for idx, text in valid_texts
+            if token_counts_by_index.get(idx, 0) > MAX_EMBED_INPUT_TOKENS
+        ]
+        regular_texts = [
+            (idx, text)
+            for idx, text in valid_texts
+            if token_counts_by_index.get(idx, 0) <= MAX_EMBED_INPUT_TOKENS
+        ]
 
         # OpenAI limit: 300000 tokens per request for text-embedding-3-small
         # Use 200000 as safe limit to account for estimation errors
         max_tokens_per_request = 200000  # noqa: N806
 
         try:
-            # Create embeddings for all valid texts (with batching if needed)
-            indices, texts_to_embed = zip(*valid_texts, strict=True)
             embeddings: list[list[float]] = [[0.0] * EMBEDDING_DIM for _ in texts]
+            if regular_texts:
+                regular_total_tokens = sum(token_counts_by_index[idx] for idx, _ in regular_texts)
+                indices, texts_to_embed = zip(*regular_texts, strict=True)
 
-            if total_tokens <= max_tokens_per_request:
-                # Single request
-                response = await self._client.embeddings.create(
-                    input=list(texts_to_embed),
-                    model=self._model,
-                )
+                if regular_total_tokens <= max_tokens_per_request:
+                    # Single request
+                    response = await self._client.embeddings.create(
+                        input=list(texts_to_embed),
+                        model=self._model,
+                    )
 
-                for idx, embedding_obj in zip(indices, response.data, strict=True):
-                    embeddings[idx] = embedding_obj.embedding
-            else:
-                # Split into multiple batches
-                log.info(
-                    "rag_embedding_batch_split",
-                    total_tokens=total_tokens,
-                    total_texts=len(texts_to_embed),
-                    batch_size_limit=max_tokens_per_request,
-                    event_name="rag_embedding_batch_split",
-                )
+                    for idx, embedding_obj in zip(indices, response.data, strict=True):
+                        embeddings[idx] = embedding_obj.embedding
+                else:
+                    # Split into multiple batches
+                    log.info(
+                        "rag_embedding_batch_split",
+                        total_tokens=regular_total_tokens,
+                        total_texts=len(texts_to_embed),
+                        batch_size_limit=max_tokens_per_request,
+                        event_name="rag_embedding_batch_split",
+                    )
 
-                # Process in chunks of tokens
-                current_batch_indices: list[int] = []
-                current_batch_texts: list[str] = []
-                current_batch_tokens = 0
+                    # Process in chunks of tokens
+                    current_batch_indices: list[int] = []
+                    current_batch_texts: list[str] = []
+                    current_batch_tokens = 0
 
-                for idx, text in zip(indices, texts_to_embed, strict=True):
-                    text_tokens = self.count_tokens(text=text, provider="openai", model=self._model)
+                    for idx, text in zip(indices, texts_to_embed, strict=True):
+                        text_tokens = token_counts_by_index[idx]
 
-                    # Check if adding this text would exceed limit
-                    if (
-                        current_batch_texts
-                        and current_batch_tokens + text_tokens > max_tokens_per_request
-                    ):
-                        # Process current batch
+                        # Check if adding this text would exceed limit
+                        if (
+                            current_batch_texts
+                            and current_batch_tokens + text_tokens > max_tokens_per_request
+                        ):
+                            # Process current batch
+                            response = await self._client.embeddings.create(
+                                input=current_batch_texts,
+                                model=self._model,
+                            )
+                            for batch_idx, embedding_obj in zip(
+                                current_batch_indices, response.data, strict=True
+                            ):
+                                embeddings[batch_idx] = embedding_obj.embedding
+
+                            # Start new batch
+                            current_batch_indices = [idx]
+                            current_batch_texts = [text]
+                            current_batch_tokens = text_tokens
+                        else:
+                            # Add to current batch
+                            current_batch_indices.append(idx)
+                            current_batch_texts.append(text)
+                            current_batch_tokens += text_tokens
+
+                    # Process final batch
+                    if current_batch_texts:
                         response = await self._client.embeddings.create(
                             input=current_batch_texts,
                             model=self._model,
@@ -183,26 +219,8 @@ class EmbeddingService:
                         ):
                             embeddings[batch_idx] = embedding_obj.embedding
 
-                        # Start new batch
-                        current_batch_indices = [idx]
-                        current_batch_texts = [text]
-                        current_batch_tokens = text_tokens
-                    else:
-                        # Add to current batch
-                        current_batch_indices.append(idx)
-                        current_batch_texts.append(text)
-                        current_batch_tokens += text_tokens
-
-                # Process final batch
-                if current_batch_texts:
-                    response = await self._client.embeddings.create(
-                        input=current_batch_texts,
-                        model=self._model,
-                    )
-                    for batch_idx, embedding_obj in zip(
-                        current_batch_indices, response.data, strict=True
-                    ):
-                        embeddings[batch_idx] = embedding_obj.embedding
+            for idx, text in oversized_texts:
+                embeddings[idx] = await self._embed_text_with_auto_split(text)
 
             log.info(
                 "rag_embedding_batch",
@@ -305,6 +323,90 @@ class EmbeddingService:
         )
 
         return response.data[0].embedding
+
+    async def _embed_text_with_auto_split(self, text: str) -> list[float]:
+        """Embed a text, splitting oversized inputs and averaging child embeddings."""
+        token_count = self.count_tokens(text, provider="openai", model=self._model)
+        if token_count <= MAX_EMBED_INPUT_TOKENS:
+            return await self._create_embedding(text)
+
+        split_texts = self._split_text_by_token_limit(
+            text=text,
+            max_tokens=MAX_EMBED_INPUT_TOKENS,
+            overlap_tokens=EMBED_CHUNK_OVERLAP_TOKENS,
+        )
+
+        log.info(
+            "rag_embedding_text_split",
+            original_tokens=token_count,
+            split_parts=len(split_texts),
+            max_input_tokens=MAX_EMBED_INPUT_TOKENS,
+            event_name="rag_embedding_text_split",
+        )
+
+        weighted_embeddings: list[list[float]] = []
+        weights: list[float] = []
+        for split_text in split_texts:
+            split_embedding = await self._create_embedding(split_text)
+            weighted_embeddings.append(split_embedding)
+            split_tokens = max(
+                1,
+                self.count_tokens(split_text, provider="openai", model=self._model),
+            )
+            weights.append(float(split_tokens))
+
+        return self._weighted_average_embedding(weighted_embeddings, weights)
+
+    def _split_text_by_token_limit(self, text: str, max_tokens: int, overlap_tokens: int) -> list[str]:
+        """Split text using token windows with overlap."""
+        try:
+            encoding = tiktoken.encoding_for_model(self._model)
+        except KeyError:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        token_ids = encoding.encode(text)
+        if len(token_ids) <= max_tokens:
+            return [text]
+
+        stride = max(1, max_tokens - max(0, overlap_tokens))
+        windows: list[str] = []
+        start = 0
+        while start < len(token_ids):
+            end = min(start + max_tokens, len(token_ids))
+            window_ids = token_ids[start:end]
+            decoded = encoding.decode(window_ids).strip()
+            if decoded:
+                windows.append(decoded)
+            if end >= len(token_ids):
+                break
+            start += stride
+
+        return windows or [text]
+
+    @staticmethod
+    def _weighted_average_embedding(
+        embeddings: list[list[float]],
+        weights: list[float],
+    ) -> list[float]:
+        """Create a weighted and L2-normalized embedding centroid."""
+        if not embeddings:
+            return [0.0] * EMBEDDING_DIM
+
+        if len(embeddings) != len(weights):
+            msg = "embeddings and weights length mismatch"
+            raise ValueError(msg)
+
+        total_weight = sum(weights) or float(len(weights))
+        aggregated = [0.0] * len(embeddings[0])
+
+        for emb, weight in zip(embeddings, weights, strict=True):
+            for i, value in enumerate(emb):
+                aggregated[i] += value * (weight / total_weight)
+
+        norm = math.sqrt(sum(value * value for value in aggregated))
+        if norm > 0:
+            aggregated = [value / norm for value in aggregated]
+
+        return aggregated
 
 
 __all__ = ["EmbeddingService", "EMBEDDING_DIM"]

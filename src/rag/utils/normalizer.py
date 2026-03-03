@@ -189,12 +189,17 @@ def extract_legal_filters_from_query(normalized_query: str) -> dict[str, Any]:
 
     if any(term in normalized_query for term in ("jurisprudencia", "sumula", "acordao")):
         filters["content_type"] = "jurisprudence"
+        filters["source_type"] = "jurisprudence"
     elif any(term in normalized_query for term in ("concurso", "questao", "prova")):
         filters["content_type"] = "exam_question"
+        filters["source_type"] = "exam_question"
+        filters["is_exam_focus"] = True
     elif any(term in normalized_query for term in ("doutrina", "manual", "comentario")):
         filters["content_type"] = "doctrine"
+        filters["source_type"] = "commentary"
     elif any(term in normalized_query for term in ("artigo", "lei", "caput", "inciso")):
         filters["content_type"] = "legal_text"
+        filters["source_type"] = "lei_cf"
 
     return filters
 

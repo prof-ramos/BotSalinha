@@ -29,6 +29,9 @@ uv run bot.py --chat
 
 ### RAG Document Ingestion
 
+> Runbook específico para ingestão contínua em Supabase:
+> `docs/operations/supabase-ingestion-runbook.md`
+
 **Ingest single RAG document (DOCX):**
 ```bash
 uv run python scripts/ingest_rag.py
