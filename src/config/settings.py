@@ -67,7 +67,10 @@ class DatabaseConfig(BaseModel):
     url: str = Field(default="sqlite:///data/botsalinha.db", description="Database connection URL")
     echo: bool = Field(default=False, description="Echo SQL statements")
     max_conversation_age_days: int = Field(
-        default=30, ge=1, le=365, description="Max conversation age in days"
+        default=30,
+        ge=1,
+        le=365,
+        description="Max conversation age in days",
     )
 
 
@@ -78,7 +81,10 @@ class RetryConfig(BaseModel):
     delay_seconds: float = Field(default=1.0, ge=0.1, le=60, description="Initial delay")
     max_delay_seconds: float = Field(default=60.0, ge=1.0, le=300, description="Maximum delay")
     exponential_base: float = Field(
-        default=2.0, ge=1.0, le=10.0, description="Exponential backoff base"
+        default=2.0,
+        ge=1.0,
+        le=10.0,
+        description="Exponential backoff base",
     )
 
 
@@ -89,6 +95,25 @@ class RAGCacheConfig(BaseModel):
     max_memory_mb: int = Field(default=50, ge=10, le=500, description="Max memory for cache (MB)")
     ttl_seconds: int = Field(default=86400, ge=300, le=604800, description="Cache TTL (seconds)")
     persist_to_db: bool = Field(default=False, description="Persist cache to database")
+
+
+class ChromaConfig(BaseModel):
+    """ChromaDB vector store configuration."""
+
+    enabled: bool = Field(default=False, description="Enable ChromaDB backend")
+    path: str = Field(default="data/chroma", description="ChromaDB persistence path")
+    collection_name: str = Field(default="rag_chunks", description="Collection name")
+    hybrid_search_enabled: bool = Field(default=True, description="Enable hybrid search")
+    fallback_to_sqlite: bool = Field(default=True, description="Fallback to SQLite on error")
+    dual_write_enabled: bool = Field(
+        default=False, description="Write to both stores during migration"
+    )
+    fallback_timeout_ms: int = Field(
+        default=200,
+        ge=50,
+        le=1000,
+        description="Fallback timeout in milliseconds",
+    )
 
 
 class RAGConfig(BaseModel):
@@ -130,14 +155,21 @@ class RAGConfig(BaseModel):
         description="Delta for fallback similarity threshold",
     )
     max_context_tokens: int = Field(
-        default=2000, ge=100, le=8000, description="Maximum context tokens"
+        default=2000,
+        ge=100,
+        le=8000,
+        description="Maximum context tokens",
     )
     documents_path: str = Field(default="data/documents", description="Path to documents directory")
     embedding_model: str = Field(
-        default="text-embedding-3-small", description="OpenAI embedding model"
+        default="text-embedding-3-small",
+        description="OpenAI embedding model",
     )
     confidence_threshold: float = Field(
-        default=0.70, ge=0.0, le=1.0, description="Confidence threshold"
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold",
     )
     retrieval_mode: str = Field(default="hybrid_lite", description="Retrieval strategy")
     rerank_enabled: bool = Field(default=True, description="Enable reranking")
@@ -174,24 +206,39 @@ class RAGConfig(BaseModel):
     )
     # Code-specific RAG settings
     code_chunk_max_tokens: int = Field(
-        default=300, ge=50, le=1000, description="Max tokens per code chunk"
+        default=300,
+        ge=50,
+        le=1000,
+        description="Max tokens per code chunk",
     )
     code_chunk_min_tokens: int = Field(
-        default=50, ge=10, le=200, description="Min tokens per code chunk"
+        default=50,
+        ge=10,
+        le=200,
+        description="Min tokens per code chunk",
     )
     code_respect_boundaries: bool = Field(
-        default=True, description="Respect function/class boundaries"
+        default=True,
+        description="Respect function/class boundaries",
     )
     code_include_line_numbers: bool = Field(
-        default=True, description="Include line numbers in metadata"
+        default=True,
+        description="Include line numbers in metadata",
     )
     # Cache configuration
     cache: RAGCacheConfig = Field(
-        default_factory=RAGCacheConfig, description="Semantic cache configuration"
+        default_factory=RAGCacheConfig,
+        description="Semantic cache configuration",
     )
     # Feature flag para rollout gradual
     enable_experimental_cache: bool = Field(
-        default=False, description="Enable progressive rollout of semantic cache"
+        default=False,
+        description="Enable progressive rollout of semantic cache",
+    )
+    # ChromaDB configuration
+    chroma: ChromaConfig = Field(
+        default_factory=ChromaConfig,
+        description="ChromaDB vector store configuration",
     )
 
     @model_validator(mode="after")
@@ -312,13 +359,17 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(
-        default="INFO", description="Log level: DEBUG/INFO/WARNING/ERROR/CRITICAL"
+        default="INFO",
+        description="Log level: DEBUG/INFO/WARNING/ERROR/CRITICAL",
     )
     log_format: str = Field(default="json", description="Log format: json/text")
 
     # Bot configuration
     history_runs: int = Field(
-        default=3, ge=1, le=10, description="Number of conversation runs in context"
+        default=3,
+        ge=1,
+        le=10,
+        description="Number of conversation runs in context",
     )
 
     # Nested configurations
@@ -387,7 +438,14 @@ class Settings(BaseSettings):
         legacy_max_age = os.getenv("MAX_CONVERSATION_AGE_DAYS")
         if legacy_max_age:
             database = _coerce_nested_model(values.get("database"))
-            database.setdefault("max_conversation_age_days", _safe_int("MAX_CONVERSATION_AGE_DAYS", legacy_max_age, "database.max_conversation_age_days"))
+            database.setdefault(
+                "max_conversation_age_days",
+                _safe_int(
+                    "MAX_CONVERSATION_AGE_DAYS",
+                    legacy_max_age,
+                    "database.max_conversation_age_days",
+                ),
+            )
             values["database"] = database
 
         # --- OpenAI ---
@@ -426,7 +484,9 @@ class Settings(BaseSettings):
 
         legacy_history_runs = os.getenv("HISTORY_RUNS")
         if legacy_history_runs:
-            values.setdefault("history_runs", _safe_int("HISTORY_RUNS", legacy_history_runs, "history_runs"))
+            values.setdefault(
+                "history_runs", _safe_int("HISTORY_RUNS", legacy_history_runs, "history_runs")
+            )
 
         # --- Rate limit ---
         legacy_rl_requests = os.getenv("RATE_LIMIT_REQUESTS")
@@ -434,9 +494,17 @@ class Settings(BaseSettings):
         if legacy_rl_requests or legacy_rl_window:
             rate_limit = _coerce_nested_model(values.get("rate_limit"))
             if legacy_rl_requests:
-                rate_limit.setdefault("requests", _safe_int("RATE_LIMIT_REQUESTS", legacy_rl_requests, "rate_limit.requests"))
+                rate_limit.setdefault(
+                    "requests",
+                    _safe_int("RATE_LIMIT_REQUESTS", legacy_rl_requests, "rate_limit.requests"),
+                )
             if legacy_rl_window:
-                rate_limit.setdefault("window_seconds", _safe_int("RATE_LIMIT_WINDOW_SECONDS", legacy_rl_window, "rate_limit.window_seconds"))
+                rate_limit.setdefault(
+                    "window_seconds",
+                    _safe_int(
+                        "RATE_LIMIT_WINDOW_SECONDS", legacy_rl_window, "rate_limit.window_seconds"
+                    ),
+                )
             values["rate_limit"] = rate_limit
 
         # --- Retry ---
@@ -446,11 +514,21 @@ class Settings(BaseSettings):
         if legacy_max_retries or legacy_delay or legacy_max_delay:
             retry = _coerce_nested_model(values.get("retry"))
             if legacy_max_retries:
-                retry.setdefault("max_retries", _safe_int("MAX_RETRIES", legacy_max_retries, "retry.max_retries"))
+                retry.setdefault(
+                    "max_retries", _safe_int("MAX_RETRIES", legacy_max_retries, "retry.max_retries")
+                )
             if legacy_delay:
-                retry.setdefault("delay_seconds", _safe_float("RETRY_DELAY_SECONDS", legacy_delay, "retry.delay_seconds"))
+                retry.setdefault(
+                    "delay_seconds",
+                    _safe_float("RETRY_DELAY_SECONDS", legacy_delay, "retry.delay_seconds"),
+                )
             if legacy_max_delay:
-                retry.setdefault("max_delay_seconds", _safe_float("RETRY_MAX_DELAY_SECONDS", legacy_max_delay, "retry.max_delay_seconds"))
+                retry.setdefault(
+                    "max_delay_seconds",
+                    _safe_float(
+                        "RETRY_MAX_DELAY_SECONDS", legacy_max_delay, "retry.max_delay_seconds"
+                    ),
+                )
             values["retry"] = retry
 
         return values

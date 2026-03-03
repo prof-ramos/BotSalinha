@@ -39,6 +39,19 @@ async def main() -> None:
 
     settings = get_settings()
 
+    # Log vector store backend configuration
+    if settings.rag.chroma.enabled:
+        log.info(
+            "vector_store_backend",
+            backend="chromadb",
+            path=settings.rag.chroma.path,
+            collection=settings.rag.chroma.collection_name,
+        )
+        if settings.rag.chroma.dual_write_enabled:
+            log.info("dual_write_mode", mode="sqlite+chromadb")
+    else:
+        log.info("vector_store_backend", backend="sqlite")
+
     # Obter API key via settings (suporta formato canônico e legado)
     api_key = settings.get_openai_api_key()
     if not api_key:

@@ -51,8 +51,23 @@ async def main() -> None:
     parser.add_argument("--replace", action="store_true", help="Replace existing document")
     args = parser.parse_args()
 
-    # Verificar se OPENAI_API_KEY está configurada
+    # Get settings early for backend logging
     settings = get_settings()
+
+    # Log vector store backend configuration
+    if settings.rag.chroma.enabled:
+        log.info(
+            "vector_store_backend",
+            backend="chromadb",
+            path=settings.rag.chroma.path,
+            collection=settings.rag.chroma.collection_name,
+        )
+        if settings.rag.chroma.dual_write_enabled:
+            log.info("dual_write_mode", mode="sqlite+chromadb")
+    else:
+        log.info("vector_store_backend", backend="sqlite")
+
+    # Verificar se OPENAI_API_KEY está configurada
     api_key = settings.get_openai_api_key()
     if not api_key:
         print("❌ BOTSALINHA_OPENAI__API_KEY não configurada")
@@ -61,7 +76,6 @@ async def main() -> None:
         sys.exit(1)
 
     # Conectar ao banco
-    settings = get_settings()
     db_url = str(settings.database.url)
     if db_url.startswith("sqlite:///"):
         db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")

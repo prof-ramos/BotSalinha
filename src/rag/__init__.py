@@ -16,7 +16,7 @@ from .services import (
     QueryService,
     SemanticCache,
 )
-from .storage import VectorStore, cosine_similarity
+from .storage import HybridVectorStore, VectorStore, cosine_similarity
 from .utils import ConfiancaCalculator, MetadataExtractor
 
 __all__ = [
@@ -46,5 +46,6 @@ __all__ = [
     "EMBEDDING_DIM",
     # Storage
     "VectorStore",
+    "HybridVectorStore",
     "cosine_similarity",
 ]

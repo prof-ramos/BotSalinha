@@ -1,7 +1,7 @@
 metric,value
-throughput_ops_per_second,1227.40
-insert_avg_ms,1.28
-read_avg_ms,0.58
-read_insert_ratio,0.45
+throughput_ops_per_second,590.53
+insert_avg_ms,3.71
+read_avg_ms,0.68
+read_insert_ratio,0.18
 total_operations,150
-total_time_seconds,0.122
+total_time_seconds,0.254

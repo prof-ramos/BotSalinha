@@ -33,6 +33,7 @@ Assistente de Direito e Concursos Públicos para Discord, com suporte a RAG (Ret
 - **Google Gemini 2.5 Flash Lite** - Modelo principal
 - **OpenAI GPT** - Modelo alternativo
 - **SQLite** + **SQLAlchemy async ORM** - Banco de dados
+- **ChromaDB** - Vector store opcional para RAG
 - **Alembic** - Migrações de banco
 
 ## Uso
@@ -50,6 +51,7 @@ Assistente de Direito e Concursos Públicos para Discord, com suporte a RAG (Ret
 - [Arquitetura](docs/architecture.md) - Arquitetura do sistema e componentes
 - [Documentação Técnica](docs/CODE_DOCUMENTATION.md) - Documentação detalhada do código
 - [Guia do Desenvolvedor](docs/DEVELOPER_GUIDE.md) - Setup e desenvolvimento
+- [ChromaDB Runbook](docs/operations/chromadb-runbook.md) - Operações do ChromaDB
 
 ## Configuração
 

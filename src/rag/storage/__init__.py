@@ -1,5 +1,7 @@
 """RAG storage layer."""
 
+from .chroma_store import ChromaStore, bm25_score
+from .hybrid_vector_store import HybridVectorStore
 from .vector_store import (
     VectorStore,
     cosine_similarity,
@@ -9,7 +11,10 @@ from .vector_store import (
 
 __all__ = [
     "VectorStore",
+    "ChromaStore",
     "cosine_similarity",
     "serialize_embedding",
     "deserialize_embedding",
+    "bm25_score",
+    "HybridVectorStore",
 ]

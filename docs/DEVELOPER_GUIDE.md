@@ -8,8 +8,9 @@ Este guia fornece informações completas para desenvolvedores que trabalham no 
 2. [Visão Geral da Estrutura do Projeto](#2-visão-geral-da-estrutura-do-projeto)
 3. [Fluxo de Trabalho de Desenvolvimento](#3-fluxo-de-trabalho-de-desenvolvimento)
 4. [Desenvolvimento RAG](#4-desenvolvimento-rag)
-5. [Abordagem de Teste](#5-abordagem-de-teste)
-6. [Solução de Problemas](#6-solução-de-problemas)
+5. [ChromaDB Vector Store](#5-chromadb-vector-store)
+6. [Abordagem de Teste](#6-abordagem-de-teste)
+7. [Solução de Problemas](#7-solução-de-problemas)
 
 ---
 
@@ -707,7 +708,75 @@ uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
 
 ---
 
-## 5. Abordagem de Teste
+## 5. ChromaDB Vector Store
+
+BotSalinha suporta ChromaDB como backend de busca vetorial alternativa ao SQLite.
+
+### Arquitetura
+
+O sistema usa um `HybridVectorStore` que combina:
+- **ChromaDB:** Busca vetorial primária (quando habilitado)
+- **SQLite:** Fallback automático + armazenamento de metadata
+
+### Configuração
+
+Para ativar ChromaDB, defina no `.env`:
+
+```bash
+BOTSALINHA_RAG__CHROMA__ENABLED=true
+BOTSALINHA_RAG__CHROMA__PATH=data/chroma
+```
+
+### Características
+
+- **Hybrid Search:** Combina busca vetorial com BM25 lexical reranking
+- **Dual-Write:** Escreve em ambos os backends durante migração
+- **Fallback Automático:** Timeout de 200ms com fallback para SQLite
+- **Zero Downtime:** Bot continua funcionando durante migração
+
+### Migração
+
+Para migrar embeddings do SQLite para ChromaDB:
+
+```bash
+# Validação (dry-run)
+uv run python scripts/migrate_to_chroma.py --dry-run
+
+# Migração completa
+uv run python scripts/migrate_to_chroma.py --batch-size 100
+
+# Validação pós-migração
+uv run python scripts/migrate_to_chroma.py --validate
+```
+
+### Variáveis de Ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `BOTSALINHA_RAG__CHROMA__ENABLED` | `false` | Ativar ChromaDB |
+| `BOTSALINHA_RAG__CHROMA__PATH` | `data/chroma` | Caminho de persistência |
+| `BOTSALINHA_RAG__CHROMA__HYBRID_SEARCH_ENABLED` | `true` | Hybrid search (BM25) |
+| `BOTSALINHA_RAG__CHROMA__FALLBACK_TO_SQLITE` | `true` | Fallback em erro |
+| `BOTSALINHA_RAG__CHROMA__DUAL_WRITE_ENABLED` | `false` | Dual-write migração |
+| `BOTSALINHA_RAG__CHROMA__FALLBACK_TIMEOUT_MS` | `200` | Timeout fallback (ms) |
+
+### Troubleshooting
+
+**ChromaDB não inicia:**
+- Verifique permissões de escrita em `data/chroma`
+- Certifique-se que o caminho existe
+
+**Fallback frequente:**
+- Ajuste `FALLBACK_TIMEOUT_MS`
+- Verifique logs para identificar erros
+
+**Performance:**
+- Use batch size de 100 para migração
+- Monitore telemetria de fallback
+
+---
+
+## 6. Abordagem de Teste
 
 ### Pirâmide de Testes
 
@@ -812,7 +881,7 @@ uv run pytest -s
 
 ---
 
-## 6. Solução de Problemas
+## 7. Solução de Problemas
 
 ### Problemas Comuns de Desenvolvimento
 

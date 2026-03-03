@@ -624,3 +624,143 @@ def mock_history_tracker(monkeypatch):
     tracker.track_history = track_history
 
     yield tracker
+
+
+# ===== Fixtures for ChromaDB Testing =====
+# These fixtures support ChromaDB vector store for E2E RAG testing
+
+
+@pytest.fixture
+def chroma_settings(monkeypatch, tmp_path):
+    """
+    Configure ChromaDB for testing.
+
+    Uses a temporary directory for ChromaDB storage that is cleaned up after tests.
+    """
+    from pathlib import Path
+
+    from src.config.settings import get_settings
+
+    # Create temp directory for ChromaDB
+    chroma_path = tmp_path / "chroma"
+    chroma_path.mkdir(exist_ok=True)
+
+    # Configure ChromaDB settings
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__ENABLED", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__PATH", str(chroma_path))
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__COLLECTION_NAME", "test_rag_chunks")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__HYBRID_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__DUAL_WRITE_ENABLED", "false")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__FALLBACK_TO_SQLITE", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__FALLBACK_TIMEOUT_MS", "5000")
+
+    # Clear settings cache to pick up new configuration
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    yield settings
+
+    # Cleanup is handled automatically by tmp_path fixture
+    get_settings.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def chroma_vector_store(db_session, chroma_settings):
+    """
+    Create ChromaStore for testing.
+
+    Provides a ChromaDB vector store instance configured with test settings.
+    Uses db_session instead of prod_db_session to avoid circular dependencies.
+    """
+    from src.rag.storage.chroma_store import ChromaStore
+
+    store = ChromaStore(session=db_session)
+    yield store
+
+    # ChromaDB cleanup is handled by chroma_settings tmp_path
+
+
+@pytest_asyncio.fixture
+async def hybrid_vector_store(db_session, chroma_settings):
+    """
+    Create HybridVectorStore for testing.
+
+    Provides a hybrid store with ChromaDB primary and SQLite fallback.
+    Uses db_session instead of prod_db_session to avoid circular dependencies.
+    """
+    from src.rag.storage.hybrid_vector_store import HybridVectorStore
+
+    store = HybridVectorStore(session=db_session)
+    yield store
+
+    # Cleanup is handled by chroma_settings tmp_path
+
+
+# ===== Fixtures for E2E ChromaDB Testing with Production Database =====
+
+
+@pytest.fixture
+def chroma_settings_e2e(monkeypatch, tmp_path):
+    """
+    Configure ChromaDB for E2E testing with production database.
+
+    Uses production ChromaDB path (data/chroma) for testing against real data.
+    """
+    from pathlib import Path
+
+    from src.config.settings import get_settings
+
+    # Use production ChromaDB path
+    chroma_path = Path("data/chroma")
+    if not chroma_path.exists():
+        pytest.skip("Production ChromaDB not found at data/chroma")
+
+    # Configure ChromaDB settings to use existing production instance
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__ENABLED", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__PATH", str(chroma_path))
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__COLLECTION_NAME", "rag_chunks")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__HYBRID_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__DUAL_WRITE_ENABLED", "false")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__FALLBACK_TO_SQLITE", "true")
+    monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__FALLBACK_TIMEOUT_MS", "200")
+
+    # Clear settings cache to pick up new configuration
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    yield settings
+
+    # Cleanup is NOT needed - we're using production data
+    get_settings.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def chroma_vector_store_e2e(prod_db_session, chroma_settings_e2e):
+    """
+    Create ChromaStore for E2E testing with production database.
+
+    Uses production ChromaDB and production database for realistic testing.
+    """
+    from src.rag.storage.chroma_store import ChromaStore
+
+    store = ChromaStore(session=prod_db_session)
+    yield store
+
+    # No cleanup - production data
+
+
+@pytest_asyncio.fixture
+async def hybrid_vector_store_e2e(prod_db_session, chroma_settings_e2e):
+    """
+    Create HybridVectorStore for E2E testing with production database.
+
+    Uses production ChromaDB and production database for realistic testing.
+    """
+    from src.rag.storage.hybrid_vector_store import HybridVectorStore
+
+    store = HybridVectorStore(session=prod_db_session)
+    yield store
+
+    # No cleanup - production data

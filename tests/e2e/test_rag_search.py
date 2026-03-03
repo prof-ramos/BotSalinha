@@ -329,3 +329,437 @@ class TestRAGSearchE2E:
     # foram movidas para scripts em metricas/ e não são mais importáveis
     # Este teste deve ser executado via metricas/run_all_metrics.py
 
+
+@pytest.mark.e2e
+@pytest.mark.rag
+@pytest.mark.database
+class TestRAGVectorStoreBackends:
+    """Test RAG search with different vector store backends (SQLite, ChromaDB, Hybrid)."""
+
+    @pytest.mark.asyncio
+    async def test_vector_store_retrieval_by_backend_sqlite(
+        self,
+        prod_db_session: AsyncSession,
+    ) -> None:
+        """Test VectorStore direct retrieval with SQLite backend."""
+        from sqlalchemy import select
+        from src.rag import VectorStore
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        vector_store = VectorStore(session=prod_db_session)
+
+        # Retrieve by ID
+        chunk = await vector_store.get_chunk_by_id(chunk_orm.id)
+
+        assert chunk is not None
+        assert chunk.chunk_id == chunk_orm.id
+        assert chunk.texto == chunk_orm.texto
+
+        # Count chunks
+        count = await vector_store.count_chunks()
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_vector_store_retrieval_by_backend_chroma(
+        self,
+        prod_db_session: AsyncSession,
+        chroma_vector_store_e2e,
+    ) -> None:
+        """Test VectorStore direct retrieval with ChromaDB backend."""
+        from sqlalchemy import select
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Retrieve by ID
+        chunk = await chroma_vector_store_e2e.get_chunk_by_id(chunk_orm.id)
+
+        assert chunk is not None
+        assert chunk.chunk_id == chunk_orm.id
+        assert chunk.texto == chunk_orm.texto
+
+        # Count chunks
+        count = await chroma_vector_store_e2e.count_chunks()
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_vector_store_retrieval_by_backend_hybrid(
+        self,
+        prod_db_session: AsyncSession,
+        hybrid_vector_store_e2e,
+    ) -> None:
+        """Test VectorStore direct retrieval with Hybrid backend."""
+        from sqlalchemy import select
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Retrieve by ID
+        chunk = await hybrid_vector_store_e2e.get_chunk_by_id(chunk_orm.id)
+
+        assert chunk is not None
+        assert chunk.chunk_id == chunk_orm.id
+        assert chunk.texto == chunk_orm.texto
+
+        # Count chunks
+        count = await hybrid_vector_store_e2e.count_chunks()
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_vector_store_search_by_backend_sqlite(
+        self,
+        prod_db_session: AsyncSession,
+    ) -> None:
+        """Test vector search with SQLite backend."""
+        from sqlalchemy import func, select
+        from src.rag import VectorStore
+
+        # Check if we have chunks
+        chunk_count_stmt = select(func.count(ChunkORM.id))
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
+        chunk_count = chunk_result.scalar() or 0
+
+        if chunk_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        # Get a chunk with embedding for query
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        vector_store = VectorStore(session=prod_db_session)
+
+        # Search using the chunk's embedding
+        results = await vector_store.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="direitos fundamentais",
+            limit=5,
+            min_similarity=0.6,
+        )
+
+        # Verify results
+        assert isinstance(results, list)
+        assert len(results) <= 5
+
+        for chunk, score in results:
+            assert isinstance(chunk, Chunk)
+            assert isinstance(score, float)
+            assert score >= 0.0
+            assert hasattr(chunk, "chunk_id")
+            assert hasattr(chunk, "texto")
+
+    @pytest.mark.asyncio
+    async def test_vector_store_search_by_backend_chroma(
+        self,
+        prod_db_session: AsyncSession,
+        chroma_vector_store_e2e,
+    ) -> None:
+        """Test vector search with ChromaDB backend."""
+        from sqlalchemy import func, select
+
+        # Check if we have chunks
+        chunk_count_stmt = select(func.count(ChunkORM.id))
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
+        chunk_count = chunk_result.scalar() or 0
+
+        if chunk_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        # Get a chunk with embedding for query
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Search using the chunk's embedding
+        results = await chroma_vector_store_e2e.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="direitos fundamentais",
+            limit=5,
+            min_similarity=0.6,
+        )
+
+        # Verify results
+        assert isinstance(results, list)
+        assert len(results) <= 5
+
+        for chunk, score in results:
+            assert isinstance(chunk, Chunk)
+            assert isinstance(score, float)
+            assert score >= 0.0
+            assert hasattr(chunk, "chunk_id")
+            assert hasattr(chunk, "texto")
+
+    @pytest.mark.asyncio
+    async def test_vector_store_search_by_backend_hybrid(
+        self,
+        prod_db_session: AsyncSession,
+        hybrid_vector_store_e2e,
+    ) -> None:
+        """Test vector search with Hybrid backend."""
+        from sqlalchemy import func, select
+
+        # Check if we have chunks
+        chunk_count_stmt = select(func.count(ChunkORM.id))
+        chunk_result = await prod_db_session.execute(chunk_count_stmt)
+        chunk_count = chunk_result.scalar() or 0
+
+        if chunk_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        # Get a chunk with embedding for query
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Search using the chunk's embedding
+        results = await hybrid_vector_store_e2e.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="direitos fundamentais",
+            limit=5,
+            min_similarity=0.6,
+        )
+
+        # Verify results
+        assert isinstance(results, list)
+        assert len(results) <= 5
+
+        for chunk, score in results:
+            assert isinstance(chunk, Chunk)
+            assert isinstance(score, float)
+            assert score >= 0.0
+            assert hasattr(chunk, "chunk_id")
+            assert hasattr(chunk, "texto")
+
+    @pytest.mark.asyncio
+    async def test_vector_store_filters_by_backend_sqlite(
+        self,
+        prod_db_session: AsyncSession,
+    ) -> None:
+        """Test vector search with metadata filters using SQLite backend."""
+        from sqlalchemy import select
+        from src.rag import VectorStore
+
+        # Get a document ID
+        doc_stmt = select(DocumentORM).limit(1)
+        doc_result = await prod_db_session.execute(doc_stmt)
+        document = doc_result.scalar_one_or_none()
+
+        if not document:
+            pytest.skip("No indexed documents found")
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        vector_store = VectorStore(session=prod_db_session)
+
+        # Search with document filter
+        results = await vector_store.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="servidor",
+            limit=5,
+            documento_id=document.id,
+        )
+
+        # All results should be from the specified document
+        for chunk, score in results:
+            assert chunk.documento_id == document.id
+
+    @pytest.mark.asyncio
+    async def test_vector_store_filters_by_backend_chroma(
+        self,
+        prod_db_session: AsyncSession,
+        chroma_vector_store_e2e,
+    ) -> None:
+        """Test vector search with metadata filters using ChromaDB backend."""
+        from sqlalchemy import select
+
+        # Get a document ID
+        doc_stmt = select(DocumentORM).limit(1)
+        doc_result = await prod_db_session.execute(doc_stmt)
+        document = doc_result.scalar_one_or_none()
+
+        if not document:
+            pytest.skip("No indexed documents found")
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Search with document filter
+        results = await chroma_vector_store_e2e.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="servidor",
+            limit=5,
+            documento_id=document.id,
+        )
+
+        # All results should be from the specified document
+        for chunk, score in results:
+            assert chunk.documento_id == document.id
+
+    @pytest.mark.asyncio
+    async def test_vector_store_filters_by_backend_hybrid(
+        self,
+        prod_db_session: AsyncSession,
+        hybrid_vector_store_e2e,
+    ) -> None:
+        """Test vector search with metadata filters using Hybrid backend."""
+        from sqlalchemy import select
+
+        # Get a document ID
+        doc_stmt = select(DocumentORM).limit(1)
+        doc_result = await prod_db_session.execute(doc_stmt)
+        document = doc_result.scalar_one_or_none()
+
+        if not document:
+            pytest.skip("No indexed documents found")
+
+        # Get a chunk with embedding
+        chunk_stmt = select(ChunkORM).where(ChunkORM.embedding.isnot(None)).limit(1)
+        chunk_result = await prod_db_session.execute(chunk_stmt)
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        # Search with document filter
+        results = await hybrid_vector_store_e2e.search(
+            query_embedding=chunk_orm.embedding,
+            query_text="servidor",
+            limit=5,
+            documento_id=document.id,
+        )
+
+        # All results should be from the specified document
+        for chunk, score in results:
+            assert chunk.documento_id == document.id
+
+    @pytest.mark.asyncio
+    async def test_vector_store_count_by_backend_sqlite(
+        self,
+        prod_db_session: AsyncSession,
+    ) -> None:
+        """Test chunk counting with SQLite backend."""
+        from sqlalchemy import func, select
+        from src.rag import VectorStore
+
+        # Get expected count from SQLite
+        count_stmt = select(func.count(ChunkORM.id))
+        count_result = await prod_db_session.execute(count_stmt)
+        expected_count = count_result.scalar() or 0
+
+        if expected_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        vector_store = VectorStore(session=prod_db_session)
+
+        # Count chunks
+        count = await vector_store.count_chunks()
+
+        # ChromaDB and SQLite should have the same count
+        # Hybrid uses SQLite as source of truth
+        assert count >= 1
+        assert count == expected_count
+
+    @pytest.mark.asyncio
+    async def test_vector_store_count_by_backend_chroma(
+        self,
+        prod_db_session: AsyncSession,
+        chroma_vector_store_e2e,
+    ) -> None:
+        """Test chunk counting with ChromaDB backend."""
+        from sqlalchemy import func, select
+
+        # Get expected count from SQLite
+        count_stmt = select(func.count(ChunkORM.id))
+        count_result = await prod_db_session.execute(count_stmt)
+        expected_count = count_result.scalar() or 0
+
+        if expected_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        # Count chunks
+        count = await chroma_vector_store_e2e.count_chunks()
+
+        # ChromaDB and SQLite should have the same count
+        # Hybrid uses SQLite as source of truth
+        assert count >= 1
+        assert count == expected_count
+
+    @pytest.mark.asyncio
+    async def test_vector_store_count_by_backend_hybrid(
+        self,
+        prod_db_session: AsyncSession,
+        hybrid_vector_store_e2e,
+    ) -> None:
+        """Test chunk counting with Hybrid backend."""
+        from sqlalchemy import func, select
+
+        # Get expected count from SQLite
+        count_stmt = select(func.count(ChunkORM.id))
+        count_result = await prod_db_session.execute(count_stmt)
+        expected_count = count_result.scalar() or 0
+
+        if expected_count == 0:
+            pytest.skip("No indexed chunks found")
+
+        # Count chunks
+        count = await hybrid_vector_store_e2e.count_chunks()
+
+        # ChromaDB and SQLite should have the same count
+        # Hybrid uses SQLite as source of truth
+        assert count >= 1
+        assert count == expected_count
+        chunk_orm = chunk_result.scalar_one_or_none()
+
+        if not chunk_orm:
+            pytest.skip("No chunks with embeddings found")
+
+        vector_store = self._get_vector_store(request, store_type, prod_db_session)
+
+        # Retrieve by ID
+        chunk = await vector_store.get_chunk_by_id(chunk_orm.id)
+
+        assert chunk is not None
+        assert chunk.chunk_id == chunk_orm.id
+        assert chunk.texto == chunk_orm.texto
+
+        # Count chunks
+        count = await vector_store.count_chunks()
+        assert count >= 1
+
