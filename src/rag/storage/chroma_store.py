@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
+import numpy as np
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,7 +207,7 @@ class ChromaStore:
 
     async def search(
         self,
-        query_embedding: list[float],
+        query_embedding: list[float] | bytes | bytearray | memoryview | np.ndarray,
         query_text: str | None = None,
         limit: int = 5,
         min_similarity: float = 0.6,
@@ -233,6 +234,7 @@ class ChromaStore:
         """
         try:
             collection = self._get_or_create_collection()
+            normalized_query_embedding = self._normalize_query_embedding(query_embedding)
 
             # Build where clause for ChromaDB
             where = self._convert_filters_for_chroma(filters)
@@ -242,7 +244,7 @@ class ChromaStore:
             # Fetch candidates from ChromaDB
             n_results = candidate_limit or (limit * 10)
             results = collection.query(
-                query_embeddings=[query_embedding],
+                query_embeddings=[normalized_query_embedding],
                 where=where if where else None,
                 n_results=n_results,
             )
@@ -319,6 +321,19 @@ class ChromaStore:
                 error=str(e),
             )
             raise APIError(f"ChromaDB search failed: {e}") from e
+
+    @staticmethod
+    def _normalize_query_embedding(
+        query_embedding: list[float] | bytes | bytearray | memoryview | np.ndarray,
+    ) -> list[float]:
+        """Normalize query embedding to list[float] for ChromaDB queries."""
+        if isinstance(query_embedding, (bytes, bytearray, memoryview)):
+            return np.frombuffer(query_embedding, dtype=np.float32).tolist()
+
+        if isinstance(query_embedding, np.ndarray):
+            return query_embedding.astype(np.float32).tolist()
+
+        return [float(value) for value in query_embedding]
 
     def _bm25_rerank(
         self, query: str, chunks: list[tuple[Chunk, float, str]]

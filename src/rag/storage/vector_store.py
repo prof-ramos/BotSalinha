@@ -232,7 +232,7 @@ class VectorStore:
 
     async def search(
         self,
-        query_embedding: list[float],
+        query_embedding: list[float] | bytes | bytearray | memoryview | np.ndarray,
         query_text: str | None = None,
         limit: int = 5,
         min_similarity: float = 0.6,
@@ -259,6 +259,8 @@ class VectorStore:
             APIError: If search fails
         """
         try:
+            normalized_query_embedding = self._normalize_query_embedding(query_embedding)
+
             log.debug(
                 LogEvents.RAG_BUSCA_INICIADA,
                 limit=limit,
@@ -306,7 +308,7 @@ class VectorStore:
             embedding_matrix = np.vstack(embeddings_list)
 
             # Vectorized cosine similarity computation
-            similarities = batch_cosine_similarity(query_embedding, embedding_matrix)
+            similarities = batch_cosine_similarity(normalized_query_embedding, embedding_matrix)
 
             semantic_candidate_limit = candidate_limit or (limit * CANDIDATE_MULTIPLIER)
             semantic_candidate_limit = max(1, semantic_candidate_limit)
@@ -386,6 +388,19 @@ class VectorStore:
                 query_embedding_dim=len(query_embedding),
             )
             raise APIError(f"Vector search failed: {e}") from e
+
+    @staticmethod
+    def _normalize_query_embedding(
+        query_embedding: list[float] | bytes | bytearray | memoryview | np.ndarray,
+    ) -> list[float]:
+        """Normalize query embedding into list[float] for cosine similarity."""
+        if isinstance(query_embedding, (bytes, bytearray, memoryview)):
+            return np.frombuffer(query_embedding, dtype=np.float32).tolist()
+
+        if isinstance(query_embedding, np.ndarray):
+            return query_embedding.astype(np.float32).tolist()
+
+        return [float(value) for value in query_embedding]
 
     async def has_fts5_capability(self) -> bool:
         """Detect whether current SQLite database supports and has FTS5 index ready."""

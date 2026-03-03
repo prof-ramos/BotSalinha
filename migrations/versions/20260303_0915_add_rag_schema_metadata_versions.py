@@ -22,6 +22,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add explicit version columns to support metadata/schema evolution."""
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name if bind is not None else ""
+
     op.add_column(
         "rag_documents",
         sa.Column("schema_version", sa.Integer(), nullable=False, server_default="1"),
@@ -31,8 +34,10 @@ def upgrade() -> None:
         sa.Column("metadata_version", sa.Integer(), nullable=False, server_default="1"),
     )
 
-    op.alter_column("rag_documents", "schema_version", server_default=None)
-    op.alter_column("rag_chunks", "metadata_version", server_default=None)
+    # SQLite does not support ALTER COLUMN DROP DEFAULT syntax directly.
+    if dialect_name != "sqlite":
+        op.alter_column("rag_documents", "schema_version", server_default=None)
+        op.alter_column("rag_chunks", "metadata_version", server_default=None)
 
 
 def downgrade() -> None:
