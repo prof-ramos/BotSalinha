@@ -548,6 +548,7 @@ class IngestionService:
             metadata_version=RAG_METADATA_VERSION,
             token_count=chunk.token_count,
             embedding=embedding_blob,
+            source_type=chunk.metadados.source_type,
             created_at=datetime.now(UTC),
         )
 

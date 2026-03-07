@@ -3,13 +3,20 @@
     "filesystem": {
       "name": "Filesystem MCP",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
       "env": {}
     },
     "context7": {
       "name": "Context7 - Docs Query",
       "command": "npx",
-      "args": ["-y", "context7"],
+      "args": [
+        "-y",
+        "context7"
+      ],
       "env": {}
     },
     "deep-graph": {
@@ -33,34 +40,48 @@
     "python-sdk": {
       "name": "Python SDK",
       "command": "python",
-      "args": ["-m", "python_sdk.server"],
+      "args": [
+        "-m",
+        "python_sdk.server"
+      ],
       "env": {}
     },
     "docker": {
       "name": "Docker MCP",
       "command": "python",
-      "args": ["-m", "mcp_server_docker"],
+      "args": [
+        "-m",
+        "mcp_server_docker"
+      ],
       "env": {}
     },
     "jupyter": {
       "name": "Jupyter MCP",
       "command": "python",
-      "args": ["-m", "server_jupyter"],
+      "args": [
+        "-m",
+        "server_jupyter"
+      ],
       "env": {}
     },
     "postgresql": {
-      "name": "PostgreSQL MCP - Configure DATABASE_URL in production",
+      "name": "PostgreSQL MCP",
       "command": "python",
-      "args": ["-m", "server_postgres"],
+      "args": [
+        "-m",
+        "server_postgres"
+      ],
       "env": {
-        "DATABASE_URL": ""
-      },
-      "_note": "Server will be automatically disabled if DATABASE_URL is empty. Example: postgresql://user:pass@host:port/db"
+        "DATABASE_URL": "postgresql://user:pass@host/db"
+      }
     },
     "opik": {
       "name": "Opik MCP",
       "command": "python",
-      "args": ["-m", "opik_mcp"],
+      "args": [
+        "-m",
+        "opik_mcp"
+      ],
       "env": {}
     },
     "brave-search": {
@@ -70,13 +91,12 @@
       "env": {}
     },
     "google-maps": {
-      "name": "Google Maps MCP - Configure GOOGLE_MAPS_API_KEY in production",
+      "name": "Google Maps MCP",
       "command": "server-google-maps",
       "args": [],
       "env": {
-        "GOOGLE_MAPS_API_KEY": ""
-      },
-      "_note": "Server will be automatically disabled if GOOGLE_MAPS_API_KEY is empty. Get your key at https://developers.google.com/maps"
+        "GOOGLE_MAPS_API_KEY": "..."
+      }
     }
   }
 }

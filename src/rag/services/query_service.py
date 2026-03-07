@@ -12,6 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...config.settings import get_settings
 from ...utils.errors import APIError
 from ...utils.log_events import LogEvents
+from ...utils.metrics import (
+    track_confidence,
+    track_legal_query_type,
+    track_rag_query,
+    track_similarity,
+)
 from ..models import RAGContext
 from ..storage.hybrid_vector_store import HybridVectorStore
 from ..storage.vector_store import VectorStore
@@ -27,6 +33,7 @@ from ..utils.retrieval_ranker import (
     resolve_rerank_weights,
 )
 from .embedding_service import EmbeddingService
+from .semantic_cache import SemanticCache
 
 log = structlog.get_logger(__name__)
 
@@ -48,6 +55,7 @@ class QueryService:
         embedding_service: EmbeddingService | None = None,
         vector_store: VectorStore | HybridVectorStore | None = None,
         confianca_calculator: ConfiancaCalculator | None = None,
+        semantic_cache: SemanticCache | None = None,
     ) -> None:
         """
         Initialize the query service.
@@ -57,6 +65,7 @@ class QueryService:
             embedding_service: Optional embedding service (will create if None)
             vector_store: Optional vector store (will create if None)
             confianca_calculator: Optional confidence calculator (will create if None)
+            semantic_cache: Optional semantic cache (will create if None)
         """
         self._session = session
         self._settings = get_settings()
@@ -66,6 +75,10 @@ class QueryService:
         self._vector_store = vector_store or HybridVectorStore(session)
         self._confianca_calculator = confianca_calculator or ConfiancaCalculator(
             alta_threshold=self._settings.rag.confidence_threshold,
+        )
+        self._semantic_cache = semantic_cache or SemanticCache(
+            max_memory_mb=50,
+            default_ttl_seconds=86400,  # 24 hours
         )
         self._context_strategy = self._resolve_context_strategy()
 
@@ -125,6 +138,29 @@ class QueryService:
                 else self._settings.rag.rerank_enabled
             )
 
+            # FAST PATH: Check semantic cache for existing response
+            cache_key = self._semantic_cache.generate_key(
+                query=query_text,
+                top_k=top_k,
+                min_similarity=min_similarity,
+                retrieval_mode=retrieval_mode,
+                rerank_profile="default" if rerank_enabled else None,
+                chunking_mode=None,
+            )
+
+            cached_response = await self._semantic_cache.get(cache_key)
+            if cached_response is not None:
+                # Cache hit - return cached context
+                log.info(
+                    LogEvents.RAG_BUSCA_CONCLUIDA,
+                    cache_hit=True,
+                    cache_age_seconds=time.time() - cached_response.cached_at,
+                    confidence=cached_response.rag_context_dict.get("confianca", {}).get("value", 0.0),
+                    total_query_duration_ms=0.0,
+                    event_name="rag_query_service_cache_hit",
+                )
+                return RAGContext(**cached_response.rag_context_dict)
+
             rewritten_query, rewrite_meta = rewrite_legal_query(query_text)
             normalized_query = normalize_query_text(rewritten_query)
             extracted_filters = extract_legal_filters_from_query(normalized_query)
@@ -151,21 +187,23 @@ class QueryService:
             # Start total timing
             total_start = time.perf_counter()
 
-            # Step 1: Generate embedding for query
+            # Step 1: Generate embedding for query (with metrics tracking)
             embed_start = time.perf_counter()
-            query_embedding = await self._embedding_service.embed_text(normalized_query)
+            with track_rag_query("embedding"):
+                query_embedding = await self._embedding_service.embed_text(normalized_query)
             embedding_duration_ms = (time.perf_counter() - embed_start) * 1000
 
             # Step 2: Search vector store (first-stage retrieval)
             search_start = time.perf_counter()
-            chunks_with_scores = await self._vector_store.search(
-                query_embedding=query_embedding,
-                query_text=normalized_query,
-                limit=candidate_pool_size,
-                min_similarity=min_similarity,
-                documento_id=documento_id,
-                filters=merged_filters,
-            )
+            with track_rag_query("vector_search"):
+                chunks_with_scores = await self._vector_store.search(
+                    query_embedding=query_embedding,
+                    query_text=normalized_query,
+                    limit=candidate_pool_size,
+                    min_similarity=min_similarity,
+                    documento_id=documento_id,
+                    filters=merged_filters,
+                )
             vector_search_duration_ms = (time.perf_counter() - search_start) * 1000
 
             fallback_applied = False
@@ -308,6 +346,20 @@ class QueryService:
                 query_normalized=normalized_query,
             )
 
+            # Track metrics
+            track_confidence(confidence.value)
+            for similarity in similaridades:
+                track_similarity(similarity)
+            track_legal_query_type(query_type)
+
+            # SLOW PATH: Store response in semantic cache for future queries
+            await self._semantic_cache.set(
+                query_key=cache_key,
+                rag_context=context,
+                llm_response="",  # Will be populated by agent after generation
+                ttl_seconds=86400,  # 24 hours
+            )
+
             log.info(
                 LogEvents.RAG_BUSCA_CONCLUIDA,
                 candidate_count=len(score_map),
@@ -372,12 +424,35 @@ class QueryService:
         filters: dict[str, Any] | None = None
 
         if normalized_tipo != "todos":
-            # Map tipo to metadata filters
+            # Map tipo to metadata filters.
+            # source_type-based filters (preferred — use the dedicated indexed column)
+            # are listed alongside legacy marker-based fallbacks.
             tipo_filters: dict[str, dict[str, Any]] = {
                 "artigo": {"artigo": "not_null"},  # Has artigo field
-                # OR condition: STF OR STJ
-                "jurisprudencia": {"__or__": [{"marca_stf": True}, {"marca_stj": True}]},
-                "questao": {"banca": "not_null"},  # Has banca field
+                # Legacy: marker-based; new: source_type filter
+                "jurisprudencia": {
+                    "__or__": [
+                        {"source_type": "jurisprudencia"},
+                        {"source_type": "jurisprudence"},
+                        {"marca_stf": True},
+                        {"marca_stj": True},
+                    ]
+                },
+                "questao": {
+                    "__or__": [
+                        {"source_type": "questao_prova"},
+                        {"source_type": "exam_question"},
+                        {"banca": "not_null"},
+                    ]
+                },
+                "lei": {"source_type": "lei_cf"},
+                "ec": {"source_type": "emenda_constitucional"},
+                "comentario": {
+                    "__or__": [
+                        {"source_type": "comentario"},
+                        {"source_type": "commentary"},
+                    ]
+                },
                 "nota": {},  # Will use token_count filter
             }
 
@@ -734,6 +809,28 @@ class QueryService:
         merged_list = list(merged.values())
         merged_list.sort(key=lambda item: item[1], reverse=True)
         return merged_list
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        """
+        Get semantic cache statistics.
+
+        Returns:
+            Dictionary with cache metrics including hit rate, memory usage, etc.
+        """
+        stats = self._semantic_cache.get_stats()
+        return {
+            "cache_hits": stats.hits,
+            "cache_misses": stats.misses,
+            "cache_hit_rate": stats.hit_rate,
+            "cache_evictions": stats.evictions,
+            "cache_memory_mb": stats.current_memory_mb,
+            "cache_entry_count": stats.entry_count,
+        }
+
+    async def clear_cache(self) -> None:
+        """Clear all entries from the semantic cache."""
+        await self._semantic_cache.clear()
+        log.info("rag_semantic_cache_cleared", event_name="rag_semantic_cache_cleared")
 
 
 __all__ = ["QueryService"]

@@ -16,6 +16,9 @@ from ..storage.sqlite_repository import get_repository
 
 log = structlog.get_logger()
 
+# Metrics server task reference
+_metrics_server_task: asyncio.Task[None] | None = None
+
 
 class GracefulShutdown:
     """
@@ -25,12 +28,20 @@ class GracefulShutdown:
     of resources like database connections.
     """
 
-    def __init__(self) -> None:
-        """Initialize the graceful shutdown handler."""
+    def __init__(self, enable_metrics: bool = False, metrics_port: int = 9090) -> None:
+        """
+        Initialize the graceful shutdown handler.
+
+        Args:
+            enable_metrics: Whether to start the metrics server
+            metrics_port: Port for the metrics server
+        """
         self._shutdown = False
         self._shutdown_event = asyncio.Event()
         self._cleanup_tasks: list[Callable[[], Awaitable[None]]] = []
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._enable_metrics = enable_metrics
+        self._metrics_port = metrics_port
 
     def register_cleanup_task(self, task: Callable[[], Awaitable[None]]) -> None:
         """
@@ -129,17 +140,27 @@ class GracefulShutdown:
 
 
 @asynccontextmanager
-async def managed_lifecycle():
+async def managed_lifecycle(
+    enable_metrics: bool = False,
+    metrics_port: int = 9090,
+):
     """
     Context manager for application lifecycle.
 
     Handles startup and shutdown gracefully.
 
+    Args:
+        enable_metrics: Whether to start the Prometheus metrics server
+        metrics_port: Port for the metrics server (default: 9090)
+
     Usage:
-        async with managed_lifecycle():
+        async with managed_lifecycle(enable_metrics=True):
             await bot.start()
     """
-    shutdown_manager = GracefulShutdown()
+    shutdown_manager = GracefulShutdown(
+        enable_metrics=enable_metrics,
+        metrics_port=metrics_port,
+    )
 
     # Register cleanup tasks
     async def cleanup_repository():
@@ -156,10 +177,41 @@ async def managed_lifecycle():
         # No running loop
         shutdown_manager.setup_signal_handlers()
 
+    # Start metrics server if enabled
+    metrics_task = None
+    if enable_metrics:
+        try:
+            from ..metricas.prometheus_exporter import run_metrics_server
+
+            metrics_task = asyncio.create_task(
+                run_metrics_server(host="127.0.0.1", port=metrics_port)
+            )
+            log.info(
+                "metrics_server_started",
+                port=metrics_port,
+            )
+        except ImportError as e:
+            log.warning(
+                "metrics_server_not_available",
+                reason="FastAPI or uvicorn not installed",
+                error=str(e),
+            )
+        except Exception as e:
+            log.error(
+                "metrics_server_failed_to_start",
+                error=str(e),
+            )
+
     try:
         log.info("application_started")
         yield shutdown_manager
     finally:
+        # Cancel metrics server task if running
+        if metrics_task and not metrics_task.done():
+            metrics_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await metrics_task
+
         await shutdown_manager.cleanup()
         log.info("application_stopped")
 
@@ -192,8 +244,8 @@ async def run_with_lifecycle(
     shutdown_manager.setup_signal_handlers()
 
     # Create tasks
-    start_task = asyncio.create_task(start_coro())
-    wait_shutdown_task = asyncio.create_task(shutdown_manager.wait_for_shutdown())
+    start_task: asyncio.Task[None] = asyncio.create_task(start_coro())
+    wait_shutdown_task: asyncio.Task[None] = asyncio.create_task(shutdown_manager.wait_for_shutdown())
 
     # Wait for either startup to complete or shutdown signal
     done, pending = await asyncio.wait(

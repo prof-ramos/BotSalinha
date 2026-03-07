@@ -13,12 +13,10 @@ from pathlib import Path
 
 import pydantic
 import structlog
-
-from ..utils.errors import ConfigurationError
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from ..utils.errors import ValidationError
+from ..utils.errors import ConfigurationError, ValidationError
 
 log = structlog.get_logger()
 
@@ -31,12 +29,33 @@ PROMPT_DIR = PROJECT_ROOT / "prompt"
 class ModelConfig(BaseModel):
     """AI model configuration."""
 
-    provider: str = Field(default="google", description="Provedor do modelo")
-    model_id: str = Field(default="gemini-2.5-flash-lite", description="ID do modelo", alias="id")
+    provider: str | None = Field(default="openai", description="Provedor do modelo")
+    model_id: str = Field(default="gpt-4o-mini", description="ID do modelo", alias="id")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperatura de geração")
     max_tokens: int = Field(
         default=4096, ge=1, le=1_000_000, description="Máximo de tokens na resposta"
     )
+
+    @field_validator("provider")
+    @classmethod
+    def normalize_and_validate_provider(cls, v: str | None) -> str:
+        """Normalize provider to lowercase and validate allowed values."""
+        # Handle None and empty string
+        if v is None or v == "":
+            return "openai"
+
+        # Normalize to lowercase
+        provider = v.lower().strip()
+
+        # Validate allowed providers
+        allowed_providers = {"openai", "google"}
+        if provider not in allowed_providers:
+            raise ValueError(
+                f"Provider inválido: '{v}'. Provedores permitidos: {', '.join(sorted(allowed_providers))}. "
+                f"Nota: 'gemini' foi renomeado para 'google'."
+            )
+
+        return provider
 
 
 class PromptConfig(BaseModel):

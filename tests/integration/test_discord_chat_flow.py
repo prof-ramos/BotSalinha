@@ -32,7 +32,11 @@ class TestCanalIAFlow:
         get_settings.cache_clear()
         new_settings = get_settings()
 
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         # Create mock message
         message = MagicMock()
@@ -93,7 +97,11 @@ class TestDMFlow:
         from src.core.discord import BotSalinhaBot
 
         # Arrange
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         message = MagicMock()
         message.author.bot = False
@@ -147,7 +155,11 @@ class TestRateLimitingIntegration:
         # Arrange - Set strict rate limit for testing
         rate_limiter.reconfigure(requests=2, window_seconds=60)
 
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         # Create mock message
         message = MagicMock()
@@ -205,7 +217,11 @@ class TestCommandsStillWork:
         from src.core.discord import BotSalinhaBot
 
         # Arrange
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         ctx = MagicMock()
         ctx.author.bot = False
@@ -238,7 +254,11 @@ class TestCommandsStillWork:
         from src.core.discord import BotSalinhaBot
 
         # Arrange - Create a DM conversation
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         user_id = "111222333"
         channel_id = "555666777"
@@ -295,7 +315,11 @@ class TestConversationHistory:
         from src.core.discord import BotSalinhaBot
 
         # Arrange
-        bot = BotSalinhaBot(repository=conversation_repository)
+        bot = BotSalinhaBot()
+        bot.repository = conversation_repository
+        bot.agent.repository = conversation_repository
+        bot.conversation_service.conversation_repo = conversation_repository
+        bot.conversation_service.message_repo = conversation_repository
 
         user_id = "111222333"
         channel_id = "555666777"

@@ -10,21 +10,25 @@ from typing import Any
 
 import structlog
 from agno.agent import Agent
-from agno.models.base import Model
-from agno.models.google import Gemini
-from agno.models.openai import OpenAIChat
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config.settings import get_settings
 from ..config.yaml_config import yaml_config
-from ..rag import ConfiancaCalculator, QueryService, RAGContext, SemanticCache
+from ..rag import (
+    ConfiancaCalculator,
+    QueryService,
+    RAGContext,
+    SemanticCache,
+)
 from ..rag.services.embedding_service import EmbeddingService
 from ..storage.repository import MessageRepository
 from ..tools.mcp_manager import MCPToolsManager
 from ..utils.errors import APIError, ConfigurationError
 from ..utils.input_sanitizer import sanitize_user_input
 from ..utils.log_events import LogEvents
+from ..utils.metrics import track_error, track_provider_request, track_tokens
 from ..utils.retry import AsyncRetryConfig, async_retry
+from .provider_manager import ProviderManager
 
 log = structlog.get_logger()
 
@@ -115,13 +119,6 @@ class AgentWrapper:
         # Load prompt from external file (configured in config.yaml)
         prompt_content = yaml_config.prompt_content
 
-        # Get provider from config (google or openai)
-        provider = yaml_config.model.provider.lower()
-        model_id = yaml_config.model.model_id
-
-        # Get temperature from YAML config
-        temperature = yaml_config.model.temperature
-
         # Create retry config once in __init__
         self._retry_config = AsyncRetryConfig.from_settings(self.settings.retry)
 
@@ -133,31 +130,13 @@ class AgentWrapper:
         except AttributeError:
             pass  # MCP tools not configured
 
-        # Select model based on provider (validated by Literal["openai", "google"])
-        model: Model
-        if provider == "google":
-            google_api_key = self.settings.get_google_api_key()
-            if not google_api_key:
-                raise ConfigurationError(
-                    "API key do Google não configurada. "
-                    "Defina GOOGLE_API_KEY no .env para usar provider='google'.",
-                    config_key="google.api_key",
-                )
-            model = Gemini(id=model_id, temperature=temperature, api_key=google_api_key)
-        else:
-            # provider == "openai" (default, enforced by Literal type)
-            openai_api_key: str | None = self.settings.get_openai_api_key()
-            if not openai_api_key:
-                raise ConfigurationError(
-                    "API key da OpenAI não configurada. "
-                    "Defina BOTSALINHA_OPENAI__API_KEY no .env para usar provider='openai'. "
-                    "(Formato legado OPENAI_API_KEY também funciona via fallback.)",
-                    config_key="openai.api_key",
-                )
-            # Type assertion: we know api_key is not None here due to the check above
-            assert openai_api_key is not None
-            # Pass api_key explicitly to avoid reliance on environment variable
-            model = OpenAIChat(id=model_id, temperature=temperature, api_key=openai_api_key)
+        # Initialize provider manager with multi-provider support
+        self._provider_manager = ProviderManager(
+            enable_rotation=True,  # Rotate between healthy providers
+        )
+
+        # Get initial model from provider manager
+        model = self._provider_manager.get_model()
 
         # Create the Agno agent
         self.agent = Agent(
@@ -173,12 +152,13 @@ class AgentWrapper:
 
         log.info(
             "agent_wrapper_initialized",
-            provider=provider,
-            model=model_id,
+            provider=self._provider_manager.get_current_provider(),
+            model=yaml_config.model.model_id,
             prompt_file=yaml_config.prompt.file,
             temperature=yaml_config.model.temperature,
             history_runs=self.settings.history_runs,
             rag_enabled=self.enable_rag,
+            provider_manager_enabled=True,
         )
 
     async def generate_response(
@@ -410,29 +390,121 @@ class AgentWrapper:
         """
         generation_start = time.perf_counter()
 
-        async def _do_generate() -> str:
+        # Get current provider from provider manager
+        _ = self._provider_manager.get_current_provider()
+
+        async def _do_generate_with_fallback() -> str:
+            """Generate with automatic provider fallback on failure."""
+            # Try current provider first
+            provider_config = self._provider_manager.get_healthy_provider()
+            if not provider_config:
+                raise ConfigurationError("No healthy AI providers available")
+
+            provider = provider_config.provider
+            model = self._provider_manager.get_model()
+            model_id = provider_config.model_id
+
+            # Update agent model if different
+            if self.agent.model != model:
+                self.agent.model = model
+                log.info(
+                    "agent_model_switched",
+                    new_provider=provider,
+                    new_model=model_id,
+                )
+
             # Build full prompt with history and RAG context
             full_prompt = self._build_prompt(prompt, history, rag_context)
 
-            # Run the agent (async API) - arun returns RunOutput directly
-            result = self.agent.arun(full_prompt)
-            response = await result  # type: ignore[misc]
+            # Track provider request with metrics
+            generation_start_inner = time.perf_counter()
+            with track_provider_request(provider, model_id):
+                try:
+                    # Run the agent (async API) - arun returns RunOutput directly
+                    result = self.agent.arun(full_prompt)
+                    response = await result  # type: ignore[misc]
 
-            if not response or not response.content:
-                raise APIError("Empty response from AI provider")
+                    if not response or not response.content:
+                        raise APIError("Empty response from AI provider")
 
-            return response.content
+                    # Track token usage (rough estimation)
+                    estimated_prompt_tokens = len(full_prompt) // 4
+                    estimated_completion_tokens = len(response.content) // 4
+                    track_tokens(provider, model_id, estimated_prompt_tokens, estimated_completion_tokens)
+
+                    # Record success in provider manager
+                    latency_ms = (time.perf_counter() - generation_start_inner) * 1000
+                    self._provider_manager.record_success(provider, latency_ms)
+
+                    return response.content
+
+                except Exception as e:
+                    # Record failure in provider manager
+                    self._provider_manager.record_failure(provider, e)
+
+                    # Try fallback provider if available
+                    fallback_config = self._provider_manager.get_healthy_provider()
+                    if fallback_config and fallback_config.provider != provider:
+                        log.warning(
+                            "provider_fallback_triggered",
+                            primary_provider=provider,
+                            fallback_provider=fallback_config.provider,
+                            error=str(e),
+                        )
+
+                        # Update agent to fallback provider
+                        fallback_model = self._provider_manager.get_model()
+                        self.agent.model = fallback_model
+
+                        # Retry with fallback provider
+                        generation_start_fallback = time.perf_counter()
+                        with track_provider_request(fallback_config.provider, fallback_config.model_id):
+                            result = self.agent.arun(full_prompt)
+                            response = await result  # type: ignore[misc]
+
+                            if not response or not response.content:
+                                raise APIError("Empty response from fallback AI provider") from None
+
+                            # Track token usage for fallback
+                            estimated_prompt_tokens = len(full_prompt) // 4
+                            estimated_completion_tokens = len(response.content) // 4
+                            track_tokens(
+                                fallback_config.provider,
+                                fallback_config.model_id,
+                                estimated_prompt_tokens,
+                                estimated_completion_tokens,
+                            )
+
+                            # Record success for fallback
+                            latency_ms = (time.perf_counter() - generation_start_fallback) * 1000
+                            self._provider_manager.record_success(fallback_config.provider, latency_ms)
+
+                            return response.content
+
+                    # No fallback available or fallback also failed
+                    raise
 
         # Use retry config created in __init__
         # Type ignore: async_retry type signature doesn't properly support async functions
-        response_content = await async_retry(_do_generate, self._retry_config, operation_name="ai_generate")  # type: ignore[arg-type]
+        try:
+            response_content = await async_retry(
+                _do_generate_with_fallback,
+                self._retry_config,
+                operation_name="ai_generate_with_fallback",
+            )  # type: ignore[arg-type]
+        except Exception as e:
+            # Track error
+            track_error(type(e).__name__, "agent")
+            raise
 
         llm_generation_duration_ms = (time.perf_counter() - generation_start) * 1000
 
         log.info(
             "llm_generation_completed",
+            provider=self._provider_manager.get_current_provider(),
             llm_generation_duration_ms=round(llm_generation_duration_ms, 2),
             response_length=len(response_content),
+            provider_stats=self._provider_manager.get_stats(),
         )
 
         return response_content, llm_generation_duration_ms

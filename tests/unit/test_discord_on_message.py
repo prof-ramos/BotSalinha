@@ -25,8 +25,13 @@ class TestOnMessageBotDetection:
 
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
-        await bot._setup_hook() if hasattr(bot, "_setup_hook") else None
+        bot = BotSalinhaBot()
+        # Replace the internally created repository with mock
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
+        await bot.setup_hook() if hasattr(bot, "setup_hook") else None
 
         message = MagicMock()
         message.author.bot = True
@@ -52,7 +57,7 @@ class TestOnMessageCanalIADetection:
     async def test_responds_in_configured_canal_ia(
         self, mock_discord_context, test_settings, monkeypatch
     ):
-        """Bot should respond to messages in the configured IA channel."""
+        """Bot should process commands in any channel (IA channel behavior removed)."""
         from src.config.settings import get_settings
         from src.core.discord import BotSalinhaBot
         from src.storage.sqlite_repository import SQLiteRepository
@@ -64,38 +69,33 @@ class TestOnMessageCanalIADetection:
         new_settings = get_settings()
 
         mock_repo = MagicMock(spec=SQLiteRepository)
-        mock_repo.get_or_create_conversation = AsyncMock(return_value=MagicMock(id="conv-1"))
-        mock_repo.create_message = AsyncMock()
-
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
         message.author.id = 111222333
-        message.content = "Teste IA"
+        message.content = "!ping"  # Using command prefix
         message.id = 999888777
         message.guild = MagicMock()
         message.guild.id = 987654321
         message.channel.id = 123456789  # Canal IA ID
         message.channel.send = AsyncMock()
-        # Mock typing as an async context manager
-        message.channel.typing = MagicMock()
-        message.channel.typing.return_value.__aenter__ = AsyncMock()
-        message.channel.typing.return_value.__aexit__ = AsyncMock()
 
         # Act
         with (
             patch("src.core.discord.settings", new_settings),
             patch.object(BotSalinhaBot, "user", new_callable=PropertyMock) as mock_user,
-            patch(
-                "src.core.discord.AgentWrapper.generate_response",
-                new=AsyncMock(return_value="Resposta de teste"),
-            ),
+            patch.object(BotSalinhaBot, "latency", new_callable=PropertyMock) as mock_latency,
         ):
             mock_user.return_value.id = 12345
+            mock_latency.return_value = 0.05
             await bot.on_message(message)
 
-        # Assert - Message should be sent in the IA channel
+        # Assert - Command should be processed
         assert message.channel.send.called
 
     async def test_valueerror_malformed_canal_ia_id_logs_warning(
@@ -112,7 +112,11 @@ class TestOnMessageCanalIADetection:
         new_settings = get_settings()
 
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
@@ -140,40 +144,38 @@ class TestOnMessageDMDetection:
     """Tests for DM detection."""
 
     async def test_responds_in_dm(self, mock_discord_context, test_settings):
-        """Bot should respond to messages in DM."""
+        """Bot should process commands in DM."""
         from src.core.discord import BotSalinhaBot
         from src.storage.sqlite_repository import SQLiteRepository
 
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
         message.author.id = 111222333
-        message.content = "O que é crime doloso?"
+        message.content = "!ping"  # Using command prefix
         message.id = 999888777
         message.guild = None  # DM has no guild
         message.channel = MagicMock(spec=discord.DMChannel)
         message.channel.id = 111222333
         message.channel.send = AsyncMock()
-        # Mock typing as an async context manager
-        message.channel.typing = MagicMock()
-        message.channel.typing.return_value.__aenter__ = AsyncMock()
-        message.channel.typing.return_value.__aexit__ = AsyncMock()
 
         # Act
         with (
             patch.object(BotSalinhaBot, "user", new_callable=PropertyMock) as mock_user,
-            patch(
-                "src.core.discord.AgentWrapper.generate_response",
-                new=AsyncMock(return_value="Resposta de teste"),
-            ),
+            patch.object(BotSalinhaBot, "latency", new_callable=PropertyMock) as mock_latency,
         ):
             mock_user.return_value.id = 12345
+            mock_latency.return_value = 0.05
             await bot.on_message(message)
 
-        # Assert - Message should be sent in DM
+        # Assert - Command should be processed
         assert message.channel.send.called
 
 
@@ -189,7 +191,11 @@ class TestOnMessageNormalChannel:
 
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
@@ -230,7 +236,11 @@ class TestHandleChatMessageErrors:
             )
         )
 
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
@@ -261,7 +271,11 @@ class TestHandleChatMessageErrors:
         mock_repo = MagicMock(spec=SQLiteRepository)
         mock_repo.get_or_create_conversation = AsyncMock(return_value=MagicMock(id="conv-1"))
 
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
@@ -295,7 +309,11 @@ class TestHandleChatMessageErrors:
 
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False
@@ -327,7 +345,11 @@ class TestHandleChatMessageErrors:
         mock_repo.get_or_create_conversation = AsyncMock(return_value=MagicMock(id="conv-user-123"))
         mock_repo.create_message = AsyncMock()
 
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         user_id = 111222333
         message1 = MagicMock()
@@ -371,7 +393,11 @@ class TestHandleChatMessageValidation:
 
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
-        bot = BotSalinhaBot(repository=mock_repo)
+        bot = BotSalinhaBot()
+        bot.repository = mock_repo
+        bot.agent.repository = mock_repo
+        bot.conversation_service.conversation_repo = mock_repo
+        bot.conversation_service.message_repo = mock_repo
 
         message = MagicMock()
         message.author.bot = False

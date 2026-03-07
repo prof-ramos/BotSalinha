@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import time
 from typing import Any
 
 import numpy as np
@@ -22,6 +24,104 @@ log = structlog.get_logger(__name__)
 # We fetch limit * CANDIDATE_MULTIPLIER candidates before computing similarities
 CANDIDATE_MULTIPLIER = 10
 LEXICAL_CANDIDATE_MULTIPLIER = 3
+
+# Cache configuration
+CACHE_TTL_SECONDS = 3600  # 1 hour TTL
+MAX_CACHE_SIZE = 1000  # Maximum number of cached queries
+
+
+class QueryResultCache:
+    """
+    Simple LRU cache with TTL for vector search results.
+
+    Caches query results based on a hash of the query embedding and filters.
+    """
+
+    def __init__(self, max_size: int = MAX_CACHE_SIZE, ttl_seconds: int = CACHE_TTL_SECONDS):
+        """
+        Initialize the cache.
+
+        Args:
+            max_size: Maximum number of entries to store
+            ttl_seconds: Time-to-live for cache entries in seconds
+        """
+        self._cache: dict[str, tuple[list[tuple[Chunk, float]], float]] = {}
+        self._access_times: dict[str, float] = {}
+        self._max_size = max_size
+        self._ttl_seconds = ttl_seconds
+
+    def _generate_key(self, query_embedding: list[float], filters: dict[str, Any] | None, limit: int) -> str:
+        """Generate a cache key from query parameters."""
+        # Create a deterministic key from the query embedding and filters
+        embedding_hash = hashlib.sha256(json.dumps(query_embedding[:10]).encode()).hexdigest()[:16]
+        filters_hash = hashlib.sha256(json.dumps(sorted(filters.items()) if filters else {}, sort_keys=True).encode()).hexdigest()[:16]
+        return f"{embedding_hash}:{filters_hash}:{limit}"
+
+    def get(self, query_embedding: list[float], filters: dict[str, Any] | None, limit: int) -> list[tuple[Chunk, float]] | None:
+        """
+        Get cached results if available and not expired.
+
+        Args:
+            query_embedding: Query vector
+            filters: Metadata filters
+            limit: Result limit
+
+        Returns:
+            Cached results or None if not found/expired
+        """
+        key = self._generate_key(query_embedding, filters, limit)
+        current_time = time.time()
+
+        if key not in self._cache:
+            return None
+
+        results, timestamp = self._cache[key]
+
+        # Check if expired
+        if current_time - timestamp > self._ttl_seconds:
+            del self._cache[key]
+            if key in self._access_times:
+                del self._access_times[key]
+            return None
+
+        # Update access time for LRU
+        self._access_times[key] = current_time
+        return results
+
+    def put(self, query_embedding: list[float], filters: dict[str, Any] | None, limit: int, results: list[tuple[Chunk, float]]) -> None:
+        """
+        Store results in cache.
+
+        Args:
+            query_embedding: Query vector
+            filters: Metadata filters
+            limit: Result limit
+            results: Search results to cache
+        """
+        key = self._generate_key(query_embedding, filters, limit)
+        current_time = time.time()
+
+        # Evict oldest entry if cache is full
+        if len(self._cache) >= self._max_size and key not in self._cache:
+            oldest_key = min(self._access_times.items(), key=lambda x: x[1])[0]
+            del self._cache[oldest_key]
+            del self._access_times[oldest_key]
+
+        self._cache[key] = (results, current_time)
+        self._access_times[key] = current_time
+
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        self._cache.clear()
+        self._access_times.clear()
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get cache statistics."""
+        return {
+            "size": len(self._cache),
+            "max_size": self._max_size,
+            "ttl_seconds": self._ttl_seconds,
+        }
 
 
 def serialize_embedding(embedding: list[float]) -> bytes:
@@ -155,6 +255,7 @@ class VectorStore:
         "marca_hediondo",
         "marca_acao_penal",
         "marca_militar",
+        "marca_tcu",
         "banca",
         "ano",
         # Code-specific fields
@@ -176,15 +277,17 @@ class VectorStore:
     }
     _LEGACY_DOCUMENT_KEYS = ("fonte", "nome", "arquivo_origem")
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, enable_cache: bool = True) -> None:
         """
         Initialize the vector store.
 
         Args:
             session: SQLAlchemy async session
+            enable_cache: Whether to enable result caching (default: True)
         """
         self._session = session
         self._fts5_capability_cache: bool | None = None
+        self._result_cache = QueryResultCache() if enable_cache else None
 
     async def add_embeddings(self, chunks_with_embeddings: list[tuple[Chunk, list[float]]]) -> None:
         """
@@ -264,10 +367,30 @@ class VectorStore:
             APIError: If search fails
         """
         try:
+            # Rollback any pending transaction before executing search
+            # This handles the case where ChromaDB timeout left the session in invalid state
+            if self._session.in_transaction():
+                await self._session.rollback()
+
             normalized_query_embedding = self._normalize_query_embedding(query_embedding)
+
+            # Check cache for repeated queries
+            if self._result_cache:
+                cached_results = self._result_cache.get(normalized_query_embedding, filters, limit)
+                if cached_results is not None:
+                    log.debug(
+                        LogEvents.RAG_BUSCA_INICIADA,
+                        cache_hit=True,
+                        limit=limit,
+                        min_similarity=min_similarity,
+                        documento_id=documento_id,
+                        event_name="rag_vector_store_search_cache_hit",
+                    )
+                    return cached_results
 
             log.debug(
                 LogEvents.RAG_BUSCA_INICIADA,
+                cache_hit=False,
                 limit=limit,
                 min_similarity=min_similarity,
                 documento_id=documento_id,
@@ -382,6 +505,10 @@ class VectorStore:
                 lexical_enabled=bool(query_text and query_text.strip()),
                 event_name="rag_vector_store_search_success",
             )
+
+            # Cache results for future queries
+            if self._result_cache:
+                self._result_cache.put(normalized_query_embedding, filters, limit, chunks_with_scores)
 
             return chunks_with_scores
 

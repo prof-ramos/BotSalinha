@@ -37,7 +37,13 @@ MARCA_ACAO_PENAL = r"\ba[cç][ã]o\s+penal\s*(?:p[úu]blica|privada)\b"
 MARCA_MILITAR = r"\b(codigo?\s*penal\s*militar|crime?\s+militar|justi[cç]a\s+militar)\b"
 
 # Exam board (banca) patterns - expanded
-BANCA_PATTERN = r"\b(CEBRASPE|FCC|VUNESP|FGV|CESGRANRIO|CEPEC|IADES|CESPE|MP[A-Z]{2}|PGE[A-Z]{2}|TJ[A-Z]{2}|TRF\d|PC[A-Z]{2}|DPE[A-Z]{2}|MPF|MPU|MPT|MPE)\b"
+BANCA_PATTERN = r"\b(CEBRASPE|FCC|VUNESP|FGV|CESGRANRIO|CEPEC|IADES|CESPE|FUMARC|MP[A-Z]{2}|PGE[A-Z]{2}|TJ[A-Z]{2}|TRF\d|PC[A-Z]{2}|DPE[A-Z]{2}|MPF|MPU|MPT|MPE)\b"
+
+# TCU (Tribunal de Contas da União) specific patterns
+MARCA_TCU = r"\(TCU\)|TCU\s*:|#TCU:|Tribunal de Contas da União|Tribunal\s+de\s+Contas\s+da\s+União"
+SUMULA_VINCULANTE_PATTERN = r"\bS[úu]mula\s+Vinculante\s+(?:n[ºo°]\s*)?(\d+)\b"
+ACORDAO_TCU_PATTERN = r"\bAc[óo]rd[ãa]o\s+(?:n[ºo°]\s*)?(\d+(?:/\d+)?)\b"
+JURISPRUDENCIA_TCU_PATTERN = r"\(TCU\s*[\d/]+\)|Jurisprud[êe]ncia\s+TCU|Decis[ãa]o\s+TCU"
 
 # Year pattern for exams
 ANO_PATTERN = r"\b(19\d{2}|20\d{2})\b"
@@ -50,7 +56,7 @@ DATE_DDMMYYYY_PATTERN = r"\b([0-3]\d/[01]\d/(?:19|20)\d{2})\b"
 EXAM_REFERENCE_PATTERN = r"\(([A-Z0-9]{2,10})-(19\d{2}|20\d{2})\)"
 JURIS_LINK_PATTERN = r"\b(?:Info(?:rmativo)?\s*\d+|S[uú]mula\s+[A-Z]?\d+)\b"
 EXAM_MARK_PATTERN = (
-    r"(?:#\s*)?([A-Z]{2,10})[-/\s]?(19\d{2}|20\d{2})?(?:[-/\s]+([A-Z]{3,12}))?(?:\s*[:)])?"
+    r"([A-Z0-9]{2,12})(?:[-/\s]+)(19\d{2}|20\d{2})(?:[-/\s]+([A-Z]{3,12}))?"
 )
 
 
@@ -86,6 +92,12 @@ class MetadataExtractor:
         self._juris_link_re = re.compile(JURIS_LINK_PATTERN, re.IGNORECASE)
         self._exam_mark_re = re.compile(EXAM_MARK_PATTERN)
 
+        # TCU specific patterns
+        self._tcu_re = re.compile(MARCA_TCU, re.IGNORECASE)
+        self._sumula_vinculante_re = re.compile(SUMULA_VINCULANTE_PATTERN, re.IGNORECASE)
+        self._acordao_tcu_re = re.compile(ACORDAO_TCU_PATTERN, re.IGNORECASE)
+        self._jurisprudencia_tcu_re = re.compile(JURISPRUDENCIA_TCU_PATTERN, re.IGNORECASE)
+
         log.debug("rag_metadata_extractor_initialized")
 
     def extract(self, text: str, context: dict[str, Any]) -> ChunkMetadata:
@@ -118,6 +130,7 @@ class MetadataExtractor:
             marca_hediondo,
             marca_acao_penal,
             marca_militar,
+            marca_tcu,
         ) = self._extract_marcadores(text)
 
         # Extract exam info (banca, ano)
@@ -134,6 +147,7 @@ class MetadataExtractor:
             marca_concurso=marca_concurso,
             marca_stf=marca_stf,
             marca_stj=marca_stj,
+            exam_marks=exam_marks,
         )
         source_type = self._classify_source_type(
             text=text,
@@ -184,6 +198,7 @@ class MetadataExtractor:
             marca_hediondo=marca_hediondo,
             marca_acao_penal=marca_acao_penal,
             marca_militar=marca_militar,
+            marca_tcu=marca_tcu,
             banca=banca,
             ano=ano,
             exam_source=banca,
@@ -295,7 +310,7 @@ class MetadataExtractor:
 
     def _extract_marcadores(
         self, text: str
-    ) -> tuple[bool, bool, bool, bool, bool, bool, bool, bool, bool]:
+    ) -> tuple[bool, bool, bool, bool, bool, bool, bool, bool, bool, bool]:
         """
         Extract attention and court markers from text.
 
@@ -305,7 +320,7 @@ class MetadataExtractor:
         Returns:
             Tuple of (marca_atencao, marca_stf, marca_stj, marca_concurso,
                      marca_crime, marca_pena, marca_hediondo, marca_acao_penal,
-                     marca_militar)
+                     marca_militar, marca_tcu)
         """
         marca_atencao = bool(self._atencao_re.search(text))
         marca_stf = bool(self._stf_re.search(text))
@@ -316,6 +331,7 @@ class MetadataExtractor:
         marca_hediondo = bool(self._hediondo_re.search(text))
         marca_acao_penal = bool(self._acao_penal_re.search(text))
         marca_militar = bool(self._militar_re.search(text))
+        marca_tcu = bool(self._tcu_re.search(text))
 
         return (
             marca_atencao,
@@ -327,6 +343,7 @@ class MetadataExtractor:
             marca_hediondo,
             marca_acao_penal,
             marca_militar,
+            marca_tcu,
         )
 
     def _extract_banca_ano(self, text: str) -> tuple[str | None, str | None]:
@@ -428,10 +445,11 @@ class MetadataExtractor:
         marca_concurso: bool,
         marca_stf: bool,
         marca_stj: bool,
+        exam_marks: list[dict[str, Any]],
     ) -> str:
         """Classify content type for legal RAG routing."""
         lowered = text.lower()
-        if marca_concurso or bool(self._exam_reference_re.search(text)):
+        if marca_concurso or bool(self._exam_reference_re.search(text)) or bool(exam_marks):
             return "exam_question"
         if marca_stf or marca_stj or bool(self._juris_link_re.search(text)):
             return "jurisprudence"

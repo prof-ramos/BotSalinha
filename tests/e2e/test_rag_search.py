@@ -38,8 +38,14 @@ class TestRAGSearchE2E:
         self,
         prod_rag_query_service: QueryService,
         prod_db_session: AsyncSession,
+        monkeypatch,
     ) -> None:
         """Test that a simple search returns relevant chunks."""
+        # Disable ChromaDB timeout for E2E test to avoid transaction issues
+        monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__FALLBACK_TIMEOUT_MS", "5000")
+        from src.config.settings import get_settings
+        get_settings.cache_clear()
+
         # Check if documents are indexed
         from sqlalchemy import func, select
 

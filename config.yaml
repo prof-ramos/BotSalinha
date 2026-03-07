@@ -10,6 +10,13 @@ model:
   id: gpt-4o-mini # ID do modelo
   temperature: 0.7 # Criatividade (0.0 = determinístico, 1.0 = criativo)
   max_tokens: 4096 # Máximo de tokens na resposta
+  # Lista de prioridades para fallback automático (menor = maior prioridade)
+  # Se não especificado, usa ordem: openai (prioridade 0), google (prioridade 1)
+  provider_priorities:
+    - provider: openai
+      priority: 0
+    - provider: google
+      priority: 1
 
 # Arquivo de prompt a ser utilizado (relativo ao diretório prompt/)
 # Suporta arquivos .md e .json

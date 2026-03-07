@@ -88,14 +88,15 @@ class TestYamlConfigProviderIntegration:
 
 @pytest.mark.unit
 class TestAgentWrapperProviderSelection:
-    """Tests for AgentWrapper model selection based on provider."""
+    """Tests for AgentWrapper provider selection via ProviderManager."""
 
+    @patch("src.core.agent.ProviderManager")
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")
-    def test_openai_provider_creates_openai_model(
-        self, mock_settings: MagicMock, mock_yaml: MagicMock
+    def test_openai_provider_uses_provider_manager(
+        self, mock_settings: MagicMock, mock_yaml: MagicMock, mock_provider_manager: MagicMock
     ) -> None:
-        """Provider 'openai' should instantiate OpenAIChat model."""
+        """Provider 'openai' should use ProviderManager to get model."""
         # Arrange
         mock_repo = MagicMock()
         mock_yaml.model.provider = "openai"
@@ -112,25 +113,32 @@ class TestAgentWrapperProviderSelection:
         mock_settings.return_value.retry = MagicMock()
         mock_repo.return_value = MagicMock()
 
+        # Mock ProviderManager
+        mock_model = MagicMock()
+        mock_provider_manager.return_value.get_model.return_value = mock_model
+        mock_provider_manager.return_value.get_current_provider.return_value = "openai"
+
         # Act
-        with patch("src.core.agent.OpenAIChat") as mock_openai_chat, patch("src.core.agent.Agent"):
+        with patch("src.core.agent.Agent"):
             from src.core.agent import AgentWrapper
 
             AgentWrapper(repository=mock_repo.return_value)
-            mock_openai_chat.assert_called_once_with(
-                id="gpt-4o-mini", temperature=0.7, api_key="test-key"
-            )
 
+            # Assert ProviderManager was initialized and used
+            mock_provider_manager.assert_called_once_with(enable_rotation=True)
+            mock_provider_manager.return_value.get_model.assert_called_once()
+
+    @patch("src.core.agent.ProviderManager")
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")
-    def test_google_provider_creates_gemini_model(
-        self, mock_settings: MagicMock, mock_yaml: MagicMock
+    def test_google_provider_uses_provider_manager(
+        self, mock_settings: MagicMock, mock_yaml: MagicMock, mock_provider_manager: MagicMock
     ) -> None:
-        """Provider 'google' should instantiate Gemini model."""
+        """Provider 'google' should use ProviderManager to get model."""
         # Arrange
         mock_repo = MagicMock()
         mock_yaml.model.provider = "google"
-        mock_yaml.model.model_id = "gemini-2.0-flash"
+        mock_yaml.model.model_id = "gemini-2.5-flash-lite"
         mock_yaml.model.temperature = 0.7
         mock_yaml.prompt_content = "Test prompt"
         mock_yaml.prompt.file = "prompt_v1.md"
@@ -143,21 +151,28 @@ class TestAgentWrapperProviderSelection:
         mock_settings.return_value.retry = MagicMock()
         mock_repo.return_value = MagicMock()
 
+        # Mock ProviderManager
+        mock_model = MagicMock()
+        mock_provider_manager.return_value.get_model.return_value = mock_model
+        mock_provider_manager.return_value.get_current_provider.return_value = "google"
+
         # Act
-        with patch("src.core.agent.Gemini") as mock_gemini, patch("src.core.agent.Agent"):
+        with patch("src.core.agent.Agent"):
             from src.core.agent import AgentWrapper
 
             AgentWrapper(repository=mock_repo.return_value)
-            mock_gemini.assert_called_once_with(
-                id="gemini-2.0-flash", temperature=0.7, api_key="test-key"
-            )
 
+            # Assert ProviderManager was initialized and used
+            mock_provider_manager.assert_called_once_with(enable_rotation=True)
+            mock_provider_manager.return_value.get_model.assert_called_once()
+
+    @patch("src.core.agent.ProviderManager")
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")
-    def test_missing_openai_key_raises_configuration_error(
-        self, mock_settings: MagicMock, mock_yaml: MagicMock
+    def test_provider_manager_initialization_with_no_api_keys_raises_configuration_error(
+        self, mock_settings: MagicMock, mock_yaml: MagicMock, mock_provider_manager_class: MagicMock
     ) -> None:
-        """Missing OpenAI API key should raise ConfigurationError."""
+        """ProviderManager with no API keys should raise ConfigurationError."""
         # Arrange
         mock_repo = MagicMock()
         mock_yaml.model.provider = "openai"
@@ -168,46 +183,56 @@ class TestAgentWrapperProviderSelection:
         mock_yaml.agent.add_datetime = True
         mock_yaml.agent.markdown = True
         mock_yaml.agent.debug_mode = False
-        mock_settings.return_value.get_openai_api_key.return_value = None  # No key!
+        mock_settings.return_value.get_openai_api_key.return_value = None
+        mock_settings.return_value.get_google_api_key.return_value = None
         mock_settings.return_value.history_runs = 3
         mock_settings.return_value.debug = False
         mock_settings.return_value.retry = MagicMock()
         mock_repo.return_value = MagicMock()
 
-        # Act & Assert
+        # Mock ProviderManager to raise ConfigurationError on init
         from src.utils.errors import ConfigurationError
+        mock_provider_manager_class.side_effect = ConfigurationError(
+            "No AI providers configured. "
+            "Set BOTSALINHA_OPENAI__API_KEY or BOTSALINHA_GOOGLE__API_KEY in .env"
+        )
 
-        with pytest.raises(ConfigurationError, match="OpenAI"):
+        # Act & Assert
+        with pytest.raises(ConfigurationError, match="No AI providers configured"):
             from src.core.agent import AgentWrapper
-
             AgentWrapper(repository=mock_repo.return_value)
 
+    @patch("src.core.agent.ProviderManager")
     @patch("src.core.agent.yaml_config")
     @patch("src.core.agent.get_settings")
-    def test_missing_google_key_raises_configuration_error(
-        self, mock_settings: MagicMock, mock_yaml: MagicMock
+    def test_provider_manager_get_model_failure_raises_configuration_error(
+        self, mock_settings: MagicMock, mock_yaml: MagicMock, mock_provider_manager: MagicMock
     ) -> None:
-        """Missing Google API key should raise ConfigurationError."""
+        """ProviderManager.get_model() with no healthy providers should raise ConfigurationError."""
         # Arrange
         mock_repo = MagicMock()
         mock_yaml.model.provider = "google"
-        mock_yaml.model.model_id = "gemini-2.0-flash"
+        mock_yaml.model.model_id = "gemini-2.5-flash-lite"
         mock_yaml.model.temperature = 0.7
         mock_yaml.prompt_content = "Test prompt"
         mock_yaml.prompt.file = "prompt_v1.md"
         mock_yaml.agent.add_datetime = True
         mock_yaml.agent.markdown = True
         mock_yaml.agent.debug_mode = False
-        mock_settings.return_value.get_google_api_key.return_value = None  # No key!
+        mock_settings.return_value.get_google_api_key.return_value = None
         mock_settings.return_value.history_runs = 3
         mock_settings.return_value.debug = False
         mock_settings.return_value.retry = MagicMock()
         mock_repo.return_value = MagicMock()
 
-        # Act & Assert
+        # Mock ProviderManager.get_model to raise ConfigurationError
         from src.utils.errors import ConfigurationError
+        mock_provider_manager.return_value.get_model.side_effect = ConfigurationError(
+            "No healthy AI providers available. "
+            "Check your API keys in .env and ensure network connectivity."
+        )
 
-        with pytest.raises(ConfigurationError, match="Google"):
+        # Act & Assert
+        with pytest.raises(ConfigurationError, match="No healthy AI providers available"):
             from src.core.agent import AgentWrapper
-
             AgentWrapper(repository=mock_repo.return_value)

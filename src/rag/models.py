@@ -32,7 +32,10 @@ class ChunkMetadata(BaseModel):
 
     model_config = {"extra": "allow"}
 
-    documento: str = Field(..., description="Document identifier (e.g., 'CF/88')")
+    documento: str = Field(
+        default="unknown",
+        description="Document identifier (e.g., 'CF/88')",
+    )
     titulo: str | None = Field(None, description="Section title")
     capitulo: str | None = Field(None, description="Chapter reference")
     secao: str | None = Field(None, description="Section reference")
@@ -54,8 +57,9 @@ class ChunkMetadata(BaseModel):
     source_type: str | None = Field(
         None,
         description=(
-            "One of: lei_cf, emenda_constitucional, jurisprudence, "
-            "commentary, exam_question"
+            "Granular content origin. Canonical values: lei_cf, "
+            "emenda_constitucional, jurisprudence, commentary, exam_question "
+            "(legacy aliases like jurisprudencia/comentario/questao_prova are accepted)."
         ),
     )
     exam_source: str | None = Field(None, description="Single detected exam source")
@@ -111,6 +115,7 @@ class ChunkMetadata(BaseModel):
     marca_hediondo: bool = Field(False, description="Marked as heinous crime reference")
     marca_acao_penal: bool = Field(False, description="Marked as containing criminal procedure info")
     marca_militar: bool = Field(False, description="Marked as military law/criminal content")
+    marca_tcu: bool = Field(False, description="Marked as TCU (Tribunal de Contas da União) relevant")
     banca: str | None = Field(None, description="Exam board/banca name")
     ano: str | None = Field(None, description="Exam year")
     # Code-specific fields (for code ingestion)
@@ -122,6 +127,19 @@ class ChunkMetadata(BaseModel):
     classes: list[str] = Field(default_factory=list, description="Class names found in code")
     imports: list[str] = Field(default_factory=list, description="Imported modules")
     is_test: bool = Field(False, description="Whether this is a test file")
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_legacy_fields(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Map legacy field names to canonical names before validation."""
+        if isinstance(values, dict):
+            # Legacy 'fonte' → 'documento'
+            if not values.get("documento") and values.get("fonte"):
+                values["documento"] = values["fonte"]
+            # Legacy 'arquivo' → 'documento'
+            if not values.get("documento") and values.get("arquivo"):
+                values["documento"] = values["arquivo"]
+        return values
 
     @model_validator(mode="after")
     def sync_legacy_aliases(self) -> "ChunkMetadata":
@@ -153,9 +171,13 @@ class ChunkMetadata(BaseModel):
                 "lei": "lei_cf",
                 "lei_cf88": "lei_cf",
                 "emenda_constitucional": "emenda_constitucional",
+                "jurisprudence": "jurisprudence",
                 "jurisprudencia": "jurisprudence",
+                "commentary": "commentary",
                 "comentario": "commentary",
+                "exam_question": "exam_question",
                 "questao_prova": "exam_question",
+                "questao": "exam_question",
             }
             self.source_type = source_aliases.get(normalized_source, normalized_source)
         return self

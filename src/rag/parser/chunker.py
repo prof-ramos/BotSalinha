@@ -29,6 +29,13 @@ class ChunkExtractor:
     DEFAULT_RESPECT_BOUNDARIES = True
     DEFAULT_MIN_CHUNK_SIZE = 100
     DEFAULT_METADATA_MAX_DEPTH = 3
+
+    # Constitution-specific settings
+    CF_MAX_TOKENS = 300  # CF articles are shorter, use smaller chunks
+    CF_DOCUMENT_PATTERNS = ["cf", "constituicao", "constituição", "cf/88", "cf88"]
+    ADCT_PATTERN = re.compile(r"\bADCT\b|Ato\s+das\s+Disposi[cç][õo]es\s+Constitucionais\s+Transit[óo]rias", re.IGNORECASE)
+    EC_PATTERN = re.compile(r"\bEC\s+|Emenda\s+Constitucional", re.IGNORECASE)
+
     _ARTIGO_RE = re.compile(r"^\s*Art\.?\s*(\d+[A-Za-z]?)\b", re.IGNORECASE)
     _PARAGRAFO_RE = re.compile(
         r"^\s*(?:§\s*([0-9]+|[úu]nico)\s*[º°]?|par[aá]grafo\s+([úu]nico|\d+)\b)",
@@ -104,6 +111,18 @@ class ChunkExtractor:
         if not parsed_doc:
             log.warning("rag_chunker_empty_document", document=document_name)
             return []
+
+        # Detect Constitution documents and use smaller chunk sizes
+        is_cf_document = self._is_constitution_document(document_name)
+        original_max_tokens = self._max_tokens
+        if is_cf_document:
+            self._max_tokens = self.CF_MAX_TOKENS
+            log.info(
+                "rag_chunker_cf_detected",
+                document=document_name,
+                using_max_tokens=self._max_tokens,
+                default_max_tokens=original_max_tokens,
+            )
 
         semantic_blocks = self._build_semantic_blocks(parsed_doc)
         chunks: list[Chunk] = []
@@ -203,6 +222,10 @@ class ChunkExtractor:
             total_chunks=len(chunks),
             total_tokens=sum(c.token_count for c in chunks),
         )
+
+        # Restore original max_tokens if we changed it for CF document
+        if is_cf_document:
+            self._max_tokens = original_max_tokens
 
         return chunks
 
@@ -594,6 +617,46 @@ class ChunkExtractor:
         safe_name = document_name.replace("/", "-").replace("\\", "-")
         safe_name = safe_name.replace(" ", "_").strip()
         return f"{safe_name}-{seq:04d}"
+
+    @staticmethod
+    def _is_constitution_document(document_name: str) -> bool:
+        """
+        Detect if the document is a Constitution (CF/88) document.
+
+        Args:
+            document_name: Document identifier to check
+
+        Returns:
+            True if the document appears to be a Constitution document
+        """
+        lowered = document_name.lower()
+        return any(pattern in lowered for pattern in ChunkExtractor.CF_DOCUMENT_PATTERNS)
+
+    @staticmethod
+    def _is_adct_content(text: str) -> bool:
+        """
+        Detect if text contains ADCT (Ato das Disposições Constitucionais Transitórias) content.
+
+        Args:
+            text: Text to check
+
+        Returns:
+            True if the text appears to be ADCT content
+        """
+        return bool(ChunkExtractor.ADCT_PATTERN.search(text))
+
+    @staticmethod
+    def _is_ec_content(text: str) -> bool:
+        """
+        Detect if text contains Emenda Constitucional content.
+
+        Args:
+            text: Text to check
+
+        Returns:
+            True if the text appears to be EC content
+        """
+        return bool(ChunkExtractor.EC_PATTERN.search(text))
 
 
 __all__ = ["ChunkExtractor"]

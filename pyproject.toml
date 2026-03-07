@@ -41,6 +41,8 @@ dependencies = [
     # CLI metrics
     "click>=8.1.0",
     "colorama>=0.4.6",
+    # Observability
+    "prometheus-client>=0.21.0,<1.0.0",
 ]
 
 [dependency-groups]

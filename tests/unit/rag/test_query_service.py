@@ -223,7 +223,7 @@ async def test_query_service_dual_write_debug_rerank_meta(
 async def test_query_by_tipo_uses_or_filter_for_jurisprudencia(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Jurisprudencia filter must use STF OR STJ metadata."""
+    """Jurisprudencia filter should combine legacy markers with source_type metadata."""
     monkeypatch.setattr("src.rag.services.query_service.get_settings", _fake_settings)
 
     candidates = [
@@ -239,10 +239,12 @@ async def test_query_by_tipo_uses_or_filter_for_jurisprudencia(
     context = await service.query_by_tipo("jurisprudencia recente", "jurisprudencia", top_k=1)
 
     assert len(context.chunks_usados) == 1
-    assert vector_store.calls[0]["filters"] == {
-        "__or__": [{"marca_stf": True}, {"marca_stj": True}],
-        "content_type": "jurisprudence",
-    }
+    filters = vector_store.calls[0]["filters"]
+    assert isinstance(filters, dict)
+    assert filters["content_type"] == "jurisprudence"
+    assert filters["source_type"] == "jurisprudence"
+    assert {"marca_stf": True} in filters["__or__"]
+    assert {"marca_stj": True} in filters["__or__"]
 
 
 @pytest.mark.unit

@@ -196,8 +196,14 @@ class TestCodeIngestionEndToEnd:
         db_session: AsyncSession,
         sample_xml_file: str,
         mock_embedding_service: MockEmbeddingService,
+        monkeypatch,
     ) -> None:
         """Test query_code() method with various filters."""
+        # Disable ChromaDB for this test to avoid production data interference
+        monkeypatch.setenv("BOTSALINHA_RAG__CHROMA__ENABLED", "false")
+        from src.config.settings import get_settings
+        get_settings.cache_clear()
+
         # Create RAG tables
         async with db_session.bind.begin() as conn:
             await conn.run_sync(DocumentORM.metadata.create_all)
@@ -274,6 +280,9 @@ class TestCodeIngestionEndToEnd:
         # Cleanup
         await db_session.delete(document_orm)
         await db_session.commit()
+
+        # Restore settings cache
+        get_settings.cache_clear()
 
     @pytest.mark.asyncio
     async def test_ingestion_reuses_existing_document_by_content_hash(

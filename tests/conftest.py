@@ -104,11 +104,14 @@ async def db_session(test_engine):
     Create test database session.
 
     Provides a clean session for each test.
+    Ensures proper cleanup and rollback between tests.
     """
     async_session_maker = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session_maker() as session:
         yield session
+        # Ensure session is properly closed and rolled back after test
+        await session.rollback()
 
 
 @pytest_asyncio.fixture
@@ -471,11 +474,14 @@ async def prod_db_session(prod_db_engine):
     Create database session for production database (e2e only).
 
     Provides read-only access to the real RAG data.
+    Ensures proper session cleanup after test.
     """
     async_session_maker = sessionmaker(prod_db_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session_maker() as session:
         yield session
+        # Ensure session is properly closed after test
+        await session.rollback()
 
 
 @pytest_asyncio.fixture

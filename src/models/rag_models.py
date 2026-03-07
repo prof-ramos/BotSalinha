@@ -16,6 +16,8 @@ from .conversation import Base
 RAG_CHUNKS_TABLE_NAME = "rag_chunks"
 RAG_CHUNKS_FTS_TABLE_NAME = "rag_chunks_fts"
 
+SOURCE_TYPES = ("lei_cf", "emenda_constitucional", "jurisprudencia", "comentario", "questao_prova")
+
 
 class DocumentORM(Base):
     """
@@ -81,6 +83,12 @@ class ChunkORM(Base):
     )
     metadata_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        default=None,
+        index=True,
+    )
     embedding: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True, default=None
     )  # Serialized embedding (float32 array)
@@ -98,7 +106,7 @@ class ChunkORM(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ChunkORM(id={self.id!r}, documento_id={self.documento_id!r})>"
+        return f"<ChunkORM(id={self.id!r}, documento_id={self.documento_id!r}, source_type={self.source_type!r})>"
 
 
 class ContentLinkORM(Base):
@@ -145,4 +153,5 @@ __all__ = [
     "ContentLinkORM",
     "RAG_CHUNKS_TABLE_NAME",
     "RAG_CHUNKS_FTS_TABLE_NAME",
+    "SOURCE_TYPES",
 ]

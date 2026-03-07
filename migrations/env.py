@@ -26,8 +26,12 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Get database URL from settings."""
-    return settings.database.url
+    """Get database URL from settings, ensuring the async driver is specified."""
+    url = settings.database.url
+    # Alembic env.py runs async migrations; ensure the aiosqlite driver is used.
+    if url.startswith("sqlite:///") and "+aiosqlite" not in url:
+        url = url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    return url
 
 
 def run_migrations_offline() -> None:
