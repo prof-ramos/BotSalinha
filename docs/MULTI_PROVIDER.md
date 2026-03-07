@@ -1,121 +1,121 @@
-# Multi-Provider Fallback Architecture
+# Arquitetura de Multi-Provider com Fallback
 
-BotSalinha implements a sophisticated multi-provider AI system with automatic fallback, circuit breaker pattern, and provider rotation for maximum reliability and performance.
+BotSalinha implementa um sistema sofisticado de múltiplos provedores de IA com fallback automático, padrão circuit breaker e rotação de provedores para máxima confiabilidade e performance.
 
-## Overview
+## Visão Geral
 
-The ProviderManager (`src/core/provider_manager.py`) manages multiple AI providers (OpenAI, Google Gemini) with:
+O ProviderManager (`src/core/provider_manager.py`) gerencia múltiplos provedores de IA (OpenAI, Google Gemini) com:
 
-- **Health checks**: Test API calls on initialization
-- **Automatic fallback**: Switch to backup provider on failure
-- **Circuit breaker**: Temporarily disable failing providers
-- **Provider rotation**: Round-robin between healthy providers
-- **Metrics tracking**: Success rate, latency, error counts per provider
+- **Health checks**: Testes de chamada de API ao inicializar
+- **Fallback automático**: Alterna para provedor de backup em caso de falha
+- **Circuit breaker**: Desabilita temporariamente provedores com falhas
+- **Rotação de provedores**: Round-robin entre provedores saudáveis
+- **Tracking de métricas**: Taxa de sucesso, latência, contagem de erros por provedor
 
-## Architecture
+## Arquitetura
 
-### Provider States
+### Estados do Provedor
 
-Each provider has a circuit breaker state:
+Cada provedor tem um estado de circuit breaker:
 
-- **CLOSED**: Normal operation, requests flow through
-- **OPEN**: Failed, temporarily disabled (3 consecutive failures)
-- **HALF_OPEN**: Testing if recovered after timeout
+- **CLOSED**: Operação normal, requisições fluem normalmente
+- **OPEN**: Falhou, temporariamente desabilitado (3 falhas consecutivas)
+- **HALF_OPEN**: Testando se recuperou após timeout
 
-### Circuit Breaker Pattern
+### Padrão Circuit Breaker
 
 ```
-Provider Failure → Consecutive Failures ≥ 3 → OPEN State
+Falha do Provedor → Falhas Consecutivas ≥ 3 → Estado OPEN
                                                     ↓
-                                            60 second timeout
+                                            Timeout de 60 segundos
                                                     ↓
-                                              HALF_OPEN State
+                                              Estado HALF_OPEN
                                                     ↓
-                                    Next successful request → CLOSED State
+                                    Próximo request bem-sucedido → Estado CLOSED
 ```
 
-### Provider Selection Flow
+### Fluxo de Seleção de Provedor
 
-1. Get current provider from provider manager
-2. Check circuit breaker state
-3. If OPEN, check if recovery timeout elapsed → HALF_OPEN
-4. If healthy providers available, rotate based on priority
-5. Return provider model for request
+1. Obter provedor atual do provider manager
+2. Verificar estado do circuit breaker
+3. Se OPEN, verificar se timeout de recuperação passou → HALF_OPEN
+4. Se provedores saudáveis disponíveis, rotacionar baseado em prioridade
+5. Retornar modelo de provedor para requisição
 
-### Fallback Logic
+### Lógica de Fallback
 
 ```
-Request → Primary Provider
+Requisição → Provedor Primário
            ↓
-        Success?
+        Sucesso?
            ↓
-          Yes → Record Success → Return Response
+          Sim → Registrar Sucesso → Retornar Resposta
            ↓
-          No → Record Failure → Circuit Breaker Check
+          Não → Registrar Falha → Verificar Circuit Breaker
                                    ↓
-                            Backup Provider Available?
+                            Provedor de Backup Disponível?
                                    ↓
-                              Yes → Switch Provider → Retry
+                              Sim → Trocar Provedor → Retentar
                                    ↓
-                              No → Raise Error
+                              Não → Lançar Erro
 ```
 
-## Configuration
+## Configuração
 
-### Environment Variables
+### Variáveis de Ambiente
 
-Set API keys in `.env`:
+Configure chaves de API no `.env`:
 
 ```bash
-# OpenAI (primary by default)
+# OpenAI (primário por padrão)
 BOTSALINHA_OPENAI__API_KEY=sk-...
-# Legacy format also supported: OPENAI_API_KEY=sk-...
+# Formato legado também suportado: OPENAI_API_KEY=sk-...
 
-# Google (fallback by default)
+# Google (fallback por padrão)
 BOTSALINHA_GOOGLE__API_KEY=...
-# Legacy format also supported: GOOGLE_API_KEY=...
+# Formato legado também suportado: GOOGLE_API_KEY=...
 ```
 
-### YAML Configuration
+### Configuração YAML
 
-Configure provider priorities in `config.yaml`:
+Configure prioridades de provedores em `config.yaml`:
 
 ```yaml
 model:
-  provider: openai  # Default primary provider
+  provider: openai  # Provedor primário padrão
   id: gpt-4o-mini
   temperature: 0.7
-  # Optional: explicit provider priorities
+  # Opcional: prioridades explícitas de provedores
   provider_priorities:
     - provider: openai
-      priority: 0  # Lower = higher priority
+      priority: 0  # Menor = maior prioridade
     - provider: google
       priority: 1
 ```
 
-## Usage
+## Uso
 
-### Basic Usage
+### Uso Básico
 
 ```python
 from src.core.provider_manager import ProviderManager
 
-# Initialize with auto-detected providers
+# Inicializar com provedores auto-detectados
 manager = ProviderManager()
 await manager.initialize()
 
-# Get healthy provider model
+# Obter modelo de provedor saudável
 model = manager.get_model()
 
-# Use in agent
+# Usar no agente
 agent = Agent(model=model)
-response = await agent.arun("Hello")
+response = await agent.arun("Olá")
 ```
 
-### Provider Statistics
+### Estatísticas do Provedor
 
 ```python
-# Get stats for all providers
+# Obter estatísticas de todos os provedores
 stats = manager.get_stats()
 # {
 #   "openai": {
@@ -130,24 +130,24 @@ stats = manager.get_stats()
 #   "google": {...}
 # }
 
-# Get stats for specific provider
+# Obter estatísticas de provedor específico
 openai_stats = manager.get_stats("openai")
 ```
 
-### Manual Provider Selection
+### Seleção Manual de Provedor
 
 ```python
-# Get current active provider
+# Obter provedor ativo atual
 current = manager.get_current_provider()
-print(f"Using: {current}")  # "openai" or "google"
+print(f"Usando: {current}")  # "openai" ou "google"
 
-# Get next healthy provider (rotates if enabled)
+# Obter próximo provedor saudável (rotaciona se habilitado)
 provider_config = manager.get_healthy_provider()
 ```
 
-## Circuit Breaker Configuration
+## Configuração do Circuit Breaker
 
-Adjust circuit breaker thresholds in `ProviderManager`:
+Ajuste limites do circuit breaker no `ProviderManager`:
 
 ```python
 manager = ProviderManager(
@@ -155,73 +155,73 @@ manager = ProviderManager(
     enable_rotation=True,
 )
 
-# Circuit breaker thresholds
-manager.FAILURE_THRESHOLD = 3  # Consecutive failures before OPEN
-manager.RECOVERY_TIMEOUT_MS = 60_000  # Milliseconds before HALF_OPEN
-manager.HEALTH_CHECK_TIMEOUT_SECONDS = 10.0  # Health check timeout
+# Limites do circuit breaker
+manager.FAILURE_THRESHOLD = 3  # Falhas consecutivas antes de OPEN
+manager.RECOVERY_TIMEOUT_MS = 60_000  # Milissegundos antes de HALF_OPEN
+manager.HEALTH_CHECK_TIMEOUT_SECONDS = 10.0  # Timeout de health check
 ```
 
-## Metrics Integration
+## Integração com Métricas
 
-The ProviderManager integrates with the observability system:
+O ProviderManager integra com o sistema de observabilidade:
 
-- **Provider request metrics**: Tracked via `track_provider_request()`
-- **Error tracking**: Automatic via `track_error()`
-- **Latency tracking**: Recorded per request
+- **Métricas de requisição**: Rastreadas via `track_provider_request()`
+- **Rastreamento de erros**: Automático via `track_error()`
+- **Rastreamento de latência**: Registrado por requisição
 
-View provider metrics:
+Ver métricas de provedor:
 
 ```bash
 python scripts/view_metrics.py --provider
 ```
 
-## Error Handling
+## Tratamento de Erros
 
-### Transient Errors
+### Erros Transientes
 
-Provider automatically retries on transient errors (timeout, rate limit):
-- TimeoutError → Retry with same provider
-- RateLimitError → Immediate fallback to backup
-- APIError → Fallback after circuit breaker opens
+Provedor retoma automaticamente em erros transientes (timeout, rate limit):
+- TimeoutError → Tenta novamente com mesmo provedor
+- RateLimitError → Fallback imediato para backup
+- APIError → Fallback após circuit breaker abrir
 
-### Permanent Errors
+### Erros Permanentes
 
-Permanent errors immediately trigger fallback:
-- AuthenticationError → Provider disabled
-- ConfigurationError → Provider disabled
-- InvalidRequestError → Fallback without retry
+Erros permanentes acionam fallback imediatamente:
+- AuthenticationError → Provedor desabilitado
+- ConfigurationError → Provedor desabilitado
+- InvalidRequestError → Fallback sem retry
 
-### No Healthy Providers
+### Nenhum Provedor Saudável
 
-If all providers are unhealthy:
+Se todos os provedores não estiverem saudáveis:
 
 ```python
 try:
     model = manager.get_model()
 except ConfigurationError as e:
-    # "No healthy AI providers available"
-    # Check API keys and network connectivity
+    # "Nenhum provedor de IA saudável disponível"
+    # Verifique chaves de API e conectividade de rede
     pass
 ```
 
-## Best Practices
+## Melhores Práticas
 
-1. **Configure both providers**: Always have OpenAI and Gemini configured
-2. **Monitor provider stats**: Check success rates and latency regularly
-3. **Set appropriate priorities**: Use lower priority for backup/expensive providers
-4. **Enable rotation**: Distributes load and detects failures early
-5. **Handle fallbacks gracefully**: Log provider switches for monitoring
+1. **Configure ambos provedores**: Tenha sempre OpenAI e Gemini configurados
+2. **Monitore estatísticas do provedor**: Verifique taxas de sucesso e latência regularmente
+3. **Defina prioridades apropriadas**: Use prioridade menor para provedores de backup/mais caros
+4. **Habilite rotação**: Distribui carga e detecta falhas mais cedo
+5. **Trate fallbacks graciosamente**: Registre trocas de provedor para monitoramento
 
-## Troubleshooting
+## Solução de Problemas
 
-### All Providers Unhealthy
+### Todos os Provedores Não Saudáveis
 
 ```bash
-# Check API keys are set
+# Verificar se chaves de API estão configuradas
 echo $BOTSALINHA_OPENAI__API_KEY
 echo $BOTSALINHA_GOOGLE__API_KEY
 
-# Check provider stats
+# Verificar estatísticas do provedor
 python -c "
 from src.core.provider_manager import ProviderManager
 import asyncio
@@ -233,30 +233,30 @@ asyncio.run(check())
 "
 ```
 
-### Circuit Breaker Not Recovering
+### Circuit Breaker Não Recupera
 
 ```python
-# Manually reset circuit breaker
+# Resetar manualmente o circuit breaker
 manager.provider_stats["openai"].state = ProviderState.CLOSED
 manager.provider_stats["openai"].consecutive_failures = 0
 ```
 
-### Provider Not Switching
+### Provedor Não Troca
 
 ```python
-# Check if rotation is enabled
+# Verificar se rotação está habilitada
 manager.enable_rotation = True
 
-# Check provider priorities
+# Verificar prioridades dos provedores
 for p in manager.providers:
     print(f"{p.provider}: priority={p.priority}")
 ```
 
-## Future Enhancements
+## Melhorias Futuras
 
-- [ ] Weighted round-robin based on latency
-- [ ] Predictive pre-warming of backup providers
-- [ ] Provider-specific retry policies
-- [ ] Cost-aware routing (cheapest healthy provider)
-- [ ] Geographic routing (lowest latency provider)
-- [ ] Multi-region deployment for disaster recovery
+- [ ] Round-robin ponderado baseado em latência
+- [ ] Pré-aquecimento preditivo de provedores de backup
+- [ ] Políticas de retry específicas por provedor
+- [ ] Roteamento consciente de custos (provedor saudável mais barato)
+- [ ] Roteamento geográfico (provedor de menor latência)
+- [ ] Deploy multi-regional para recuperação de desastres

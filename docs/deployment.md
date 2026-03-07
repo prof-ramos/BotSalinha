@@ -1,294 +1,294 @@
-# BotSalinha Deployment Guide
+# Guia de Deploy BotSalinha
 
-## Quick Start (Docker)
+## Início Rápido (Docker)
 
-### Prerequisites
+### Pré-requisitos
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
 
-### Initial Setup
+### Configuração Inicial
 
-1. **Clone the repository**
+1. **Clone o repositório**
    ```bash
    git clone <repository-url>
    cd BotSalinha
    ```
 
-2. **Create environment file**
+2. **Crie o arquivo de ambiente**
    ```bash
    cp .env.example .env
    ```
 
-3. **Edit `.env` with your credentials**
+3. **Edite `.env` com suas credenciais**
    ```env
-   # Discord Configuration (required)
-   BOTSALINHA_DISCORD__TOKEN=your_discord_bot_token_here
+   # Configuração Discord (obrigatório)
+   BOTSALINHA_DISCORD__TOKEN=seu_discord_bot_token_aqui
 
-   # Google AI Configuration (required)
-   BOTSALINHA_GOOGLE__API_KEY=your_google_api_key_here
+   # Configuração Google AI (obrigatório)
+   BOTSALINHA_GOOGLE__API_KEY=sua_google_api_key_aqui
 
-   # OpenAI Configuration (required for RAG embeddings)
-   BOTSALINHA_OPENAI__API_KEY=your_openai_api_key_here
+   # Configuração OpenAI (obrigatório para embeddings RAG)
+   BOTSALINHA_OPENAI__API_KEY=sua_openai_api_key_aqui
 
-   # RAG Configuration (optional)
+   # Configuração RAG (opcional)
    BOTSALINHA_RAG__ENABLED=true
    BOTSALINHA_RAG__TOP_K=5
    BOTSALINHA_RAG__MIN_SIMILARITY=0.4
    BOTSALINHA_RAG__DOCUMENTS_PATH=data/documents
    ```
 
-4. **Build and start the bot**
+4. **Construa e inicie o bot**
    ```bash
    docker-compose up -d
    ```
 
-5. **Check logs**
+5. **Verifique os logs**
    ```bash
    docker-compose logs -f
    ```
 
-## Local Development (without Docker)
+## Desenvolvimento Local (sem Docker)
 
-### Prerequisites
+### Pré-requisitos
 
 - Python 3.12+
-- uv package manager
+- Gerenciador de pacotes uv
 
-### Setup
+### Configuração
 
-1. **Install dependencies**
+1. **Instale as dependências**
    ```bash
    uv sync
    ```
 
-2. **Create environment file**
+2. **Crie o arquivo de ambiente**
    ```bash
    cp .env.example .env
-   # Edit .env with your credentials
+   # Edite .env com suas credenciais
    ```
 
-3. **Run the bot**
+3. **Execute o bot**
    ```bash
    uv run bot.py
    ```
 
-## Docker Operations
+## Operações Docker
 
-### Building the image
+### Construindo a imagem
 ```bash
 docker-compose build
 ```
 
-### Starting the bot
+### Iniciando o bot
 ```bash
-# Development
+# Desenvolvimento
 docker-compose up -d
 
-# Production
+# Produção
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Stopping the bot
+### Parando o bot
 ```bash
 docker-compose down
 ```
 
-### Viewing logs
+### Visualizando logs
 ```bash
-# Follow logs
+# Acompanhar logs
 docker-compose logs -f
 
-# Last 100 lines
+# Últimas 100 linhas
 docker-compose logs --tail=100
 
-# Specific service
+# Serviço específico
 docker-compose logs -f botsalinha
 ```
 
-### Restarting the bot
+### Reiniciando o bot
 ```bash
 docker-compose restart
 ```
 
-### Updating the bot
+### Atualizando o bot
 ```bash
-# Pull latest code
+# Obter código mais recente
 git pull
 
-# Rebuild and restart
+# Reconstruir e reiniciar
 docker-compose up -d --build
 ```
 
-## Database Operations
+## Operações de Banco de Dados
 
-### Running migrations
+### Executando migrações
 ```bash
 docker-compose exec botsalinha uv run alembic upgrade head
 ```
 
-### Creating a backup
+### Criando um backup
 ```bash
-# Using the backup script
+# Usando o script de backup
 docker-compose exec botsalinha python scripts/backup.py backup
 
-# Or copy the database file
+# Ou copiar o arquivo de banco de dados
 docker cp botsalinha:/app/data/botsalinha.db ./backups/
 ```
 
-### Listing backups
+### Listando backups
 ```bash
 docker-compose exec botsalinha python scripts/backup.py list
 ```
 
-### Restoring from backup
+### Restaurando do backup
 ```bash
 docker-compose exec botsalinha python scripts/backup.py restore --restore-from /app/backups/botsalinha_backup_20260225_120000.db
 ```
 
-## Monitoring
+## Monitoramento
 
-### Health check
+### Verificação de saúde
 ```bash
 docker-compose ps
 ```
 
-### Resource usage
+### Uso de recursos
 ```bash
 docker stats botsalinha
 ```
 
-### Database location
-- **Docker**: `./data/botsalinha.db` (mounted volume)
+### Localização do banco de dados
+- **Docker**: `./data/botsalinha.db` (volume montado)
 - **Local**: `data/botsalinha.db`
 
-## Troubleshooting
+## Solução de Problemas
 
-### Bot doesn't respond to commands
+### Bot não responde aos comandos
 
-1. Check if bot is online
+1. Verifique se o bot está online
    ```bash
    docker-compose logs | grep "bot_ready"
    ```
 
-2. Verify Discord token
+2. Verifique o token do Discord
    ```bash
    docker-compose exec botsalinha env | grep BOTSALINHA_DISCORD__TOKEN
    ```
 
-3. Check MESSAGE_CONTENT Intent is enabled in Discord Developer Portal
+3. Verifique se MESSAGE_CONTENT Intent está habilitado no Discord Developer Portal
 
-### Database connection errors
+### Erros de conexão com banco de dados
 
-1. Check if data directory exists
+1. Verifique se o diretório data existe
    ```bash
    ls -la data/
    ```
 
-2. Verify permissions
+2. Verifique as permissões
    ```bash
    chmod 777 data/
    ```
 
-3. Restart the bot
+3. Reinicie o bot
    ```bash
    docker-compose restart
    ```
 
-### Rate limiting issues
+### Problemas de rate limiting
 
-1. Check rate limit settings in `.env`
+1. Verifique as configurações de rate limit no `.env`
    ```env
    BOTSALINHA_RATE_LIMIT__REQUESTS=10
    BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS=60
    ```
 
-2. Restart with new settings
+2. Reinicie com as novas configurações
    ```bash
    docker-compose up -d
    ```
 
-## Security Best Practices
+## Melhores Práticas de Segurança
 
-1. **Never commit `.env` file** - Already in `.gitignore`
+1. **Nunca faça commit do arquivo `.env`** - Já está no `.gitignore`
 
-2. **Use strong Discord bot token** - Generate in Discord Developer Portal
+2. **Use um token forte do bot Discord** - Gere no Discord Developer Portal
 
-3. **Restrict bot permissions** - Only grant necessary permissions in Discord
+3. **Restrinja as permissões do bot** - Conceda apenas permissões necessárias no Discord
 
-4. **Regular backups** - Set up automated backups via docker-compose.prod.yml
+4. **Backups regulares** - Configure backups automatizados via docker-compose.prod.yml
 
-5. **Keep dependencies updated**
+5. **Mantenha as dependências atualizadas**
    ```bash
    docker-compose build --no-cache
    ```
 
-## Production Considerations
+## Considerações de Produção
 
-1. **Use production compose file**
+1. **Use o arquivo compose de produção**
    ```bash
    docker-compose -f docker-compose.prod.yml up -d
    ```
 
-2. **Set up log rotation** - Configured in docker-compose.prod.yml
+2. **Configure rotação de logs** - Configurado em docker-compose.prod.yml
 
-3. **Monitor disk space** - Database grows over time
+3. **Monitore espaço em disco** - O banco de dados cresce com o tempo
 
-4. **Regular cleanup** - Old conversations are automatically cleaned up
+4. **Limpeza regular** - Conversas antigas são limpas automaticamente
 
-5. **Backup strategy** - Daily automated backups in production
+5. **Estratégia de backup** - Backups automatizados diários em produção
 
-## Environment Variables Reference
+## Referência de Variáveis de Ambiente
 
-All environment variables use the `BOTSALINHA_` prefix. Nested configurations use double underscore (`__`) separator.
+Todas as variáveis de ambiente usam o prefixo `BOTSALINHA_`. Configurações aninhadas usam separador de duplo sublinhado (`__`).
 
-### Required Variables
+### Variáveis Obrigatórias
 
-| Variable | Description | Example |
+| Variável | Descrição | Exemplo |
 |---|---|---|
-| `BOTSALINHA_DISCORD__TOKEN` | Discord bot token | `your_discord_bot_token_here` |
-| `BOTSALINHA_GOOGLE__API_KEY` | Google Gemini API key | `your_google_api_key_here` |
+| `BOTSALINHA_DISCORD__TOKEN` | Token do bot Discord | `seu_discord_bot_token_aqui` |
+| `BOTSALINHA_GOOGLE__API_KEY` | Chave de API do Google Gemini | `sua_google_api_key_aqui` |
 
-### RAG Configuration (Optional)
+### Configuração RAG (Opcional)
 
-| Variable | Description | Default |
+| Variável | Descrição | Padrão |
 |---|---|---|
-| `BOTSALINHA_RAG__ENABLED` | Enable RAG functionality | `true` |
-| `BOTSALINHA_RAG__TOP_K` | Number of documents to retrieve | `5` |
-| `BOTSALINHA_RAG__MIN_SIMILARITY` | Minimum similarity threshold (0.0-1.0) | `0.4` |
-| `BOTSALINHA_RAG__MIN_SIMILARITY_FLOOR` | Minimum similarity floor for fallback | `0.2` |
-| `BOTSALINHA_RAG__MIN_SIMILARITY_FALLBACK_DELTA` | Delta for fallback similarity threshold | `0.1` |
-| `BOTSALINHA_RAG__MAX_CONTEXT_TOKENS` | Maximum context tokens | `2000` |
-| `BOTSALINHA_RAG__DOCUMENTS_PATH` | Path to documents directory | `data/documents` |
-| `BOTSALINHA_RAG__EMBEDDING_MODEL` | OpenAI embedding model | `text-embedding-3-small` |
-| `BOTSALINHA_RAG__CONFIDENCE_THRESHOLD` | Confidence threshold (0.0-1.0) | `0.70` |
-| `BOTSALINHA_RAG__RETRIEVAL_MODE` | Retrieval strategy | `hybrid_lite` |
-| `BOTSALINHA_RAG__RERANK_ENABLED` | Enable reranking | `true` |
-| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MULTIPLIER` | Candidate multiplier | `12` |
-| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MIN` | Minimum candidates | `60` |
-| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_CAP` | Maximum candidates | `240` |
-| `BOTSALINHA_OPENAI__API_KEY` | OpenAI API key (required for embeddings) | `your_openai_api_key_here` |
+| `BOTSALINHA_RAG__ENABLED` | Habilitar funcionalidade RAG | `true` |
+| `BOTSALINHA_RAG__TOP_K` | Número de documentos para recuperar | `5` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY` | Limiar mínimo de similaridade (0.0-1.0) | `0.4` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY_FLOOR` | Piso mínimo de similaridade para fallback | `0.2` |
+| `BOTSALINHA_RAG__MIN_SIMILARITY_FALLBACK_DELTA` | Delta para limiar de similaridade de fallback | `0.1` |
+| `BOTSALINHA_RAG__MAX_CONTEXT_TOKENS` | Máximo de tokens de contexto | `2000` |
+| `BOTSALINHA_RAG__DOCUMENTS_PATH` | Caminho para diretório de documentos | `data/documents` |
+| `BOTSALINHA_RAG__EMBEDDING_MODEL` | Modelo de embedding OpenAI | `text-embedding-3-small` |
+| `BOTSALINHA_RAG__CONFIDENCE_THRESHOLD` | Limiar de confiança (0.0-1.0) | `0.70` |
+| `BOTSALINHA_RAG__RETRIEVAL_MODE` | Estratégia de recuperação | `hybrid_lite` |
+| `BOTSALINHA_RAG__RERANK_ENABLED` | Habilitar reranking | `true` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MULTIPLIER` | Multiplicador de candidatos | `12` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_MIN` | Mínimo de candidatos | `60` |
+| `BOTSALINHA_RAG__RETRIEVAL_CANDIDATE_CAP` | Máximo de candidatos | `240` |
+| `BOTSALINHA_OPENAI__API_KEY` | Chave de API OpenAI (obrigatório para embeddings) | `sua_openai_api_key_aqui` |
 
-### Optional Configuration
+### Configuração Opcional
 
-| Variable | Description | Default |
+| Variável | Descrição | Padrão |
 |---|---|---|
-| `BOTSALINHA_LOG_LEVEL` | Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL) | `INFO` |
-| `BOTSALINHA_LOG_FORMAT` | Log format (json/text) | `json` |
-| `BOTSALINHA_HISTORY__RUNS` | Conversation runs in context | `3` |
-| `BOTSALINHA_RATE_LIMIT__REQUESTS` | Max requests per window | `10` |
-| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS` | Rate limit window in seconds | `60` |
-| `BOTSALINHA_DATABASE__URL` | Database connection URL | `sqlite:///data/botsalinha.db` |
-| `BOTSALINHA_DATABASE__MAX_CONVERSATION_AGE_DAYS` | Max conversation age in days | `30` |
-| `BOTSALINHA_RETRY__MAX_RETRIES` | Maximum retry attempts | `3` |
-| `BOTSALINHA_RETRY__DELAY_SECONDS` | Initial retry delay in seconds | `1.0` |
-| `BOTSALINHA_APP_ENV` | Application environment | `development` |
+| `BOTSALINHA_LOG_LEVEL` | Nível de log (DEBUG/INFO/WARNING/ERROR/CRITICAL) | `INFO` |
+| `BOTSALINHA_LOG_FORMAT` | Formato de log (json/text) | `json` |
+| `BOTSALINHA_HISTORY__RUNS` | Execuções de conversa no contexto | `3` |
+| `BOTSALINHA_RATE_LIMIT__REQUESTS` | Máximo de requisições por janela | `10` |
+| `BOTSALINHA_RATE_LIMIT__WINDOW_SECONDS` | Janela de rate limit em segundos | `60` |
+| `BOTSALINHA_DATABASE__URL` | URL de conexão do banco de dados | `sqlite:///data/botsalinha.db` |
+| `BOTSALINHA_DATABASE__MAX_CONVERSATION_AGE_DAYS` | Idade máxima de conversa em dias | `30` |
+| `BOTSALINHA_RETRY__MAX_RETRIES` | Máximo de tentativas de retry | `3` |
+| `BOTSALINHA_RETRY__DELAY_SECONDS` | Delay inicial de retry em segundos | `1.0` |
+| `BOTSALINHA_APP_ENV` | Ambiente da aplicação | `development` |
 
-For a complete list of all environment variables, see `.env.example`.
+Para uma lista completa de todas as variáveis de ambiente, veja `.env.example`.
 
-## Support
+## Suporte
 
-For issues and questions:
-- Check logs: `docker-compose logs -f`
-- Review PRD.md for feature documentation
-- Check troubleshooting section in README.md
+Para problemas e dúvidas:
+- Verifique os logs: `docker-compose logs -f`
+- Revise PRD.md para documentação de funcionalidades
+- Verifique a seção de solução de problemas em README.md

@@ -1,79 +1,79 @@
-# BotSalinha Operations Runbook
+# Manual de Operações BotSalinha
 
-## Bot Commands
+## Comandos do Bot
 
-### User Commands
+### Comandos do Usuário
 
-| Command | Description | Example |
-|---------|-------------|---------|
-| `!ask <pergunta>` | Ask a question about law/contests | `!ask O que é prescrição?` |
-| `!ping` | Check bot latency | `!ping` |
-| `!ajuda` | Show help message | `!ajuda` |
-| `!info` | Show bot information | `!info` |
-| `!limpar` | Clear conversation history | `!limpar` |
+| Comando | Descrição | Exemplo |
+|---------|-----------|---------|
+| `!ask <pergunta>` | Faça uma pergunta sobre direito/concursos | `!ask O que é prescrição?` |
+| `!ping` | Verifique a latência do bot | `!ping` |
+| `!ajuda` | Mostrar mensagem de ajuda | `!ajuda` |
+| `!info` | Mostrar informações do bot | `!info` |
+| `!limpar` | Limpar histórico de conversa | `!limpar` |
 
-## RAG Operations
+## Operações RAG
 
-### CLI Commands
+### Comandos CLI
 
-**Run bot in Discord mode (default):**
+**Executar bot no modo Discord (padrão):**
 ```bash
 uv run botsalinha
-# or: uv run bot.py
+# ou: uv run bot.py
 ```
 
-**Run bot in interactive CLI mode (for testing):**
+**Executar bot no modo CLI interativo (para testes):**
 ```bash
 uv run bot.py --chat
 ```
 
-### RAG Document Ingestion
+### Ingestão de Documentos RAG
 
-> Runbook específico para ingestão contínua em Supabase:
+> Runbook específico para ingestão contínua no Supabase:
 > `docs/operations/supabase-ingestion-runbook.md`
 
-**Ingest single RAG document (DOCX):**
+**Ingerir documento RAG único (DOCX):**
 ```bash
 uv run python scripts/ingest_rag.py
 ```
-- Reads from `docs/plans/RAG/` directory
-- Ingests all `.docx` files found
-- Requires `BOTSALINHA_OPENAI__API_KEY` (or `OPENAI_API_KEY` for legacy compatibility)
+- Lê do diretório `docs/plans/RAG/`
+- Ingeri todos os arquivos `.docx` encontrados
+- Requer `BOTSALINHA_OPENAI__API_KEY` (ou `OPENAI_API_KEY` para compatibilidade legada)
 
-**Ingest codebase into RAG (from repomix XML):**
+**Ingerir codebase no RAG (de XML repomix):**
 ```bash
-# Generate XML with repomix first
+# Gerar XML com repomix primeiro
 npx repomix --output repomix-output.xml src/
 
-# Ingest the codebase
+# Ingerir o codebase
 uv run python scripts/ingest_codebase_rag.py repomix-output.xml
 
-# Replace existing document instead of creating duplicate
+# Substituir documento existente em vez de criar duplicata
 uv run python scripts/ingest_codebase_rag.py repomix-output.xml --replace
 
-# Dry run (parse without ingesting)
+# Dry run (analisar sem ingerir)
 uv run python scripts/ingest_codebase_rag.py repomix-output.xml --dry-run
 ```
 
-**Ingest all legislation documents:**
+**Ingerir todos os documentos de legislação:**
 ```bash
 uv run python scripts/ingest_all_rag.py
 ```
-- Scans configured legislation directory
-- Ingests all DOCX files recursively
-- Generates metrics CSV in `metricas/` directory
-- Skips already-ingested documents (by hash)
+- Escaneia o diretório de legislação configurado
+- Ingeri todos os arquivos DOCX recursivamente
+- Gera CSV de métricas no diretório `metricas/`
+- Pula documentos já ingeridos (por hash)
 
-**Ingest specific legislation (e.g., Penal Code):**
+**Ingerir legislação específica (ex: Código Penal):**
 ```bash
 uv run python scripts/ingest_penal.py
 ```
 
-### RAG Reindex and Management
+### Reindexação e Gerenciamento RAG
 
-**List all RAG documents:**
+**Listar todos os documentos RAG:**
 ```python
-# In Python shell
+# No shell Python
 import asyncio
 from src.rag.storage.rag_repository import RagRepository
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -92,9 +92,9 @@ async def list_docs():
 asyncio.run(list_docs())
 ```
 
-**Delete specific RAG document:**
+**Excluir documento RAG específico:**
 ```python
-# In Python shell
+# No shell Python
 import asyncio
 from src.rag.storage.rag_repository import RagRepository
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -104,67 +104,67 @@ async def delete_doc():
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     repo = RagRepository(session_factory)
 
-    # Delete by document ID
+    # Excluir por ID do documento
     success = await repo.delete_document(document_id=1)
-    print(f"Deleted: {success}")
+    print(f"Excluído: {success}")
 
     await engine.dispose()
 
 asyncio.run(delete_doc())
 ```
 
-**Replace existing document (reindex):**
+**Substituir documento existente (reindexar):**
 ```bash
-# For codebase documents
-uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "my-document" --replace
+# Para documentos de codebase
+uv run python scripts/ingest_codebase_rag.py repomix-output.xml --name "meu-documento" --replace
 ```
 
-**Clear all RAG data (database reset):**
+**Limpar todos os dados RAG (reset de banco de dados):**
 ```bash
-# WARNING: This deletes all RAG documents and embeddings
-# Stop the bot first
+# AVISO: Isso exclui todos os documentos e embeddings RAG
+# Pare o bot primeiro
 docker-compose down
 
-# Remove database file (backup first!)
+# Remover arquivo de banco de dados (faça backup primeiro!)
 cp data/botsalinha.db backups/botsalinha_before_clear_$(date +%Y%m%d_%H%M%S).db
 rm data/botsalinha.db
 
-# Restart bot (will create fresh database)
+# Reiniciar bot (criará banco de dados novo)
 docker-compose up -d
 ```
 
-### RAG Query Testing
+### Teste de Query RAG
 
-**Test RAG query directly:**
+**Testar query RAG diretamente:**
 ```bash
 uv run python scripts/test_rag_query.py
 ```
 
-## Daily Operations
+## Operações Diárias
 
-### Monitoring
+### Monitoramento
 
-**Check bot status:**
+**Verificar status do bot:**
 ```bash
 docker-compose ps
 docker-compose logs --tail=50
 ```
 
-**Check rate limiter stats:**
+**Verificar estatísticas do rate limiter:**
 ```python
-# In Python shell
+# No shell Python
 from src.middleware.rate_limiter import rate_limiter
 print(rate_limiter.get_stats())
 ```
 
-**Check database size:**
+**Verificar tamanho do banco de dados:**
 ```bash
 ls -lh data/botsalinha.db
 ```
 
-**Check RAG document count:**
+**Verificar contagem de documentos RAG:**
 ```python
-# In Python shell
+# No shell Python
 import asyncio
 from src.rag.storage.rag_repository import RagRepository
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -178,19 +178,19 @@ async def rag_stats():
     total_chunks = sum(d.chunk_count for d in docs)
     total_tokens = sum(d.token_count for d in docs)
 
-    print(f"RAG Documents: {len(docs)}")
-    print(f"Total Chunks: {total_chunks:,}")
-    print(f"Total Tokens: {total_tokens:,}")
-    print(f"Est. Cost: ${total_tokens * 0.02 / 1_000_000:.2f} USD")
+    print(f"Documentos RAG: {len(docs)}")
+    print(f"Total de Chunks: {total_chunks:,}")
+    print(f"Total de Tokens: {total_tokens:,}")
+    print(f"Custo Est.: ${total_tokens * 0.02 / 1_000_000:.2f} USD")
 
     await engine.dispose()
 
 asyncio.run(rag_stats())
 ```
 
-### Maintenance
+### Manutenção
 
-**Clean old conversations:**
+**Limpar conversas antigas:**
 ```bash
 docker-compose exec botsalinha python -c "
 import asyncio
@@ -199,145 +199,145 @@ from src.storage.sqlite_repository import get_repository
 async def cleanup():
     repo = get_repository()
     count = await repo.cleanup_old_conversations(days=30)
-    print(f'Deleted {count} old conversations')
+    print(f'{count} conversas antigas excluídas')
 
 asyncio.run(cleanup())
 "
 ```
 
-**Reset rate limit for specific user:**
+**Resetar rate limit para usuário específico:**
 ```python
-# In Python shell
+# No shell Python
 from src.middleware.rate_limiter import rate_limiter
 rate_limiter.reset_user(user_id="123456789", guild_id="987654321")
 ```
 
-**Reset all rate limits:**
+**Resetar todos os rate limits:**
 ```python
 from src.middleware.rate_limiter import rate_limiter
 rate_limiter.reset_all()
 ```
 
-## Backup and Recovery
+## Backup e Recuperação
 
-### Manual Backup
+### Backup Manual
 
 ```bash
-# Using backup script
+# Usando script de backup
 docker-compose exec botsalinha python scripts/backup.py backup
 
-# Or direct file copy
+# Ou cópia direta de arquivo
 cp data/botsalinha.db backups/botsalinha_manual_$(date +%Y%m%d_%H%M%S).db
 ```
 
-### Scheduled Backups
+### Backups Agendados
 
-Automated daily backups are configured in `docker-compose.prod.yml`:
-- Runs at 02:00 UTC daily
-- Stores in `./backups/` directory
-- Retention: 7 days (configurable)
+Backups automatizados diários são configurados em `docker-compose.prod.yml`:
+- Executa às 02:00 UTC diariamente
+- Armazena no diretório `./backups/`
+- Retenção: 7 dias (configurável)
 
-### Recovery Procedure
+### Procedimento de Recuperação
 
-1. **Stop the bot**
+1. **Parar o bot**
    ```bash
    docker-compose down
    ```
 
-2. **Restore from backup**
+2. **Restaurar do backup**
    ```bash
    cp backups/botsalinha_backup_YYYYMMDD_HHMMSS.db data/botsalinha.db
    ```
 
-3. **Start the bot**
+3. **Iniciar o bot**
    ```bash
    docker-compose up -d
    ```
 
-4. **Verify**
+4. **Verificar**
    ```bash
    docker-compose logs -f
    ```
 
-## Troubleshooting
+## Solução de Problemas
 
 ### Bot Offline
 
-**Symptoms:** Commands not responding, bot shows offline in Discord
+**Sintomas:** Comandos não respondendo, bot mostra offline no Discord
 
-**Diagnosis:**
+**Diagnóstico:**
 ```bash
-# Check container status
+# Verificar status do contêiner
 docker-compose ps
 
-# Check logs
+# Verificar logs
 docker-compose logs --tail=100
 
-# Check for errors
+# Verificar erros
 docker-compose logs | grep -i error
 ```
 
-**Solutions:**
-1. Restart container: `docker-compose restart`
-2. Check Discord token in `.env`
-3. Verify bot is invited to server
-4. Check MESSAGE_CONTENT Intent enabled
+**Soluções:**
+1. Reiniciar contêiner: `docker-compose restart`
+2. Verificar token do Discord no `.env`
+3. Verificar se o bot foi convidado para o servidor
+4. Verificar se MESSAGE_CONTENT Intent está habilitado
 
-### Database Locked
+### Banco de Dados Bloqueado
 
-**Symptoms:** "database is locked" errors
+**Sintomas:** Erros de "database is locked"
 
-**Diagnosis:**
+**Diagnóstico:**
 ```bash
-# Check for multiple instances
+# Verificar múltiplas instâncias
 docker-compose ps
 ```
 
-**Solutions:**
-1. Ensure only one instance running
-2. Check WAL mode enabled: `docker-compose exec botsalinha python -c "from src.storage.sqlite_repository import get_repository; import asyncio; asyncio.run(get_repository().initialize_database())"`
-3. Restart bot: `docker-compose restart`
+**Soluções:**
+1. Garantir apenas uma instância em execução
+2. Verificar se modo WAL está habilitado: `docker-compose exec botsalinha python -c "from src.storage.sqlite_repository import get_repository; import asyncio; asyncio.run(get_repository().initialize_database())"`
+3. Reiniciar bot: `docker-compose restart`
 
-### High Memory Usage
+### Alto Uso de Memória
 
-**Symptoms:** Container using excessive memory
+**Sintomas:** Contêiner usando memória excessiva
 
-**Diagnosis:**
+**Diagnóstico:**
 ```bash
 docker stats botsalinha
 ```
 
-**Solutions:**
-1. Clean old conversations
-2. Restart bot: `docker-compose restart`
-3. Check for memory leaks in logs
+**Soluções:**
+1. Limpar conversas antigas
+2. Reiniciar bot: `docker-compose restart`
+3. Verificar vazamentos de memória nos logs
 
-### Rate Limit Issues
+### Problemas de Rate Limit
 
-**Symptoms:** Users getting rate limited too quickly
+**Sintomas:** Usuários sendo limitados muito rápido
 
-**Diagnosis:**
+**Diagnóstico:**
 ```bash
-# Check current settings
+# Verificar configurações atuais
 docker-compose exec botsalinha env | grep RATE_LIMIT
 ```
 
-**Solutions:**
-1. Adjust in `.env`:
+**Soluções:**
+1. Ajustar no `.env`:
    ```env
    RATE_LIMIT_REQUESTS=20
    RATE_LIMIT_WINDOW_SECONDS=60
    ```
-2. Restart: `docker-compose up -d`
-3. Reset user limits if needed
+2. Reiniciar: `docker-compose up -d`
+3. Resetar limites de usuário se necessário
 
-### RAG Issues
+### Problemas RAG
 
-**Symptoms:** RAG queries returning no results or errors
+**Sintomas:** Queries RAG retornando sem resultados ou com erros
 
-**Diagnosis:**
+**Diagnóstico:**
 ```bash
-# Check if RAG documents exist
+# Verificar se existem documentos RAG
 docker-compose exec botsalinha python -c "
 import asyncio
 from src.rag.storage.rag_repository import RagRepository
@@ -348,7 +348,7 @@ async def check():
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     repo = RagRepository(session_factory)
     docs = await repo.list_documents()
-    print(f'RAG documents: {len(docs)}')
+    print(f'Documentos RAG: {len(docs)}')
     for d in docs[:5]:
         print(f'  - {d.nome}: {d.chunk_count} chunks')
     await engine.dispose()
@@ -356,39 +356,39 @@ async def check():
 asyncio.run(check())
 "
 
-# Check for embedding errors in logs
+# Verificar erros de embedding nos logs
 docker-compose logs | grep -i embedding
 docker-compose logs | grep -i "openai"
 ```
 
-**Solutions:**
-1. **No documents found**: Run ingestion script
+**Soluções:**
+1. **Nenhum documento encontrado**: Executar script de ingestão
    ```bash
    docker-compose exec botsalinha python scripts/ingest_rag.py
    ```
 
-2. **OpenAI API key issues**: Verify `BOTSALINHA_OPENAI__API_KEY` in `.env`
+2. **Problemas com chave de API OpenAI**: Verificar `BOTSALINHA_OPENAI__API_KEY` no `.env`
    ```bash
    docker-compose exec botsalinha env | grep OPENAI
-   # Should show: BOTSALINHA_OPENAI__API_KEY=sk-... (or OPENAI_API_KEY for legacy)
+   # Deve mostrar: BOTSALINHA_OPENAI__API_KEY=sk-... (ou OPENAI_API_KEY para legado)
    ```
 
-3. **Embedding generation failures**: Check logs for rate limiting
+3. **Falhas na geração de embeddings**: Verificar logs para rate limiting
    ```bash
    docker-compose logs | grep -i "rate.*limit"
-   # Consider reducing batch size or adding delays between requests
+   # Considere reduzir tamanho do lote ou adicionar delays entre requisições
    ```
 
-4. **Stale embeddings**: Reindex specific document
+4. **Embeddings obsoletos**: Reindexar documento específico
    ```bash
    docker-compose exec botsalinha python scripts/ingest_codebase_rag.py repomix-output.xml --replace
    ```
 
-5. **Database corruption**: Clear and reindex
+5. **Corrupção do banco de dados**: Limpar e reindexar
    ```bash
-   # Backup first
+   # Backup primeiro
    docker-compose exec botsalinha cp data/botsalinha.db backups/before_reindex.db
-   # Delete and reingest
+   # Excluir e reingerir
    docker-compose exec botsalinha python -c "
 import asyncio
 from src.rag.storage.rag_repository import RagRepository
@@ -401,22 +401,22 @@ async def clear():
     docs = await repo.list_documents()
     for doc in docs:
         await repo.delete_document(doc.id)
-    print(f'Deleted {len(docs)} documents')
+    print(f'{len(docs)} documentos excluídos')
     await engine.dispose()
 
 asyncio.run(clear())
 "
    ```
 
-## Health Checks
+## Verificações de Saúde
 
-### Automated Health Check
+### Verificação Automática de Saúde
 
 ```bash
-# Check if bot process is running
+# Verificar se processo do bot está rodando
 docker-compose exec botsalinha pgrep -f bot.py
 
-# Check database accessibility
+# Verificar acessibilidade do banco de dados
 docker-compose exec botsalinha python -c "
 from src.storage.sqlite_repository import get_repository
 import asyncio
@@ -424,49 +424,49 @@ asyncio.run(get_repository().initialize_database())
 print('Database OK')
 "
 
-# Check Discord connection
+# Verificar conexão Discord
 docker-compose logs | grep "bot_ready"
 ```
 
-### Manual Health Check
+### Verificação Manual de Saúde
 
-1. Send `!ping` command in Discord
-2. Check response time
-3. Verify bot is online
+1. Enviar comando `!ping` no Discord
+2. Verificar tempo de resposta
+3. Verificar se bot está online
 
-## Metrics to Monitor
+## Métricas para Monitorar
 
-| Metric | Description | Alert Threshold |
-|--------|-------------|-----------------|
-| Bot uptime | Time since last restart | < 24h |
-| Response time | `!ping` latency | > 5s |
-| Database size | Size of SQLite file | > 1GB |
-| Error rate | Errors in logs / total requests | > 5% |
-| Active users | Users with conversations in 24h | - |
-| RAG documents | Number of indexed documents | - |
-| RAG chunks | Total chunks indexed | - |
-| RAG tokens | Total tokens in embeddings | - |
-| Embedding cost | Estimated OpenAI API cost for embeddings | Monitor trend |
+| Métrica | Descrição | Limite de Alerta |
+|---------|-----------|-----------------|
+| Uptime do bot | Tempo desde último reinício | < 24h |
+| Tempo de resposta | latência `!ping` | > 5s |
+| Tamanho do banco de dados | Tamanho do arquivo SQLite | > 1GB |
+| Taxa de erros | Erros nos logs / total de requisições | > 5% |
+| Usuários ativos | Usuários com conversas em 24h | - |
+| Documentos RAG | Número de documentos indexados | - |
+| Chunks RAG | Total de chunks indexados | - |
+| Tokens RAG | Total de tokens nos embeddings | - |
+| Custo de embeddings | Custo estimado da API OpenAI para embeddings | Monitorar tendência |
 
-## Escalation Procedures
+## Procedimentos de Escalonamento
 
-### Critical Issues (Bot Down)
+### Problemas Críticos (Bot Down)
 
-1. Check logs: `docker-compose logs --tail=200`
-2. Restart bot: `docker-compose restart`
-3. If restart fails, rebuild: `docker-compose up -d --build`
-4. Escalate to administrator if persists > 15 minutes
+1. Verificar logs: `docker-compose logs --tail=200`
+2. Reiniciar bot: `docker-compose restart`
+3. Se reinício falhar, reconstruir: `docker-compose up -d --build`
+4. Escalar para administrador se persistir > 15 minutos
 
-### Data Issues
+### Problemas de Dados
 
-1. Stop bot: `docker-compose down`
-2. Create emergency backup: `cp data/botsalinha.db data/emergency_backup.db`
-3. Restore from last known good backup
-4. Start bot: `docker-compose up -d`
-5. Verify functionality
+1. Parar bot: `docker-compose down`
+2. Criar backup de emergência: `cp data/botsalinha.db data/emergency_backup.db`
+3. Restaurar do último backup conhecido bom
+4. Iniciar bot: `docker-compose up -d`
+5. Verificar funcionalidade
 
-## Contact Information
+## Informações de Contato
 
-- **Repository**: [GitHub URL]
-- **Documentation**: PRD.md, README.md
-- **Issue Tracker**: [GitHub Issues URL]
+- **Repositório**: [URL do GitHub]
+- **Documentação**: PRD.md, README.md
+- **Rastreador de Problemas**: [URL do GitHub Issues]

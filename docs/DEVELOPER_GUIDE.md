@@ -1111,6 +1111,377 @@ uv run python
 
 ---
 
+## 8. Novas Funcionalidades (2026-03-07)
+
+### 8.1 Sistema Multi-Provider com Fallback Automático
+
+O BotSalinha agora suporta múltiplos provedores de IA com fallback automático usando o padrão **Circuit Breaker**.
+
+**Arquitetura:**
+
+```
+User Query
+    ↓
+ProviderManager
+    ↓
+┌───────────────┬───────────────┐
+│               │               │
+Primary       Fallback       Rotation
+Provider      Provider        Logic
+│               │               │
+└───────────────┴───────────────┘
+    ↓               ↓               ↓
+OpenAI/Gemini    Gemini/OpenAI   Round-Robin
+```
+
+**Configuração:**
+
+```yaml
+# config.yaml
+model:
+  provider: openai  # Provedor primário
+  id: gpt-4o-mini
+  temperature: 0.7
+```
+
+**Variáveis de Ambiente:**
+
+```bash
+# Pelo menos um provedor deve ser configurado
+BOTSALINHA_OPENAI__API_KEY=sk-...
+BOTSALINHA_GOOGLE__API_KEY=...
+```
+
+**Comportamento de Fallback:**
+
+1. **Primary Provider:** Configurado em `config.yaml`
+2. **Fallback Provider:** Provedor alternativo (se API key disponível)
+3. **Health Checks:** Teste de conectividade ao inicializar
+4. **Circuit Breaker:** 3 falhas consecutivas → desabilita temporariamente
+5. **Recuperação:** Após 60 segundos, tenta recuperação
+6. **Rotação:** Round-robin quando ambos estão saudáveis
+
+**Monitoramento:**
+
+```python
+from src.core.provider_manager import ProviderManager
+
+manager = ProviderManager()
+stats = manager.get_stats("openai")  # Estatísticas por provedor
+# Retorna: requests, success_rate, avg_latency, state
+```
+
+**Documentação:** Veja `docs/MULTI_PROVIDER.md` para detalhes completos.
+
+---
+
+### 8.2 Observabilidade e Métricas (Prometheus)
+
+O BotSalinha agora expõe métricas Prometheus para monitoramento em tempo real.
+
+**Endpoint de Métricas:**
+
+```bash
+# Servidor de métricas (iniciado automaticamente se habilitado)
+http://localhost:9090/metrics
+
+# Health checks
+http://localhost:9090/health
+http://localhost:9090/health/db
+```
+
+**Configuração:**
+
+```bash
+# .env
+BOTSALINHA_METRICS__ENABLED=true
+BOTSALINHA_METRICS__PORT=9090  # Padrão: 9090
+```
+
+**Métricas Disponíveis:**
+
+1. **Provider Metrics:**
+   - `botsalinha_provider_requests_total{provider="openai"}`
+   - `botsalinha_provider_latency_seconds{provider="google"}`
+   - `botsalinha_provider_errors_total{provider="openai",error_type="timeout"}`
+
+2. **RAG Metrics:**
+   - `botsalinha_rag_queries_total`
+   - `botsalinha_rag_cache_hits_total`
+   - `botsalinha_rag_query_duration_seconds`
+
+3. **Legal Domain Metrics:**
+   - `botsalinha_legal_synonyms_applied_total`
+   - `botsalinha_legal_query_normalized_total`
+
+4. **Discord Metrics:**
+   - `botsalinha_discord_commands_total{command="ask"}`
+   - `botsalinha_discord_rate_limit_blocks_total`
+
+**Visualizador de Métricas:**
+
+```bash
+# Script incluído para visualizar métricas
+uv run python scripts/view_metrics.py
+```
+
+**Documentação:** Veja `docs/OBSERVABILITY.md` para detalhes.
+
+---
+
+### 8.3 Cache Semântico com NumPy
+
+Implementamos cache semântico com vetorização NumPy para consultas RAG repetidas.
+
+**Características:**
+
+- **LRU Cache:** Evicção por menos usados recentemente
+- **Memory-based:** Limite de memória configurável
+- **NumPy Vectorization:** Similaridade cosseno acelerada
+- **Statistics:** Tracking de hits, misses, memory usage
+
+**Configuração:**
+
+```yaml
+# config.yaml
+rag:
+  semantic_cache:
+    enabled: true
+    max_size_mb: 100
+    ttl_seconds: 3600
+```
+
+**Uso:**
+
+```python
+from src.rag.services.query_service import QueryService
+
+service = QueryService()
+result = await service.query("direitos fundamentais")  # Primeira chamada
+result = await service.query("direitos fundamentais")  # Cache hit!
+```
+
+**Aquecer Cache:**
+
+```bash
+# Aquecer cache com consultas comuns
+uv run python scripts/warm_semantic_cache.py queries.txt
+```
+
+**Documentação:** Veja `docs/SEMANTIC_CACHE_IMPLEMENTATION.md` para detalhes.
+
+---
+
+## 9. Melhorias Recentes
+
+### 9.1 Correções de Code Review (7 Issues CRÍTICOS/ALTOS)
+
+**Corrigidos em 2026-03-07:**
+
+1. ✅ **Type Safety (provider_manager.py)**
+   - Corrigido erro de tipo em health_check
+   - Uso de tipo union `Model` para evitar incompatibilidade
+
+2. ✅ **Security Hardening (prometheus_exporter.py)**
+   - Endpoint de métricas agora defaults para localhost (127.0.0.1)
+   - Prevenção de exposição pública de métricas sensíveis
+
+3. ✅ **Circuit Breaker Bug (provider_manager.py)**
+   - Corrigido erro off-by-one na rotação de provedores
+   - Acesso primeiro, depois incremento
+
+4. ✅ **Error Sanitization (prometheus_exporter.py)**
+   - Health check de database retorna mensagem genérica
+   - Prevenção de leak de informações internas
+
+5. ✅ **Type Annotations (lifecycle.py)**
+   - Adicionados type hints para tasks assíncronos
+
+6. ✅ **Return Type Consistency (prometheus_exporter.py)**
+   - Corrigido tipo de retorno de root() endpoint
+
+7. ✅ **ProviderManager None Handling**
+   - Verificação adequada de provedores saudáveis
+
+### 9.2 Correções de Testes (17 Testes)
+
+**Ultrapilot Results:**
+
+- **Antes:** 435 passed, 28 failed (94% pass rate)
+- **Depois:** 452 passed, 11 failed, 3 errors (96.6% pass rate)
+- **Melhoria:** +17 testes corrigidos, -2.6% taxa de falha
+
+**Categorias Corrigidas:**
+
+1. **Provider Config Tests (9):**
+   - Atualizadas expectativas para sistema multi-provider
+   - Validação de provider corrigida em yaml_config.py
+
+2. **Database Session Tests (2):**
+   - Erros de transação ChromaDB corrigidos
+   - Cleanup de sessão adicionado em conftest.py
+
+3. **Discord Bot Constructor (13 fixtures):**
+   - Assinatura de construtor corrigida
+   - Argumento `repository=` removido
+
+---
+
+## 10. Troubleshooting Atualizado
+
+### 10.1 Provider Sempre Usa Fallback
+
+**Sintoma:** Bot sempre usa provedor secundário, ignorando primário do config.yaml
+
+**Solução:**
+
+```bash
+# 1. Verificar API keys
+echo "OpenAI: $BOTSALINHA_OPENAI__API_KEY"
+echo "Google: $BOTSALINHA_GOOGLE__API_KEY"
+
+# 2. Verificar config.yaml
+grep "provider:" config.yaml
+
+# 3. Testar health check
+uv run python -c "
+from src.core.provider_manager import ProviderManager
+import asyncio
+manager = ProviderManager()
+asyncio.run(manager.initialize())
+print(manager.get_stats())
+"
+```
+
+### 10.2 Métricas Não Acessíveis
+
+**Sintoma:** Cannot access http://localhost:9090/metrics
+
+**Solução:**
+
+```bash
+# 1. Verificar se servidor está rodando
+curl http://localhost:9090/health
+
+# 2. Verificar variável de ambiente
+echo $BOTSALINHA_METRICS__ENABLED
+
+# 3. Verificar logs
+tail -f logs/botsalinha.log | grep metrics
+```
+
+### 10.3 Cache Semântico Não Funciona
+
+**Sintoma:** Consultas repetidas não usam cache
+
+**Solução:**
+
+```bash
+# 1. Verificar se cache está habilitado
+grep "semantic_cache:" config.yaml
+
+# 2. Limpar cache (se necessário)
+rm -f data/semantic_cache.db
+
+# 3. Verificar estatísticas
+uv run python -c "
+from src.rag.services.query_service import QueryService
+import asyncio
+service = QueryService()
+print(service.cache_stats)
+"
+```
+
+### 10.4 Erros de Tipo no Mypy
+
+**Sintoma:** Mypy reporta incompatibilidade de tipos
+
+**Solução:**
+
+```bash
+# Verificar arquivo específico
+uv run mypy src/core/provider_manager.py
+
+# Mostrar códigos de erro
+uv run mypy src/ --show-error-codes
+
+# Instalar stubs faltantes
+uv add types-PyYAML --group dev
+```
+
+---
+
+## 11. Melhores Práticas Atualizadas
+
+### 11.1 Multi-Provider
+
+- **Sempre** use `ProviderManager` para criar modelos
+- **Nunca** instancie `OpenAIChat` ou `Gemini` diretamente
+- **Monitore** health status dos provedores regularmente
+
+### 11.2 Observabilidade
+
+- **Habilite** métricas em produção
+- **Use** localhost-only para métricas (padrão: 127.0.0.1)
+- **Configure** alertas para taxas de erro altas
+
+### 11.3 Cache Semântico
+
+- **Aqueça** cache após deploy para performance
+- **Monitore** cache hit rate (meta: >60%)
+- **Limpe** cache periodicamente se necessário
+
+---
+
+## 12. Referências Rápidas
+
+### 12.1 Comandos Essenciais
+
+```bash
+# Bot
+uv run botsalinha
+
+# CLI Chat
+uv run bot.py --chat
+
+# Linting
+uv run ruff check src/ --fix
+uv run ruff format src/
+
+# Type Check
+uv run mypy src/
+
+# Tests
+uv run pytest
+uv run pytest --cov=src
+
+# Database
+uv run alembic upgrade head
+
+# Metrics
+uv run python scripts/view_metrics.py
+
+# Cache
+uv run python scripts/warm_semantic_cache.py queries.txt
+```
+
+### 12.2 Arquivos de Configuração
+
+| Arquivo | Propósito |
+|---------|-----------|
+| `.env` | Variáveis de ambiente (API keys, database) |
+| `config.yaml` | Configuração de agente/modelo |
+| `ruff.toml` | Regras de linting (100-char lines) |
+| `mypy.ini` | Type checking (strict mode) |
+| `pytest.ini` | Configuração de testes |
+
+---
+
 ### Happy Coding! 🚀
 
-Para mais informações, consulte os outros documentos do projeto ou abra uma issue no GitHub.
+**Para mais informações, consulte:**
+- `docs/MULTI_PROVIDER.md` - Sistema multi-provider
+- `docs/OBSERVABILITY.md` - Métricas e monitoramento
+- `docs/SEMANTIC_CACHE_IMPLEMENTATION.md` - Cache semântico
+- `CLAUDE.md` - Guia do projeto para Claude Code
+- `AGENTS.md` - Convenções de agentes
