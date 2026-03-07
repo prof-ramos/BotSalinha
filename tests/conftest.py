@@ -440,6 +440,38 @@ async def bot_wrapper(conversation_repository, mock_gemini_api):
     await wrapper.cleanup()
 
 
+@pytest_asyncio.fixture
+async def discord_bot(conversation_repository):
+    """
+    Create a properly initialized Discord bot with commands registered.
+
+    This fixture creates a BotSalinhaBot instance with all dependencies
+    properly initialized and commands ready for testing.
+
+    Usage:
+        async def test_command(discord_bot):
+            ctx = MagicMock()
+            ctx.send = AsyncMock()
+            await discord_bot.ping_command.callback(discord_bot, ctx)
+            ctx.send.assert_called_once()
+    """
+    from src.core.discord import BotSalinhaBot
+
+    bot = BotSalinhaBot()
+    bot.repository = conversation_repository
+    bot.agent.repository = conversation_repository
+    bot.conversation_service.conversation_repo = conversation_repository
+    bot.conversation_service.message_repo = conversation_repository
+
+    # Initialize bot internals (database, commands, etc.)
+    await bot.setup_hook()
+
+    yield bot
+
+    # Cleanup
+    await bot.close()
+
+
 # ===== Fixtures for E2E Testing with Production Database =====
 # These fixtures use the real database (data/botsalinha.db) for RAG testing
 
