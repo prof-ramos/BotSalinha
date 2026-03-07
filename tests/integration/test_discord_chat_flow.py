@@ -153,7 +153,7 @@ class TestRateLimitingIntegration:
         from src.core.discord import BotSalinhaBot
 
         # Arrange - Set strict rate limit for testing
-        rate_limiter.reconfigure(requests=2, window_seconds=60)
+        await rate_limiter.reconfigure(requests=2, window_seconds=60)
 
         bot = BotSalinhaBot()
         bot.repository = conversation_repository
@@ -178,7 +178,6 @@ class TestRateLimitingIntegration:
                 "src.core.discord.AgentWrapper.generate_response",
                 new=AsyncMock(return_value="Resposta teste"),
             ),
-            patch("src.core.discord.rate_limiter", rate_limiter),
         ):
             # First two should succeed
             message.id = 1

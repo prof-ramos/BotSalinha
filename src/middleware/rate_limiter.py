@@ -299,6 +299,28 @@ class RateLimiter:
 
         log.info("rate_limit_reset_all", cleared_users=count)
 
+    async def reconfigure(self, requests: int, window_seconds: int) -> None:
+        """
+        Reconfigure rate limiter parameters.
+
+        Args:
+            requests: Maximum requests per window
+            window_seconds: Time window in seconds
+        """
+        async with self._lock:
+            self.requests = requests
+            self.window_seconds = window_seconds
+            self.refill_rate = self.requests / self.window_seconds
+
+            # Clear existing buckets to force recreation with new parameters
+            self._users.clear()
+
+            log.info(
+                "rate_limiter_reconfigured",
+                requests=requests,
+                window_seconds=window_seconds,
+            )
+
 
 # Global rate limiter instance
 rate_limiter = RateLimiter()

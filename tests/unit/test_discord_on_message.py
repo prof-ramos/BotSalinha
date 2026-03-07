@@ -5,13 +5,13 @@ Tests the chat flow for IA channel and DM support following TDD principles.
 These tests verify the behavior of the on_message handler and _handle_chat_message method.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import discord
 import pytest
 
 from src.utils.errors import RateLimitError
-
 
 @pytest.mark.unit
 @pytest.mark.discord
@@ -26,12 +26,14 @@ class TestOnMessageBotDetection:
         # Arrange
         mock_repo = MagicMock(spec=SQLiteRepository)
         bot = BotSalinhaBot()
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
         # Replace the internally created repository with mock
         bot.repository = mock_repo
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
-        await bot.setup_hook() if hasattr(bot, "setup_hook") else None
+        # No setup_hook needed with mocks
 
         message = MagicMock()
         message.author.bot = True
@@ -47,7 +49,6 @@ class TestOnMessageBotDetection:
 
         # Assert - process_commands should NOT be called for bot messages
         mock_process.assert_not_called()
-
 
 @pytest.mark.unit
 @pytest.mark.discord
@@ -74,6 +75,10 @@ class TestOnMessageCanalIADetection:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
+
+        
 
         message = MagicMock()
         message.author.bot = False
@@ -117,6 +122,8 @@ class TestOnMessageCanalIADetection:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -137,7 +144,6 @@ class TestOnMessageCanalIADetection:
         # Assert - Should fallback to process_commands
         mock_process.assert_called_once_with(message)
 
-
 @pytest.mark.unit
 @pytest.mark.discord
 class TestOnMessageDMDetection:
@@ -155,6 +161,8 @@ class TestOnMessageDMDetection:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -178,7 +186,6 @@ class TestOnMessageDMDetection:
         # Assert - Command should be processed
         assert message.channel.send.called
 
-
 @pytest.mark.unit
 @pytest.mark.discord
 class TestOnMessageNormalChannel:
@@ -196,6 +203,8 @@ class TestOnMessageNormalChannel:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -213,7 +222,6 @@ class TestOnMessageNormalChannel:
 
         # Assert
         mock_process.assert_called_once_with(message)
-
 
 @pytest.mark.unit
 @pytest.mark.discord
@@ -241,6 +249,8 @@ class TestHandleChatMessageErrors:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -276,6 +286,8 @@ class TestHandleChatMessageErrors:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -314,6 +326,8 @@ class TestHandleChatMessageErrors:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
@@ -350,6 +364,8 @@ class TestHandleChatMessageErrors:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         user_id = 111222333
         message1 = MagicMock()
@@ -380,7 +396,6 @@ class TestHandleChatMessageErrors:
         assert call_kwargs["guild_id"] is None
         assert call_kwargs["channel_id"] == str(message1.channel.id)
 
-
 @pytest.mark.unit
 @pytest.mark.discord
 class TestHandleChatMessageValidation:
@@ -398,6 +413,8 @@ class TestHandleChatMessageValidation:
         bot.agent.repository = mock_repo
         bot.conversation_service.conversation_repo = mock_repo
         bot.conversation_service.message_repo = mock_repo
+        # Mock the loop to prevent AttributeError
+        bot.loop = asyncio.get_event_loop()
 
         message = MagicMock()
         message.author.bot = False
