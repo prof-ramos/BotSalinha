@@ -20,7 +20,7 @@ class TestCanalIAFlow:
     """Integration tests for IA channel chat flow."""
 
     async def test_complete_flow_in_canal_ia(
-        self, conversation_repository, mock_ai_response, test_settings, monkeypatch
+        self, conversation_repository, mock_gemini_api, test_settings, monkeypatch
     ):
         """Complete flow: message in IA channel -> response -> saved to database."""
         from src.config.settings import get_settings
@@ -91,7 +91,7 @@ class TestDMFlow:
     """Integration tests for DM chat flow."""
 
     async def test_complete_flow_in_dm(
-        self, conversation_repository, mock_ai_response, test_settings
+        self, conversation_repository, mock_gemini_api, test_settings
     ):
         """Complete flow: DM message -> response -> saved to database."""
         from src.core.discord import BotSalinhaBot
@@ -308,7 +308,7 @@ class TestConversationHistory:
     """Integration tests for conversation history persistence."""
 
     async def test_history_is_maintained_between_messages(
-        self, conversation_repository, mock_ai_response, test_settings
+        self, conversation_repository, mock_gemini_api, test_settings
     ):
         """Conversation history should persist across multiple messages."""
         from src.core.discord import BotSalinhaBot
