@@ -128,8 +128,8 @@ class TestDMFlow:
         assert len(response_sent) > 20  # Should have meaningful content
 
         # Assert - Conversation was created with guild_id=None for DM
-        conversations = await conversation_repository.get_dm_conversations(
-            user_id=str(message.author.id)
+        conversations = await conversation_repository.get_by_user_and_guild(
+            user_id=str(message.author.id), guild_id=None
         )
         assert len(conversations) == 1
         assert conversations[0].guild_id is None
@@ -278,7 +278,9 @@ class TestCommandsStillWork:
         )
 
         # Verify conversation exists
-        conversations = await conversation_repository.get_dm_conversations(user_id=user_id)
+        conversations = await conversation_repository.get_by_user_and_guild(
+            user_id=user_id, guild_id=None
+        )
         assert len(conversations) == 1
 
         # Create mock context for clear command
@@ -297,7 +299,9 @@ class TestCommandsStillWork:
         assert "limpo" in response.lower() or "sucesso" in response.lower()
 
         # Verify conversation was deleted
-        conversations_after = await conversation_repository.get_dm_conversations(user_id=user_id)
+        conversations_after = await conversation_repository.get_by_user_and_guild(
+            user_id=user_id, guild_id=None
+        )
         assert len(conversations_after) == 0
 
 
@@ -374,7 +378,9 @@ class TestConversationHistory:
             await bot.on_message(message2)
 
         # Assert - Same conversation should contain both exchanges
-        conversations = await conversation_repository.get_dm_conversations(user_id=str(user_id))
+        conversations = await conversation_repository.get_by_user_and_guild(
+            user_id=str(user_id), guild_id=None
+        )
         assert len(conversations) == 1
 
         conversation = conversations[0]
